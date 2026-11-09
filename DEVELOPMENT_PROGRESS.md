@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-08 (step 8 done; step 9 starting)
+Last updated: 2026-11-08 (step 9 done; step 10 starting)
 
 ## Where things live
 
@@ -34,7 +34,7 @@ name the repo).
 | 6. Logging + v0.93 release (findings 9, 11) | Done | `DiagnosticLog`, crash reports, `AutomationOptions` replaces env vars; v0.93.0 built on owner's laptop: 41/41 engineering, 16/16 interface checks |
 | 7. System solver into Core (finding 6) | Done | `SystemSolver` (Core) replaces the window's solver; bit-identical on reference project + 3 variants; 8 new solver checks (49/49); UI 16/16 (Wine) |
 | 8. One coordinate model (finding 7) | Done, reduced scope (see Step 8 record) | `LayoutGeometryCheck` detects non-closing loops, duct offset/length mismatches, unplaced components; shown on the Duct System summary, tooltip and PDF; resolver documented. Storage still relative (decision recorded) |
-| 9. Break up main window (findings 12-14) | Not started | |
+| 9. Break up main window (findings 12-14) | Done, reduced scope (see Step 9 record) | undo capped; 14 classes moved to own files; `LayoutModelCheck` per-type rules. Per-tab screen classes deferred (decision recorded) |
 | 10. Docs, independent verification, CI (findings 15-16) | Not started | table re-check and IP clearance need the owner / a second person |
 
 ## Completed changes (v0.93.0)
@@ -85,6 +85,26 @@ name the repo).
   demand, migrating each project through the resolver and refusing to migrate a project whose geometry check fails
   until the user resolves it.
 
+## Step 9 record
+
+- `BoundedHistory<T>` (Core): Designer undo and redo each keep at most 100 snapshots; snapshots exclude the PDF
+  underlay and the company logo (both restored from the current project on undo).
+- Pure moves (verified line-for-line): `LayoutTypes.cs`, `LayoutDesignerCanvas.cs`, `LayoutToolControls.cs`,
+  `SourceSinkEditorDialog.cs`, `LayoutEquipmentDialog.cs`, `LayoutDialogControls.cs`,
+  `LayoutComponentPlacementDialog.cs`, `LayoutCoordinateOriginDialog.cs`, `LayoutBranchChoiceDialog.cs`,
+  `LayoutFittingNodeDialog.cs`, `LayoutFittingEditDialog.cs`, `LayoutDuctConnectionDialog.cs`,
+  `LayoutDuctEditDialog.cs`, `FanInformationDialog.cs`. `MainForm.LayoutDesigner.cs` 8,718 -> 4,457 lines.
+- `LayoutModelCheck` (Core): the per-type field rules in one documented place; reports dangling references, a
+  second inlet on a non-converging item, invalid space roles, fan efficiency outside (0, 100], negative pressure
+  drops, invalid calculation points and closed upstream loops. Shown with the geometry review ("Layout: N items to
+  review", tooltip, PDF, log on change). The saved format is unchanged. Reference project: 0 issues.
+- Decision (deviation, owner to confirm): one screen class per tab and a separate saved model per component type
+  were deferred. The interface test reaches 99 private members of `MainForm` by name, so splitting the window
+  means rewriting that test at the same time, and a per-type saved model means a format migration. Recommended
+  order for a dedicated task: (1) replace the reflection in the interface test with an internal test API,
+  (2) extract the Fitting Loss tab (least shared state), then Duct System, then Layout Designer, (3) per-type
+  saved models with a schema 13 migration.
+
 ## Commits (Claude working repo)
 
 - `b5f8096` Baseline v0.92.0
@@ -129,7 +149,8 @@ See the step currently "In progress" above; its detailed plan is in the section 
 
 ## Current task detail
 
-Step 9: break up the main window (findings 12-14). Plan, lowest risk first: (a) cap undo history (finding 14);
-(b) move dialog classes nested in the MainForm files into their own files (pure moves); (c) typed component
-views/validation for layout node types without changing the saved JSON (finding 13); (d) extract self-contained
-tab/screen pieces where they do not share private state. Validate after each with both suites.
+Step 10: documentation and verification (findings 15-16). Plan: XML documentation with equations and sources on
+the public Core calculation API (only sources visible in the code or well established; nothing invented);
+`docs/TABLE_VERIFICATION.md` register of every digitized table for the independent re-check; `ARCHITECTURE.md`
+and `DEVELOPER_GUIDE.md`; stated defaults (finding 16); `global.json` SDK pin; CI workflow for GitHub; analyzer
+settings where the code is already clean. Validate with both suites and a Windows build.
