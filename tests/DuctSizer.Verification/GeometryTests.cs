@@ -266,3 +266,83 @@ internal static class PositionTests
             throw new Exception($"Expected {expected:R}, got {actual:R}.");
     }
 }
+
+/// <summary>Checks for per-type component blocks in the saved file (schema 14, finding 13).</summary>
+internal static class ComponentModelTests
+{
+    public static void EachComponentTypeSavesOnlyItsOwnData()
+    {
+        var document = new DuctSystemDocument();
+        var fan = SystemTests.AddNode(document, LayoutNodeType.Fan, parent: null, duct: null);
+        fan.FanStaticPressurePa = 250;
+        fan.FanEfficiencyPercent = 62;
+        var coil = SystemTests.AddNode(document, LayoutNodeType.Coil, fan, duct: null);
+        coil.PressureDropPa = 60;
+        var grd = SystemTests.AddNode(document, LayoutNodeType.Grd, coil, duct: null);
+        grd.GrdType = "Diffuser";
+        grd.GrdNeckDiameterIn = 10;
+        var path = Path.Combine(Path.GetTempPath(), $"fanworks-model-{Guid.NewGuid():N}.json");
+        try
+        {
+            DuctSystemStore.Save(path, document);
+            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+            var saved = json["LayoutNodes"]!.AsArray().Select(x => x!.AsObject()).ToArray();
+            var savedFan = saved.Single(x => (int)x["Sequence"]! == fan.Sequence);
+            var savedCoil = saved.Single(x => (int)x["Sequence"]! == coil.Sequence);
+            var savedGrd = saved.Single(x => (int)x["Sequence"]! == grd.Sequence);
+            if (savedFan["Fan"] is null || savedFan["Grd"] is not null || savedFan.ContainsKey("FanStaticPressurePa"))
+                throw new Exception("A fan must save its data in a Fan block only.");
+            if (savedCoil["Fan"] is not null || savedCoil["Grd"] is not null || savedCoil["Space"] is not null
+                || savedCoil["CalculationPoint"] is not null || savedCoil["Fitting"] is not null)
+                throw new Exception("A coil must not save fan, GRD, space, calculation-point or fitting data.");
+            if (savedGrd["Grd"] is null || (string?)savedGrd["Grd"]!["Type"] != "Diffuser")
+                throw new Exception("A GRD must save its selection in a Grd block.");
+            var loaded = DuctSystemStore.Load(path);
+            var loadedFan = loaded.LayoutNodes.Single(x => x.Sequence == fan.Sequence);
+            var loadedGrd = loaded.LayoutNodes.Single(x => x.Sequence == grd.Sequence);
+            if (loadedFan.FanStaticPressurePa != 250 || loadedFan.FanEfficiencyPercent != 62
+                || loadedGrd.GrdType != "Diffuser" || loadedGrd.GrdNeckDiameterIn != 10)
+                throw new Exception("Per-type data must round-trip unchanged.");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    public static void FlatFieldsFromOlderFilesMoveIntoTheirBlocks()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"fanworks-model-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, """
+            {
+              "SchemaVersion": 13,
+              "LayoutNodes": [
+                { "Sequence": 1, "Type": "Fan", "FanStaticPressurePa": 300.5, "FanEfficiencyPercent": 58 },
+                { "Sequence": 2, "Type": "Reservoir", "ParentNodeId": "Fan-001", "SpaceRole": "Space Sink" },
+                { "Sequence": 3, "Type": "CalculationPoint", "CalculationConnectionNodeId": "S-002",
+                  "CalculationConnectionFraction": 0.25, "CalculationPointType": "Velocity" },
+                { "Sequence": 4, "Type": "Fitting", "ParentNodeId": "Fan-001", "FittingGroup": "Elbows", "ElbowAngleDegrees": 45 }
+              ]
+            }
+            """);
+            var loaded = DuctSystemStore.Load(path);
+            var fan = loaded.LayoutNodes.Single(x => x.Sequence == 1);
+            var sink = loaded.LayoutNodes.Single(x => x.Sequence == 2);
+            var point = loaded.LayoutNodes.Single(x => x.Sequence == 3);
+            var elbow = loaded.LayoutNodes.Single(x => x.Sequence == 4);
+            if (loaded.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion
+                || fan.FanStaticPressurePa != 300.5 || fan.FanEfficiencyPercent != 58
+                || sink.SpaceRole != "Space Sink"
+                || point.CalculationConnectionNodeId != "S-002" || point.CalculationConnectionFraction != 0.25
+                || point.CalculationPointType != "Velocity"
+                || elbow.FittingGroup != "Elbows" || elbow.ElbowAngleDegrees != 45)
+                throw new Exception("Flat component fields from a schema-13 file must load into their per-type blocks unchanged.");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+}

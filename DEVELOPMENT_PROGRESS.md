@@ -222,6 +222,17 @@ step 10 refresh, release v0.95.0.
   conversion (upstream and downstream reference) -> 16/16 (Wine). Reference project: positions identical after
   save + load; results identical.
 
+## Step 9 (full) record — part A: per-type component data (schema 14)
+
+- `SavedLayoutNode` keeps common data; type-specific data lives in per-type blocks written only for that type:
+  `Fan` (static pressure, efficiency), `Grd` (all GRD/terminal selection fields), `Space` (role),
+  `CalculationPoint` (observed connection, fraction, point type, observed duct), `Fitting` (group, elbow angle).
+  The old flat property names remain as forwarding properties so existing code is unchanged. `BranchOutletBelow`
+  stays common (used by non-fittings too).
+- Load moves flat fields from schema 1-13 files into the blocks before reading (`MoveFlatComponentFieldsIntoTypeBlocks`).
+- Checks: each type saves only its own block; schema-13 flat fields load unchanged -> 63/63; interface 16/16 (Wine);
+  reference project identical (schema 14 round trip, positions unchanged).
+
 ## Current task detail
 
 None in progress. v0.94.0 built on the owner's laptop on 2026-11-09: 58/58 engineering, 16/16 interface checks,

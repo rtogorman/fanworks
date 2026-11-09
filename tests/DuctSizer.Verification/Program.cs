@@ -63,7 +63,9 @@ var tests = new (string Name, Action Run)[]
     ("Exports do not depend on regional settings", ExportCultureTests.ExportsDoNotDependOnRegionalSettings),
     ("Positions: saved file stores absolute positions", PositionTests.SavedFileStoresAbsolutePositions),
     ("Positions: stored absolute positions win over offsets", PositionTests.StoredAbsolutePositionsWinOverOffsets),
-    ("Positions: older files migrate without moving components", PositionTests.OlderFilesMigrateWithoutMovingComponents)
+    ("Positions: older files migrate without moving components", PositionTests.OlderFilesMigrateWithoutMovingComponents),
+    ("Component model: each type saves only its own data", ComponentModelTests.EachComponentTypeSavesOnlyItsOwnData),
+    ("Component model: older flat fields move into type blocks", ComponentModelTests.FlatFieldsFromOlderFilesMoveIntoTheirBlocks)
 };
 
 var failures = new List<string>();
@@ -1169,14 +1171,18 @@ static void TestDuctSystemPersistence()
         versionEight.LayoutNodes.Add(new SavedLayoutNode { Sequence = 1, Type = LayoutNodeType.Fan });
         versionEight.LayoutNodes.Add(new SavedLayoutNode
         {
-            Sequence = 2, Type = LayoutNodeType.Coil, ParentNodeId = "C-001",
-            CalculationConnectionNodeId = "C-001"
+            Sequence = 2, Type = LayoutNodeType.Coil, ParentNodeId = "C-001"
+        });
+        // Schema 14 stores the observed connection only on calculation points.
+        versionEight.LayoutNodes.Add(new SavedLayoutNode
+        {
+            Sequence = 3, Type = LayoutNodeType.CalculationPoint, CalculationConnectionNodeId = "C-001"
         });
         DuctSystemStore.Save(versionEightPath, versionEight);
         var migratedFanId = DuctSystemStore.Load(versionEightPath);
         if (migratedFanId.CoordinateOriginNodeId != "Fan-001"
             || migratedFanId.LayoutNodes[1].ParentNodeId != "Fan-001"
-            || migratedFanId.LayoutNodes[1].CalculationConnectionNodeId != "Fan-001")
+            || migratedFanId.LayoutNodes[2].CalculationConnectionNodeId != "Fan-001")
             throw new Exception("Version-8 fan references were not migrated to Fan-### identifiers.");
 
         restored.Fittings[0].FittingCode = "A7-F";

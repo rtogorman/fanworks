@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace DuctSizer.Core;
@@ -77,7 +78,7 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 13;
+    public const int CurrentSchemaVersion = 14;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -247,49 +248,141 @@ public enum LayoutViewMode
     TopDown
 }
 
+/// <summary>Fan-only data of a layout component (schema 14).</summary>
+public sealed class LayoutFanData
+{
+    /// <summary>Fan static pressure rise (Pa), 0 or more.</summary>
+    public double StaticPressurePa { get; set; }
+
+    /// <summary>Fan total efficiency (%), above 0 and at most 100.</summary>
+    public double EfficiencyPercent { get; set; } = 70.0;
+}
+
+/// <summary>Grille, register, diffuser or VAV terminal data of a layout component (schema 14).</summary>
+public sealed class LayoutGrdData
+{
+    public string Type { get; set; } = "Grille";
+    public double FaceSizeIn { get; set; } = 24;
+    public double NeckDiameterIn { get; set; } = 8;
+    public double LengthFt { get; set; } = 2;
+    public double SlotWidthIn { get; set; } = 0.75;
+    public int SlotCount { get; set; } = 1;
+    public double InletDiameterIn { get; set; } = 6;
+    public double SelectedAirflowCfm { get; set; }
+    public string SoundNc { get; set; } = string.Empty;
+    public string ThrowFt { get; set; } = string.Empty;
+    public string NominalDuctSizeIn { get; set; } = "12x12";
+}
+
+/// <summary>Space boundary (source or sink) data of a layout component (schema 14).</summary>
+public sealed class LayoutSpaceData
+{
+    /// <summary>"Space Source" or "Space Sink" (legacy "Return Pickup" / "Supply Discharge" accepted).</summary>
+    public string Role { get; set; } = "Supply Discharge";
+}
+
+/// <summary>Calculation point data (schema 14): which connection it observes and where along it.</summary>
+public sealed class LayoutCalculationPointData
+{
+    public string PointType { get; set; } = "Pressure";
+    public string ConnectionNodeId { get; set; } = string.Empty;
+    public bool ConnectionSecondary { get; set; }
+    public double ConnectionFraction { get; set; } = 0.5;
+    public int? ObservedDuctSequence { get; set; }
+}
+
+/// <summary>Fitting component data (schema 14).</summary>
+public sealed class LayoutFittingNodeData
+{
+    public string Group { get; set; } = string.Empty;
+    public double ElbowAngleDegrees { get; set; } = 90.0;
+}
+
+/// <summary>
+/// One Layout Designer component. Common data (identity, connections, airflow, temperature, position) is stored on
+/// the component; data that applies to one component type only is stored in that type's block (<c>Fan</c>,
+/// <c>Grd</c>, <c>Space</c>, <c>CalculationPoint</c>, <c>Fitting</c>), and only the block for the component's own
+/// <see cref="Type"/> is written to the file (schema 14). The flat properties (for example
+/// <see cref="FanStaticPressurePa"/>) read and write those blocks and are kept so existing code is unchanged.
+/// </summary>
 public sealed class SavedLayoutNode
 {
+    private LayoutFanData _fan = new();
+    private LayoutGrdData _grd = new();
+    private LayoutSpaceData _space = new();
+    private LayoutCalculationPointData _calculationPoint = new();
+    private LayoutFittingNodeData _fitting = new();
+
+    /// <summary>Fan block; written only for fans.</summary>
+    [JsonPropertyName("Fan")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LayoutFanData? FanData { get => Type == LayoutNodeType.Fan ? _fan : null; set => _fan = value ?? new(); }
+
+    /// <summary>GRD/terminal block; written only for GRDs.</summary>
+    [JsonPropertyName("Grd")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LayoutGrdData? GrdData { get => Type == LayoutNodeType.Grd ? _grd : null; set => _grd = value ?? new(); }
+
+    /// <summary>Space block; written only for space sources and sinks.</summary>
+    [JsonPropertyName("Space")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LayoutSpaceData? SpaceData { get => Type == LayoutNodeType.Reservoir ? _space : null; set => _space = value ?? new(); }
+
+    /// <summary>Calculation point block; written only for calculation points.</summary>
+    [JsonPropertyName("CalculationPoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LayoutCalculationPointData? CalculationPointData
+    {
+        get => Type == LayoutNodeType.CalculationPoint ? _calculationPoint : null;
+        set => _calculationPoint = value ?? new();
+    }
+
+    /// <summary>Fitting block; written only for fittings.</summary>
+    [JsonPropertyName("Fitting")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LayoutFittingNodeData? FittingData { get => Type == LayoutNodeType.Fitting ? _fitting : null; set => _fitting = value ?? new(); }
+
     public int Sequence { get; set; }
     public LayoutNodeType Type { get; set; }
     public int GridX { get; set; }
     public int GridY { get; set; }
     public string ParentNodeId { get; set; } = string.Empty;
     public string SecondaryParentNodeId { get; set; } = string.Empty;
-    public string FittingGroup { get; set; } = string.Empty;
+    [JsonIgnore] public string FittingGroup { get => _fitting.Group; set => _fitting.Group = value; }
     public string AirSystemType { get; set; } = "Supply Air";
     public string BranchId { get; set; } = "Main";
     public double AirflowM3PerS { get; set; }
     public double TemperatureC { get; set; } = 21.1111111111;
     public double PressureDropPa { get; set; }
-    public double FanStaticPressurePa { get; set; }
-    public double FanEfficiencyPercent { get; set; } = 70.0;
+    [JsonIgnore] public double FanStaticPressurePa { get => _fan.StaticPressurePa; set => _fan.StaticPressurePa = value; }
+    [JsonIgnore] public double FanEfficiencyPercent { get => _fan.EfficiencyPercent; set => _fan.EfficiencyPercent = value; }
     public double PressurePa { get; set; }
     public double VelocityMPerS { get; set; }
-    public string GrdType { get; set; } = "Grille";
+    [JsonIgnore] public string GrdType { get => _grd.Type; set => _grd.Type = value; }
     public string Description { get; set; } = string.Empty;
-    public double GrdFaceSizeIn { get; set; } = 24;
-    public double GrdNeckDiameterIn { get; set; } = 8;
-    public double GrdLengthFt { get; set; } = 2;
-    public double GrdSlotWidthIn { get; set; } = 0.75;
-    public int GrdSlotCount { get; set; } = 1;
-    public double GrdInletDiameterIn { get; set; } = 6;
-    public double GrdSelectedAirflowCfm { get; set; }
-    public string GrdSoundNc { get; set; } = string.Empty;
-    public string GrdThrowFt { get; set; } = string.Empty;
-    public string GrdNominalDuctSizeIn { get; set; } = "12x12";
-    public string SpaceRole { get; set; } = "Supply Discharge";
-    public string CalculationPointType { get; set; } = "Pressure";
-    public string CalculationConnectionNodeId { get; set; } = string.Empty;
-    public bool CalculationConnectionSecondary { get; set; }
-    public double CalculationConnectionFraction { get; set; } = 0.5;
-    public int? ObservedDuctSequence { get; set; }
+    [JsonIgnore] public double GrdFaceSizeIn { get => _grd.FaceSizeIn; set => _grd.FaceSizeIn = value; }
+    [JsonIgnore] public double GrdNeckDiameterIn { get => _grd.NeckDiameterIn; set => _grd.NeckDiameterIn = value; }
+    [JsonIgnore] public double GrdLengthFt { get => _grd.LengthFt; set => _grd.LengthFt = value; }
+    [JsonIgnore] public double GrdSlotWidthIn { get => _grd.SlotWidthIn; set => _grd.SlotWidthIn = value; }
+    [JsonIgnore] public int GrdSlotCount { get => _grd.SlotCount; set => _grd.SlotCount = value; }
+    [JsonIgnore] public double GrdInletDiameterIn { get => _grd.InletDiameterIn; set => _grd.InletDiameterIn = value; }
+    [JsonIgnore] public double GrdSelectedAirflowCfm { get => _grd.SelectedAirflowCfm; set => _grd.SelectedAirflowCfm = value; }
+    [JsonIgnore] public string GrdSoundNc { get => _grd.SoundNc; set => _grd.SoundNc = value; }
+    [JsonIgnore] public string GrdThrowFt { get => _grd.ThrowFt; set => _grd.ThrowFt = value; }
+    [JsonIgnore] public string GrdNominalDuctSizeIn { get => _grd.NominalDuctSizeIn; set => _grd.NominalDuctSizeIn = value; }
+    [JsonIgnore] public string SpaceRole { get => _space.Role; set => _space.Role = value; }
+    [JsonIgnore] public string CalculationPointType { get => _calculationPoint.PointType; set => _calculationPoint.PointType = value; }
+    [JsonIgnore] public string CalculationConnectionNodeId { get => _calculationPoint.ConnectionNodeId; set => _calculationPoint.ConnectionNodeId = value; }
+    [JsonIgnore] public bool CalculationConnectionSecondary { get => _calculationPoint.ConnectionSecondary; set => _calculationPoint.ConnectionSecondary = value; }
+    [JsonIgnore] public double CalculationConnectionFraction { get => _calculationPoint.ConnectionFraction; set => _calculationPoint.ConnectionFraction = value; }
+    [JsonIgnore] public int? ObservedDuctSequence { get => _calculationPoint.ObservedDuctSequence; set => _calculationPoint.ObservedDuctSequence = value; }
     public double DeltaXM { get; set; }
     public double DeltaYM { get; set; }
     public double DeltaZM { get; set; }
     public double SecondaryDeltaXM { get; set; }
     public double SecondaryDeltaYM { get; set; }
     public double SecondaryDeltaZM { get; set; }
-    public double ElbowAngleDegrees { get; set; } = 90.0;
+    [JsonIgnore] public double ElbowAngleDegrees { get => _fitting.ElbowAngleDegrees; set => _fitting.ElbowAngleDegrees = value; }
     /// <summary>Absolute X position (m) of the component. Stored from schema 13; authoritative when the file is loaded.</summary>
     public double XM { get; set; }
 
@@ -568,7 +661,13 @@ public static class DuctSystemStore
             return new DuctSystemDocument();
 
         var json = File.ReadAllText(path);
-        var document = JsonSerializer.Deserialize<DuctSystemDocument>(json, JsonOptions)
+        var root = JsonNode.Parse(json, new JsonNodeOptions { PropertyNameCaseInsensitive = true })
+                   ?? throw new InvalidDataException("The local duct-system file is empty or invalid.");
+        // Schema 14 moved type-specific component fields into per-type blocks. Older files store them flat on
+        // every component; move them before reading (no value changes).
+        if (root is JsonObject rootObject && ReadSchemaVersion(rootObject) < 14)
+            MoveFlatComponentFieldsIntoTypeBlocks(rootObject);
+        var document = root.Deserialize<DuctSystemDocument>(JsonOptions)
                        ?? throw new InvalidDataException("The local duct-system file is empty or invalid.");
         document.Ducts ??= new List<SavedDuct>();
         document.Fittings ??= new List<SavedFitting>();
@@ -696,6 +795,9 @@ public static class DuctSystemStore
         var positionsFromOffsets = document.SchemaVersion == 12;
         if (document.SchemaVersion == 12)
             document.SchemaVersion = 13;
+        // Version 14: per-type component blocks (moved above, before reading).
+        if (document.SchemaVersion == 13)
+            document.SchemaVersion = 14;
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."
@@ -976,6 +1078,60 @@ public static class DuctSystemStore
         string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
 
     private static double FiniteOrZero(double value) => double.IsFinite(value) ? value : 0;
+
+    private static readonly (string Legacy, string Block, string Name)[] FlatComponentFields =
+    {
+        ("FanStaticPressurePa", "Fan", "StaticPressurePa"), ("FanEfficiencyPercent", "Fan", "EfficiencyPercent"),
+        ("GrdType", "Grd", "Type"), ("GrdFaceSizeIn", "Grd", "FaceSizeIn"), ("GrdNeckDiameterIn", "Grd", "NeckDiameterIn"),
+        ("GrdLengthFt", "Grd", "LengthFt"), ("GrdSlotWidthIn", "Grd", "SlotWidthIn"), ("GrdSlotCount", "Grd", "SlotCount"),
+        ("GrdInletDiameterIn", "Grd", "InletDiameterIn"), ("GrdSelectedAirflowCfm", "Grd", "SelectedAirflowCfm"),
+        ("GrdSoundNc", "Grd", "SoundNc"), ("GrdThrowFt", "Grd", "ThrowFt"), ("GrdNominalDuctSizeIn", "Grd", "NominalDuctSizeIn"),
+        ("SpaceRole", "Space", "Role"),
+        ("CalculationPointType", "CalculationPoint", "PointType"),
+        ("CalculationConnectionNodeId", "CalculationPoint", "ConnectionNodeId"),
+        ("CalculationConnectionSecondary", "CalculationPoint", "ConnectionSecondary"),
+        ("CalculationConnectionFraction", "CalculationPoint", "ConnectionFraction"),
+        ("ObservedDuctSequence", "CalculationPoint", "ObservedDuctSequence"),
+        ("FittingGroup", "Fitting", "Group"), ("ElbowAngleDegrees", "Fitting", "ElbowAngleDegrees")
+    };
+
+    private static int ReadSchemaVersion(JsonObject root)
+    {
+        foreach (var (key, value) in root)
+        {
+            if (string.Equals(key, nameof(DuctSystemDocument.SchemaVersion), StringComparison.OrdinalIgnoreCase)
+                && value is JsonValue number && number.TryGetValue<int>(out var version))
+                return version;
+        }
+        return 1;
+    }
+
+    /// <summary>Schema 13 and earlier: moves flat type-specific component fields into their per-type blocks.</summary>
+    private static void MoveFlatComponentFieldsIntoTypeBlocks(JsonObject root)
+    {
+        var nodesKey = root.Select(pair => pair.Key)
+            .FirstOrDefault(key => string.Equals(key, nameof(DuctSystemDocument.LayoutNodes), StringComparison.OrdinalIgnoreCase));
+        if (nodesKey is null || root[nodesKey] is not JsonArray nodes)
+            return;
+        foreach (var node in nodes.OfType<JsonObject>())
+        {
+            foreach (var (legacy, block, name) in FlatComponentFields)
+            {
+                var key = node.Select(pair => pair.Key)
+                    .FirstOrDefault(candidate => string.Equals(candidate, legacy, StringComparison.OrdinalIgnoreCase));
+                if (key is null)
+                    continue;
+                var value = node[key];
+                node.Remove(key);
+                if (node[block] is not JsonObject target)
+                {
+                    target = new JsonObject();
+                    node[block] = target;
+                }
+                target[name] = value;
+            }
+        }
+    }
 
     public static void Save(string path, DuctSystemDocument document)
     {
