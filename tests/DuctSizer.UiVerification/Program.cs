@@ -353,15 +353,15 @@ internal static class Program
             foreach (var requiredText in new[] { "Colebrook", "iterations", "cfm", "fpm", "in. w.c.", "lbm/ft³" })
                 Require(ductCalculationDetails.Text.Contains(requiredText, StringComparison.OrdinalIgnoreCase),
                     $"The Duct Calculator calculation worksheet should contain {requiredText}.");
-            Require(ductCalculationDetails.Rtf.Contains("\\pict", StringComparison.Ordinal),
+            Require((ductCalculationDetails.Rtf ?? "").Contains("\\pict", StringComparison.Ordinal),
                 "The Duct Calculator should render equations as stacked display math.");
             Require(ductCalculationDetails.Text.Contains("REQUIRED EQUATIONS", StringComparison.Ordinal)
                     && ductCalculationDetails.Text.Contains("PARAMETERS AND SUB-EQUATIONS", StringComparison.Ordinal)
                     && ductCalculationDetails.Text.Contains("INPUT VALUES", StringComparison.Ordinal)
                     && ductCalculationDetails.Text.Contains("SOLVED PARAMETERS — EQUATION SUBSTITUTIONS", StringComparison.Ordinal)
-                    && ductCalculationDetails.Rtf.Contains("\\emfblip", StringComparison.Ordinal)
-                    && ductCalculationDetails.Rtf.Contains("\\red190\\green44\\blue44", StringComparison.Ordinal)
-                    && ductCalculationDetails.Rtf.Contains("\\red0\\green105\\blue154", StringComparison.Ordinal),
+                    && (ductCalculationDetails.Rtf ?? "").Contains("\\emfblip", StringComparison.Ordinal)
+                    && (ductCalculationDetails.Rtf ?? "").Contains("\\red190\\green44\\blue44", StringComparison.Ordinal)
+                    && (ductCalculationDetails.Rtf ?? "").Contains("\\red0\\green105\\blue154", StringComparison.Ordinal),
                 "The Duct Calculator should show equations first, organized parameters, red inputs, and blue solved equation substitutions.");
             Require(ductCalculationDetails.Text.Contains("1. FINAL DUCT GEOMETRY", StringComparison.Ordinal)
                     && ductCalculationDetails.Text.Contains("2. AIR PROPERTIES", StringComparison.Ordinal)
@@ -666,7 +666,7 @@ internal static class Program
                     && fittingCalculationDetails.Text.Contains("Re =", StringComparison.Ordinal)
                     && fittingCalculationDetails.Text.Contains("in. w.c.", StringComparison.Ordinal)
                     && fittingCalculationDetails.Text.Contains("AIR AND MATERIAL", StringComparison.Ordinal)
-                    && fittingCalculationDetails.Rtf.Contains("\\pict", StringComparison.Ordinal),
+                    && (fittingCalculationDetails.Rtf ?? "").Contains("\\pict", StringComparison.Ordinal),
                 "The Fitting Calculator should keep summary outputs in its left card and show the ASHRAE source table with properly typeset Imperial equations on the right.");
             var fittingShowCalculations = PrivateField<Button>(form, "_fittingCalculationsShowButton");
             var fittingHideCalculations = PrivateField<Button>(form, "_fittingCalculationsHideButton");
@@ -1377,7 +1377,7 @@ internal static class Program
                     && layoutToolList.FlowDirection == FlowDirection.TopDown
                     && layoutToolList.Width <= 220
                     && layoutToolList.Controls.Cast<Control>().All(tool => tool.Size == new Size(46, 46)
-                        && layoutToolTips.GetToolTip(tool).Contains("\r\n", StringComparison.Ordinal)),
+                        && (layoutToolTips.GetToolTip(tool) ?? "").Contains("\r\n", StringComparison.Ordinal)),
                 $"The layout components should appear as compact, borderless icon selectors in a vertically scrolling right drawer, with names and explanations retained as hover help. Count={layoutToolList.Controls.Count}, Wrap={layoutToolList.WrapContents}, Flow={layoutToolList.FlowDirection}, Width={layoutToolList.Width}, Sizes={string.Join(',', layoutToolList.Controls.Cast<Control>().Select(tool => tool.Size))}.");
             Require(settingsButton.Visible && grid.AllowUserToOrderColumns
                     && grid.RowTemplate.Height <= 26 && grid.ColumnHeadersHeight <= 52
@@ -3097,7 +3097,7 @@ internal static class Program
                     Require(save is not null, "The equipment dialog save method should exist.");
                     {
                         var priorDelta = (coilNode.DeltaXM, coilNode.DeltaYM, coilNode.DeltaZM);
-                        save.Invoke(offsetDialog, null);
+                        save!.Invoke(offsetDialog, null);
                         var desired = (LayoutCoordinate)equipmentDialogType.GetProperty("DesiredAbsoluteCoordinate",
                             BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(offsetDialog)!;
                         Require(Math.Abs(UnitConversions.MToFeet(desired.XM) - 34) < 1e-9

@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-09 (owner directives done; steps 8 and 9 completed in full; v0.95.0 pending Windows build)
+Last updated: 2026-11-09 (all ten steps done; v0.95.0 built and verified on the owner's laptop; history on GitHub)
 
 ## Where things live
 
@@ -18,9 +18,8 @@ Last updated: 2026-11-09 (owner directives done; steps 8 and 9 completed in full
 | Interface checks | `tests/DuctSizer.UiVerification` (WinForms, Windows only) |
 | Reference project (not in repo: contains a client drawing underlay) | owner's `%LOCALAPPDATA%\DuctSizer\duct-system.json`; golden results recorded below |
 
-Git history exists in Claude's working repository (commits listed below). The owner's folder
-does not have `.git` yet; a private GitHub repository is pending (owner to connect GitHub and
-name the repo).
+Git history: https://github.com/rtogorman/fanworks (branch `main`, pushed 2026-11-09). The owner's
+laptop folder is a plain copy (no `.git`); it is kept in step by copying changed files.
 
 ## Correction plan status
 
@@ -35,7 +34,7 @@ name the repo).
 | 7. System solver into Core (finding 6) | Done | `SystemSolver` (Core) replaces the window's solver; bit-identical on reference project + 3 variants; 8 new solver checks (49/49); UI 16/16 (Wine) |
 | 8. One coordinate model (finding 7) | Done in full 2026-11-09 (see "Step 8 (full) record"); earlier partial record kept below | `LayoutGeometryCheck` detects non-closing loops, duct offset/length mismatches, unplaced components; shown on the Duct System summary, tooltip and PDF; resolver documented. Storage still relative (decision recorded) |
 | 9. Break up main window (findings 12-14) | Done in full 2026-11-09 (see "Step 9 (full)" records A and B) | undo capped; 14 classes moved to own files; `LayoutModelCheck` per-type rules. Per-tab screen classes deferred (decision recorded) |
-| 10. Docs, independent verification, CI (findings 15-16) | Done in code; human items open | XML docs with equations/sources; `docs/TABLE_VERIFICATION.md` (108 entries, all "Not verified"); ARCHITECTURE/DEVELOPER_GUIDE; culture test; warnings as errors; `global.json`; CI workflow. Open: independent table re-check, IP clearance, GitHub |
+| 10. Docs, independent verification, CI (findings 15-16) | Done in code; human items open | XML docs with equations/sources; `docs/TABLE_VERIFICATION.md` (108 entries, all "Not verified"); ARCHITECTURE/DEVELOPER_GUIDE; culture test; warnings as errors; `global.json`; CI workflow (now on GitHub). Open: independent table re-check, IP clearance (owner) |
 
 ## Completed changes (v0.93.0)
 
@@ -137,6 +136,13 @@ name the repo).
 - `448ba62` Step 8: layout geometry check
 - `bc773c9` / `7905688` Step 9: bounded undo, file split, model check
 - `ef46add` Step 10: documentation, register, CI; v0.94.0
+- `659fda1` Progress: v0.94.0 verified on Windows
+- `6eaccc0` Unsized connections block totals; Auto-size Fan isolates the critical path
+- `bd496b2` Step 8: absolute positions stored (schema 13); positions edited relative
+- `08e97aa` Step 9: per-type component data (schema 14)
+- `9f86bbb` / `589371d` / `70265c9` / `1949647` Step 9: one screen class per tab
+- `a3b08c6` v0.95.0: docs, unsized display fix
+- (next) Test warnings fixed; v0.95.0 Windows verification recorded
 
 ## Reference project golden results (v0.93.0 Core)
 
@@ -154,12 +160,11 @@ the three sinks it feeds total 1,200 cfm.
 
 ## Outstanding issues and open decisions
 
-- GitHub repository not yet connected (needed for CI to run and to carry history to the owner's folder).
 - Independent re-check of ASHRAE / Titus / Price table transcriptions needs the source documents and a second person.
 - IP / licensing clearance for embedded ASHRAE tables and images, Titus catalog data and toolbox icons (owner / legal).
 - Interface tests write to the real user log folder while running (harmless; could be redirected).
-- Deferred restructuring (owner to confirm): absolute-coordinate storage (step 8 record); per-tab screen classes and
-  per-type saved models (step 9 record).
+- Remaining structural debt: `DuctSystemScreen` and `LayoutDesignerScreen` are each ~4,000 lines; splitting them
+  further (e.g. table, filters, export; canvas, dialogs, wiring) is a later refactor, not a correctness issue.
 - Stricter analyzer set (`latest-recommended`) not yet adopted (~270 findings, mostly style).
 
 ## Architecture notes and decisions
@@ -173,7 +178,7 @@ the three sinks it feeds total 1,200 cfm.
 
 ## Next steps
 
-See the step currently "In progress" above; its detailed plan is in the section below.
+No step is in progress; see "Current task detail" at the end for open items.
 
 ## Owner directives (2026-11-09)
 
@@ -254,9 +259,19 @@ step 10 refresh, release v0.95.0.
   DEVELOPER_GUIDE (UiMember, position rule) updated; version 0.95.0.
 - Fixed a last display path that still treated an unsized connection as zero loss (Duct System inlet pressure column).
 
+## v0.95.0 Windows verification (2026-11-09)
+
+- `RunBuild.cmd` on the owner's laptop: 63/63 engineering checks, 16/16 interface checks, published
+  `outputs\FanWorks-win-x64-v0.95.0\FanWorks.exe`. 0 errors.
+- The build reported four nullable warnings (CS8602) in the interface test program (RTF/tooltip text and a
+  reflected method). Fixed afterwards by guarding those lookups; tests re-run 63/63 and 16/16 (Linux/Wine). No
+  application code changed.
+- History pushed to GitHub (`origin/main`); the CI workflow `.github/workflows/build.yml` runs on each push.
+- Owner's folder: `MainForm.FittingLoss.cs`, `MainForm.DuctSystem.cs`, `MainForm.LayoutDesigner.cs` are one-line
+  stubs left because the remote-file tool cannot delete; the owner can delete them (the build is fine either way).
+
 ## Current task detail
 
-Build v0.95.0 on the owner's laptop and confirm both suites on Windows. Old partial files
-(`MainForm.FittingLoss.cs`, `MainForm.DuctSystem.cs`, `MainForm.LayoutDesigner.cs`) were replaced in the owner's
-folder by one-line stubs (the remote-file tool cannot delete); they can be deleted. Then: push history to GitHub once
-the Claude GitHub App is installed.
+None in progress. Open items needing people or documents: independent re-check of the table transcriptions,
+ASHRAE page citations and licensing (owner), code signing, and the reference project's fan airflow (1,000 cfm set
+vs 1,200 cfm served).
