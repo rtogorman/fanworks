@@ -617,8 +617,7 @@ internal static class Program
             Require(form.Controls.Find("ExportSystemButton", true).Length == 0
                     && form.Controls.Find("ImportSystemButton", true).Length == 0,
                 "Project export and import should be removed from the Duct System action row.");
-            var settingsMenu = (ContextMenuStrip)typeof(MainForm)
-                .GetField("_settingsMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            var settingsMenu = (ContextMenuStrip)UiMember.Field("_settingsMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
             Require(settingsMenu.Items.Find("ImportProjectMenuItem", true).Length == 1
                     && settingsMenu.Items.Find("AutomaticSizingInputsMenuItem", true).Length == 1
                     && settingsMenu.Items.Find("CalculationMethodInputsMenuItem", true).Single().Text
@@ -853,8 +852,7 @@ internal static class Program
                     && vavDetails.Contains("ΔP = ΔP₁", StringComparison.Ordinal)
                     && vavDetails.Contains("AHRI 410-2001", StringComparison.Ordinal),
                 "The Titus DESV VAV-with-reheat calculator should expose size, rows, airflow, interpolation, and manufacturer pressure drop without unrelated duct geometry inputs.");
-            var vavPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(typeof(MainForm)
-                .GetMethod("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
+            var vavPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(UiMember.Method("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
                 .Invoke(null, new object[] { vavCalculation }) ?? Array.Empty<DuctSystemPdfCalculationSection>());
             Require(vavPdfSections.Any(section => section.Heading == "RECREATED PUBLISHED PERFORMANCE TABLE"
                                                    && section.Lines.Count == 10)
@@ -1405,8 +1403,7 @@ internal static class Program
                         })
                     && grid.Columns["AirSystem"].HeaderText == "Air type",
                 "The Duct System schedule should lead with the requested operating-data column order.");
-            var formattedNegativeZero = (string)typeof(MainForm)
-                .GetMethod("FormatSystemPressureValue", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var formattedNegativeZero = (string)UiMember.Method("FormatSystemPressureValue", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { -0.00001 })!;
             Require(formattedNegativeZero == "0" && !formattedNegativeZero.StartsWith("-", StringComparison.Ordinal),
                 "Static pressure in/out formatting should normalize rounded negative zero to zero.");
@@ -1569,8 +1566,7 @@ internal static class Program
             document.LayoutNodes.AddRange(new[] { negativeSource, fanAfterNegativeSource });
             UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
-            var fanInletPressure = (double)(typeof(MainForm)
-                .GetMethod("SystemInletPressureForNode", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var fanInletPressure = (double)(UiMember.Method("SystemInletPressureForNode", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { fanAfterNegativeSource }) ?? double.NaN);
             Require(fanInletPressure < 0
                     && Math.Abs(fanAfterNegativeSource.PressurePa
@@ -2427,15 +2423,13 @@ internal static class Program
                 "Rearranging a Designer component should create an Undo state without changing its connection or duct data.");
             layoutUndo.PerformClick();
             Application.DoEvents();
-            var restoredDocument = (DuctSystemDocument)typeof(MainForm)
-                .GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            var restoredDocument = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
             var restoredFilter = restoredDocument.LayoutNodes.FirstOrDefault(x => x.Sequence == filterNode.Sequence);
             Require(restoredFilter is not null && restoredFilter.GridX == originalFilterX && layoutRedo.Enabled,
                 "Undo should restore the previous Designer component position and enable Redo.");
             layoutRedo.PerformClick();
             Application.DoEvents();
-            restoredDocument = (DuctSystemDocument)typeof(MainForm)
-                .GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            restoredDocument = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
             restoredFilter = restoredDocument.LayoutNodes.FirstOrDefault(x => x.Sequence == filterNode.Sequence);
             Require(restoredFilter is not null && restoredFilter.GridX == movedFilterX,
                 "Redo should restore the reapplied Designer component position.");
@@ -2449,8 +2443,7 @@ internal static class Program
             Require((bool)(processShortcut.Invoke(form, undoShortcutArgs) ?? false),
                 "Ctrl+Z should be handled as the Layout Designer Undo shortcut.");
             Application.DoEvents();
-            restoredDocument = (DuctSystemDocument)typeof(MainForm)
-                .GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            restoredDocument = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
             restoredFilter = restoredDocument.LayoutNodes.FirstOrDefault(x => x.Sequence == filterNode.Sequence);
             Require(restoredFilter is not null && restoredFilter.GridX == originalFilterX,
                 "Ctrl+Z should restore the previous Designer component position.");
@@ -2461,8 +2454,7 @@ internal static class Program
             Require((bool)(processShortcut.Invoke(form, redoShortcutArgs) ?? false),
                 "Ctrl+Y should be handled as the Layout Designer Redo shortcut.");
             Application.DoEvents();
-            restoredDocument = (DuctSystemDocument)typeof(MainForm)
-                .GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            restoredDocument = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
             restoredFilter = restoredDocument.LayoutNodes.FirstOrDefault(x => x.Sequence == filterNode.Sequence);
             Require(restoredFilter is not null && restoredFilter.GridX == movedFilterX,
                 "Ctrl+Y should restore the reapplied Designer component position.");
@@ -2594,8 +2586,7 @@ internal static class Program
                     && File.Exists(greenSaveProjectPath),
                 "The green Save button should create the project file, PDF, and CSV at the selected base path.");
             {
-                var savedModel = (DuctSystemDocument)typeof(MainForm)
-                    .GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+                var savedModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
                 var expectedNodes = savedModel.LayoutNodes.Count;
                 var expectedDucts = savedModel.Ducts.Count;
                 var expectedFittings = savedModel.Fittings.Count;
@@ -2832,8 +2823,7 @@ internal static class Program
             UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
 
-            var pdfReportItems = (IReadOnlyList<DuctSystemPdfReportItem>)(typeof(MainForm)
-                .GetMethod("BuildPdfReportItems", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var pdfReportItems = (IReadOnlyList<DuctSystemPdfReportItem>)(UiMember.Method("BuildPdfReportItems", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null) ?? Array.Empty<DuctSystemPdfReportItem>());
             Require(pdfReportItems.Count >= 5
                     && pdfReportItems[0].Id == fanNode.Id
@@ -2874,8 +2864,7 @@ internal static class Program
                         && !string.IsNullOrWhiteSpace(item.ReferenceImageJpegBase64)
                         && item.ReferenceImagePixelWidth > 0 && item.ReferenceImagePixelHeight > 0),
                 "The PDF detail report should follow connected-system order and include comprehensive duct, fitting, and equipment inputs and calculated outputs.");
-            var titusPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(typeof(MainForm)
-                .GetMethod("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
+            var titusPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(UiMember.Method("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
                 .Invoke(null, new object[] { titusCalculation }) ?? Array.Empty<DuctSystemPdfCalculationSection>());
             Require(titusPdfSections.Any(section => section.Heading == "RECREATED PUBLISHED PERFORMANCE TABLE"
                                                     && section.Lines.Count >= 8)
@@ -2884,8 +2873,7 @@ internal static class Program
                     && titusPdfSections.SelectMany(section => section.Lines)
                         .Any(line => line.Formula.Contains("Automatically selected inlet", StringComparison.Ordinal)),
                 "The exported Titus calculation should include the selected performance chart, inlet, and manufacturer reference.");
-            var titus350RPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(typeof(MainForm)
-                .GetMethod("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
+            var titus350RPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(UiMember.Method("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
                 .Invoke(null, new object[] { titus350RCalculation }) ?? Array.Empty<DuctSystemPdfCalculationSection>());
             Require(titus350RPdfSections.Any(section => section.Heading == "RECREATED PUBLISHED PERFORMANCE TABLE"
                                                          && section.Lines.Count == 10)
@@ -2930,15 +2918,12 @@ internal static class Program
             {
                 document.LayoutPdfBackground = importedBackground;
                 document.CompanyLogoPngBase64 = CreateTestCompanyLogo();
-                var logo = ((string Base64, int Width, int Height))(typeof(MainForm)
-                    .GetMethod("BuildReportLogo", BindingFlags.Instance | BindingFlags.NonPublic)!
+                var logo = ((string Base64, int Width, int Height))(UiMember.Method("BuildReportLogo", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(form, null) ?? (string.Empty, 0, 0));
                 Require(!string.IsNullOrWhiteSpace(logo.Base64) && logo.Width > 0 && logo.Height > 0,
                     "The embedded project logo should be converted for the PDF report.");
-                var pdfLayout = (DuctSystemPdfLayout?)typeof(MainForm)
-                    .GetMethod("BuildPdfLayout", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
-                var pdfSchematics = (IReadOnlyList<DuctSystemPdfSchematic>)(typeof(MainForm)
-                    .GetMethod("BuildPdfSchematics", BindingFlags.Instance | BindingFlags.NonPublic)!
+                var pdfLayout = (DuctSystemPdfLayout?)UiMember.Method("BuildPdfLayout", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+                var pdfSchematics = (IReadOnlyList<DuctSystemPdfSchematic>)(UiMember.Method("BuildPdfSchematics", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(form, null) ?? Array.Empty<DuctSystemPdfSchematic>());
                 Require(pdfSchematics.Count == 4
                         && pdfSchematics.Select(item => item.Title).SequenceEqual(new[]
@@ -3653,8 +3638,7 @@ internal static class Program
                     AutomationOptions.OpenProjectPath = null;
                 }
                 Application.DoEvents();
-                var openedModel = (DuctSystemDocument)typeof(MainForm)
-                    .GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+                var openedModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
                 Require(openedModel.LayoutNodes.Count == savedProject.LayoutNodes.Count
                         && openedModel.LayoutNodes.Count > 0
                         && openedModel.Ducts.Count == savedProject.Ducts.Count

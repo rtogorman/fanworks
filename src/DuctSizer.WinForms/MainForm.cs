@@ -7,32 +7,35 @@ namespace DuctSizer.WinForms;
 
 public sealed partial class MainForm : Form
 {
+    private DuctSystemScreen? _ductSystemScreen;
+    internal DuctSystemScreen DuctSystemScreen => _ductSystemScreen ??= new DuctSystemScreen(this);
+
     private FittingCalculatorScreen? _fittingScreen;
     internal FittingCalculatorScreen FittingScreen => _fittingScreen ??= new FittingCalculatorScreen(this);
 
     internal const double FixedRelativeHumidity = 0.50;
     internal const double FixedAtmosphericPressurePa = 101_325.0;
 
-    private readonly ComboBox _unitsCombo = CreateDropDown();
-    private readonly ComboBox _modeCombo = CreateDropDown();
-    private readonly ComboBox _shapeCombo = CreateDropDown();
-    private readonly ComboBox _materialCombo = CreateDropDown();
-    private readonly ComboBox _equivalentMethodCombo = CreateDropDown();
-    private readonly ComboBox _pressureBasisCombo = CreateDropDown();
+    internal readonly ComboBox _unitsCombo = CreateDropDown();
+    internal readonly ComboBox _modeCombo = CreateDropDown();
+    internal readonly ComboBox _shapeCombo = CreateDropDown();
+    internal readonly ComboBox _materialCombo = CreateDropDown();
+    internal readonly ComboBox _equivalentMethodCombo = CreateDropDown();
+    internal readonly ComboBox _pressureBasisCombo = CreateDropDown();
     internal static readonly string[] AirSystemTypes =
         { "Supply Air", "Return Air", "Exhaust Air", "Outdoor Air", "Relief Air", "Other" };
 
-    private readonly TextBox _airflowText = CreateInput("1000");
-    private readonly TextBox _temperatureText = CreateInput("70");
-    private readonly TextBox _lengthText = CreateInput("100");
-    private readonly TextBox _diameterText = CreateInput("12");
-    private readonly TextBox _widthText = CreateInput("24");
-    private readonly TextBox _heightText = CreateInput("12");
-    private readonly ComboBox _rectangularFixedDimensionCombo = CreateDropDown();
-    private readonly TextBox _rectangularFixedDimensionText = CreateInput("16");
+    internal readonly TextBox _airflowText = CreateInput("1000");
+    internal readonly TextBox _temperatureText = CreateInput("70");
+    internal readonly TextBox _lengthText = CreateInput("100");
+    internal readonly TextBox _diameterText = CreateInput("12");
+    internal readonly TextBox _widthText = CreateInput("24");
+    internal readonly TextBox _heightText = CreateInput("12");
+    internal readonly ComboBox _rectangularFixedDimensionCombo = CreateDropDown();
+    internal readonly TextBox _rectangularFixedDimensionText = CreateInput("16");
     private readonly TextBox _targetFrictionText = CreateInput("0.08");
     private readonly TextBox _maximumVelocityText = CreateInput("1500");
-    private readonly TextBox _sizeIncrementText = CreateInput("0");
+    internal readonly TextBox _sizeIncrementText = CreateInput("0");
     private readonly Label _diameterUnitLabel = CreateInputUnitLabel();
     private readonly Label _widthUnitLabel = CreateInputUnitLabel();
     private readonly Label _heightUnitLabel = CreateInputUnitLabel();
@@ -45,10 +48,10 @@ public sealed partial class MainForm : Form
     private readonly SplitContainer _ductCalculatorSplitter = new();
     private readonly RoundedPanel _inputCard = new();
     private readonly RoundedPanel _resultsCard = new();
-    private readonly Label _ductEditingLabel = new();
+    internal readonly Label _ductEditingLabel = new();
     private readonly TableLayoutPanel _summaryTable = new();
     private readonly ListView _results = new();
-    private readonly Label _statusLabel = new();
+    internal readonly Label _statusLabel = new();
     private readonly Label _methodHintLabel = new();
     private readonly Label _sizeSummaryValue = CreateSummaryValue();
     private readonly Label _velocitySummaryValue = CreateSummaryValue();
@@ -60,7 +63,7 @@ public sealed partial class MainForm : Form
     private readonly ListViewGroup _pressureGroup = new("Pressure loss");
     private readonly ListViewGroup _propertiesGroup = new("Air and material");
     internal UnitSystem _currentUnits = UnitSystem.Imperial;
-    private bool _updatingControls;
+    internal bool _updatingControls;
     private bool _stackedLayout;
     private bool _ductCalculationsCollapsed;
     private bool _ductCalculationsExpanded;
@@ -124,7 +127,7 @@ public sealed partial class MainForm : Form
         BuildChoices();
         BuildLayout();
         WireEvents();
-        LoadDuctSystem();
+        DuctSystemScreen.LoadDuctSystem();
         UpdateUnitsLabels();
         UpdateControlState();
         ApplyResponsiveLayout();
@@ -346,19 +349,19 @@ public sealed partial class MainForm : Form
         calculateButton.Margin = Padding.Empty;
         UiPolish.RoundButton(calculateButton);
         calculateButton.Click += (_, _) => CalculateAndDisplay();
-        _addDuctButton.Name = "AddDuctButton";
-        _addDuctButton.Text = DefaultDuctActionText;
-        _addDuctButton.Size = new Size(175, 34);
-        _addDuctButton.Margin = Padding.Empty;
-        _addDuctButton.BackColor = Color.FromArgb(42, 135, 91);
-        _addDuctButton.ForeColor = Color.White;
-        _addDuctButton.Font = new Font("Segoe UI Semibold", 8.5F);
-        _addDuctButton.FlatStyle = FlatStyle.Flat;
-        _addDuctButton.FlatAppearance.BorderSize = 0;
-        UiPolish.RoundButton(_addDuctButton);
-        _addDuctButton.Click += (_, _) => AddOrUpdateCurrentDuct();
-        _addDuctButton.Visible = false;
-        buttonPanel.Controls.Add(_addDuctButton);
+        DuctSystemScreen._addDuctButton.Name = "AddDuctButton";
+        DuctSystemScreen._addDuctButton.Text = DuctSystemScreen.DefaultDuctActionText;
+        DuctSystemScreen._addDuctButton.Size = new Size(175, 34);
+        DuctSystemScreen._addDuctButton.Margin = Padding.Empty;
+        DuctSystemScreen._addDuctButton.BackColor = Color.FromArgb(42, 135, 91);
+        DuctSystemScreen._addDuctButton.ForeColor = Color.White;
+        DuctSystemScreen._addDuctButton.Font = new Font("Segoe UI Semibold", 8.5F);
+        DuctSystemScreen._addDuctButton.FlatStyle = FlatStyle.Flat;
+        DuctSystemScreen._addDuctButton.FlatAppearance.BorderSize = 0;
+        UiPolish.RoundButton(DuctSystemScreen._addDuctButton);
+        DuctSystemScreen._addDuctButton.Click += (_, _) => DuctSystemScreen.AddOrUpdateCurrentDuct();
+        DuctSystemScreen._addDuctButton.Visible = false;
+        buttonPanel.Controls.Add(DuctSystemScreen._addDuctButton);
         calculateButton.Margin = new Padding(0, 0, 10, 0);
         buttonPanel.Controls.Add(calculateButton);
 
@@ -524,7 +527,7 @@ public sealed partial class MainForm : Form
         root.Controls.Add(titlePanel, 0, 0);
         root.Controls.Add(_contentLayout, 0, 1);
         root.Controls.Add(statusPanel, 0, 2);
-        InitializeTabsAndSystem(root);
+        DuctSystemScreen.InitializeTabsAndSystem(root);
         AcceptButton = calculateButton;
         Resize += (_, _) => ApplyResponsiveLayout();
     }
@@ -677,7 +680,7 @@ public sealed partial class MainForm : Form
 
         CalculateAndDisplay();
         FittingScreen.CalculateFittingAndDisplay();
-        RefreshDuctSystemGrid();
+        DuctSystemScreen.RefreshDuctSystemGrid();
     }
 
     private void UpdateUnitsLabels()
@@ -697,7 +700,7 @@ public sealed partial class MainForm : Form
         _inputLabels["velocity"].Text = imperial ? "Max Velocity (fpm)" : "Max Velocity (m/s)";
     }
 
-    private void UpdateControlState()
+    internal void UpdateControlState()
     {
         if (_shapeCombo.SelectedItem is null || _modeCombo.SelectedItem is null)
             return;
@@ -773,7 +776,7 @@ public sealed partial class MainForm : Form
         return null;
     }
 
-    private void CalculateAndDisplay()
+    internal void CalculateAndDisplay()
     {
         if (_updatingControls)
             return;
@@ -837,7 +840,7 @@ public sealed partial class MainForm : Form
                     targetFriction,
                     maximumVelocity,
                     increment,
-                    _ductSystem.DefaultSizeRoundingDirection,
+                    DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection,
                     fixedDimension,
                     fixedDimensionM));
                 continuousGeometry = sizing.ContinuousGeometry;
@@ -845,7 +848,7 @@ public sealed partial class MainForm : Form
             }
 
             DisplayResults(result, continuousGeometry);
-            _lastCalculation = result;
+            DuctSystemScreen._lastCalculation = result;
 
             var warning = result.Friction.Regime == FlowRegime.Transitional
                 ? "Transitional flow: pressure loss is shown as unblended laminar-to-turbulent bounds."
@@ -862,7 +865,7 @@ public sealed partial class MainForm : Form
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or FormatException or OverflowException)
         {
-            _lastCalculation = null;
+            DuctSystemScreen._lastCalculation = null;
             _results.Items.Clear();
             _sizeSummaryValue.Text = "—";
             _velocitySummaryValue.Text = "—";
@@ -1191,7 +1194,7 @@ public sealed partial class MainForm : Form
             : $"{UnitConversions.MToInches(value.WidthM):0.###} × {UnitConversions.MToInches(value.HeightM):0.###} in";
     }
 
-    private string FormatGeometry(DuctGeometry geometry)
+    internal string FormatGeometry(DuctGeometry geometry)
     {
         if (_currentUnits == UnitSystem.Imperial)
         {

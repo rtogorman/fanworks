@@ -5,8 +5,15 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-public sealed partial class MainForm
+internal sealed partial class DuctSystemScreen
 {
+    private readonly MainForm _host;
+
+    internal DuctSystemScreen(MainForm host)
+    {
+        _host = host;
+    }
+
     internal readonly PolishedTabControl _mainTabs = new();
     private readonly Button _calculatorNavigationButton = new();
     private readonly Button _fittingNavigationButton = new();
@@ -26,7 +33,7 @@ public sealed partial class MainForm
     private readonly TabPage _fittingTab = new("Fitting Calculator");
     internal readonly TabPage _systemTab = new("Duct System");
     internal readonly TabPage _layoutTab = new("Layout Designer");
-    private readonly DataGridView _ductGrid = new();
+    internal readonly DataGridView _ductGrid = new();
     private readonly ContextMenuStrip _ductGridContextMenu = new();
     private readonly ToolStripMenuItem _editSystemItemMenuItem = new("Edit item")
         { Name = "DuctGridEditItemMenuItem" };
@@ -36,7 +43,7 @@ public sealed partial class MainForm
     private readonly Label _systemCriticalLabel = new();
     private readonly Label _systemCountLabel = new();
     internal readonly Label _systemStorageStatusLabel = new();
-    private readonly Button _addDuctButton = new();
+    internal readonly Button _addDuctButton = new();
     private readonly Button _deleteAllSystemButton = new();
     private readonly Button _exportSystemButton = new();
     private readonly Button _importSystemButton = new();
@@ -44,18 +51,18 @@ public sealed partial class MainForm
     private readonly Button _viewFanInformationButton = new();
     private readonly Button _criticalPathFilterButton = new();
     internal DuctSystemDocument _ductSystem = new();
-    private DuctCalculationResult? _lastCalculation;
-    private int? _editingDuctSequence;
+    internal DuctCalculationResult? _lastCalculation;
+    internal int? _editingDuctSequence;
     internal int? _editingFittingSequence;
-    private const string DefaultDuctActionText = "Save Duct Changes";
+    internal const string DefaultDuctActionText = "Save Duct Changes";
     internal const string DefaultFittingActionText = "Save Fitting Changes";
-    private bool _criticalPathCalculated;
+    internal bool _criticalPathCalculated;
     private bool _criticalPathFilterEnabled;
-    private HashSet<string> _criticalPathItemKeys = new(StringComparer.OrdinalIgnoreCase);
+    internal HashSet<string> _criticalPathItemKeys = new(StringComparer.OrdinalIgnoreCase);
     private double _criticalPathPressureLossPa;
     private string _criticalPathRoute = string.Empty;
     private IReadOnlyList<SystemCalculationIssue> _criticalPathIssues = Array.Empty<SystemCalculationIssue>();
-    private sealed record SystemRowTag(bool IsFitting, int Sequence);
+    internal sealed record SystemRowTag(bool IsFitting, int Sequence);
 
     private string DuctSystemStoragePath
     {
@@ -71,7 +78,7 @@ public sealed partial class MainForm
         }
     }
 
-    private void InitializeTabsAndSystem(Control calculatorRoot)
+    internal void InitializeTabsAndSystem(Control calculatorRoot)
     {
         _mainTabs.Name = "MainTabs";
         _mainTabs.Dock = DockStyle.Fill;
@@ -80,23 +87,23 @@ public sealed partial class MainForm
         calculatorRoot.Dock = DockStyle.Fill;
         _calculatorTab.Name = "CalculatorTab";
         _calculatorTab.Padding = new Padding(0);
-        _calculatorTab.BackColor = BackColor;
+        _calculatorTab.BackColor = _host.BackColor;
         _calculatorTab.Controls.Add(calculatorRoot);
 
         _systemTab.Name = "DuctSystemTab";
         _systemTab.Padding = new Padding(0);
-        _systemTab.BackColor = BackColor;
+        _systemTab.BackColor = _host.BackColor;
         _systemTab.Controls.Add(BuildDuctSystemPage());
 
         _fittingTab.Name = "FittingLossTab";
         _fittingTab.Padding = new Padding(0);
-        _fittingTab.BackColor = BackColor;
-        _fittingTab.Controls.Add(FittingScreen.BuildFittingLossPage());
+        _fittingTab.BackColor = _host.BackColor;
+        _fittingTab.Controls.Add(_host.FittingScreen.BuildFittingLossPage());
 
         _layoutTab.Name = "LayoutDesignerTab";
         _layoutTab.Padding = new Padding(0);
-        _layoutTab.BackColor = BackColor;
-        _layoutTab.Controls.Add(BuildLayoutDesignerPage());
+        _layoutTab.BackColor = _host.BackColor;
+        _layoutTab.Controls.Add(_host.BuildLayoutDesignerPage());
 
         _mainTabs.TabPages.Add(_calculatorTab);
         _mainTabs.TabPages.Add(_fittingTab);
@@ -151,7 +158,7 @@ public sealed partial class MainForm
             RowCount = 3,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
@@ -165,9 +172,9 @@ public sealed partial class MainForm
             UpdateNavigationButtonState();
             SynchronizeSelectedSystemView();
             if (_mainTabs.SelectedTab == _fittingTab)
-                FittingScreen.ResetFittingInputScroll();
+                _host.FittingScreen.ResetFittingInputScroll();
         };
-        Controls.Add(shell);
+        _host.Controls.Add(shell);
         UpdateNavigationButtonState();
         RefreshProjectIdentityHeader();
     }
@@ -205,7 +212,7 @@ public sealed partial class MainForm
         using (var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream(
                    "DuctSizer.WinForms.Assets.DuctSizerCentrifugalIcon.png"))
         using (var sourceIcon = iconStream is null ? null : Image.FromStream(iconStream))
-            _projectHeaderAppIcon.Image = sourceIcon is null ? Icon?.ToBitmap() : new Bitmap(sourceIcon);
+            _projectHeaderAppIcon.Image = sourceIcon is null ? _host.Icon?.ToBitmap() : new Bitmap(sourceIcon);
         iconFrame.Controls.Add(_projectHeaderAppIcon);
 
         var brandBlock = new TableLayoutPanel
@@ -344,8 +351,8 @@ public sealed partial class MainForm
 
         _imperialUnitsMenuItem = new ToolStripMenuItem("Units: Imperial");
         _metricUnitsMenuItem = new ToolStripMenuItem("Units: Metric");
-        _imperialUnitsMenuItem.Click += (_, _) => _unitsCombo.SelectedIndex = 0;
-        _metricUnitsMenuItem.Click += (_, _) => _unitsCombo.SelectedIndex = 1;
+        _imperialUnitsMenuItem.Click += (_, _) => _host._unitsCombo.SelectedIndex = 0;
+        _metricUnitsMenuItem.Click += (_, _) => _host._unitsCombo.SelectedIndex = 1;
         var projectInformation = new ToolStripMenuItem("Project Settings…");
         projectInformation.Click += (_, _) => EditProjectSettings();
         var calculationMethodInputs = new ToolStripMenuItem("Calculation Method Inputs…")
@@ -394,15 +401,15 @@ public sealed partial class MainForm
     private void UpdateSettingsMenuState()
     {
         if (_imperialUnitsMenuItem is not null)
-            _imperialUnitsMenuItem.Checked = _currentUnits == UnitSystem.Imperial;
+            _imperialUnitsMenuItem.Checked = _host._currentUnits == UnitSystem.Imperial;
         if (_metricUnitsMenuItem is not null)
-            _metricUnitsMenuItem.Checked = _currentUnits == UnitSystem.Metric;
+            _metricUnitsMenuItem.Checked = _host._currentUnits == UnitSystem.Metric;
     }
 
     private void EditProjectSettings()
     {
-        using var dialog = new ProjectSettingsDialog(_ductSystem, _currentUnits);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        using var dialog = new ProjectSettingsDialog(_ductSystem, _host._currentUnits);
+        if (dialog.ShowDialog(_host) != DialogResult.OK)
             return;
         _ductSystem.UserName = dialog.UserName;
         _ductSystem.ProjectName = dialog.ProjectName;
@@ -415,8 +422,8 @@ public sealed partial class MainForm
 
     private void EditSolverSettings()
     {
-        using var dialog = new SolverSettingsDialog(_ductSystem, _currentUnits);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        using var dialog = new SolverSettingsDialog(_ductSystem, _host._currentUnits);
+        if (dialog.ShowDialog(_host) != DialogResult.OK)
             return;
         _ductSystem.DefaultSizingIncrementM = dialog.SizingIncrementM;
         _ductSystem.DefaultSizeRoundingDirection = dialog.RoundingDirection;
@@ -424,35 +431,35 @@ public sealed partial class MainForm
         _ductSystem.DefaultPressureLossBasis = dialog.PressureLossBasis;
         ApplyProjectCalculationSettings();
         SaveDuctSystem();
-        CalculateAndDisplay();
+        _host.CalculateAndDisplay();
     }
 
     private void EditAutomaticSizingInputs()
     {
-        using var dialog = new AutomaticSizingInputsDialog(_ductSystem.AutomaticSizing, _currentUnits);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        using var dialog = new AutomaticSizingInputsDialog(_ductSystem.AutomaticSizing, _host._currentUnits);
+        if (dialog.ShowDialog(_host) != DialogResult.OK)
             return;
         _ductSystem.AutomaticSizing = dialog.Settings;
         SaveDuctSystem();
-        _layoutStatusLabel.Text = "Automatic sizing defaults were saved for ducts and supported Designer components.";
-        _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+        _host._layoutStatusLabel.Text = "Automatic sizing defaults were saved for ducts and supported Designer components.";
+        _host._layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
-    private void ApplyProjectCalculationSettings()
+    internal void ApplyProjectCalculationSettings()
     {
-        _updatingControls = true;
+        _host._updatingControls = true;
         try
         {
-            _sizeIncrementText.Text = (_currentUnits == UnitSystem.Imperial
+            _host._sizeIncrementText.Text = (_host._currentUnits == UnitSystem.Imperial
                 ? UnitConversions.MToInches(_ductSystem.DefaultSizingIncrementM)
                 : UnitConversions.MToMillimeters(_ductSystem.DefaultSizingIncrementM))
                 .ToString("0.####", CultureInfo.CurrentCulture);
-            SelectChoice(_equivalentMethodCombo, _ductSystem.DefaultEquivalentDiameterMethod);
-            SelectChoice(_pressureBasisCombo, _ductSystem.DefaultPressureLossBasis);
+            SelectChoice(_host._equivalentMethodCombo, _ductSystem.DefaultEquivalentDiameterMethod);
+            SelectChoice(_host._pressureBasisCombo, _ductSystem.DefaultPressureLossBasis);
         }
         finally
         {
-            _updatingControls = false;
+            _host._updatingControls = false;
         }
     }
 
@@ -502,7 +509,7 @@ public sealed partial class MainForm
             if (_ductSystem.LayoutNodes.Count > 0)
             {
                 foreach (var node in _ductSystem.LayoutNodes)
-                    SyncLinkedItemMetadata(node);
+                    _host.SyncLinkedItemMetadata(node);
             }
             RefreshDuctSystemGrid();
         }
@@ -510,8 +517,8 @@ public sealed partial class MainForm
         {
             if (_ductSystem.LayoutNodes.Count > 0)
                 SynchronizeLayoutMetadataFromSystem();
-            RefreshLayoutDesigner();
-            EnsureLayoutViewportPositioned();
+            _host.RefreshLayoutDesigner();
+            _host.EnsureLayoutViewportPositioned();
         }
     }
 
@@ -554,7 +561,7 @@ public sealed partial class MainForm
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 5,
-            BackColor = BackColor,
+            BackColor = _host.BackColor,
             Padding = new Padding(14)
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -641,7 +648,7 @@ public sealed partial class MainForm
             RowCount = 1,
             Padding = new Padding(0, 10, 0, 6),
             Margin = Padding.Empty,
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 108));
@@ -652,7 +659,7 @@ public sealed partial class MainForm
             WrapContents = false,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         var destructiveActions = new FlowLayoutPanel
         {
@@ -661,7 +668,7 @@ public sealed partial class MainForm
             WrapContents = false,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         ConfigureSystemButton(_deleteAllSystemButton, "Delete all", 102);
         ConfigureSystemButton(_autoSizeFanButton, "Auto-size Fan", 135);
@@ -879,7 +886,7 @@ public sealed partial class MainForm
         var proposedId = Convert.ToString(args.FormattedValue, CultureInfo.CurrentCulture)?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(proposedId))
         {
-            MessageBox.Show(this, "Enter a fitting ID.", "Fitting ID Required",
+            MessageBox.Show(_host, "Enter a fitting ID.", "Fitting ID Required",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             args.Cancel = true;
             return;
@@ -894,7 +901,7 @@ public sealed partial class MainForm
             return;
 
         var response = MessageBox.Show(
-            this,
+            _host,
             $"The item ID '{proposedId}' is already in use. Allow this duplicate ID?",
             "Duplicate Item ID",
             MessageBoxButtons.YesNo,
@@ -931,11 +938,11 @@ public sealed partial class MainForm
             DisplayStyle = DataGridViewComboBoxDisplayStyle.Nothing,
             DisplayStyleForCurrentCellOnly = false
         };
-        column.Items.AddRange(AirSystemTypes.Cast<object>().ToArray());
+        column.Items.AddRange(MainForm.AirSystemTypes.Cast<object>().ToArray());
         _ductGrid.Columns.Add(column);
     }
 
-    private void LoadDuctSystem()
+    internal void LoadDuctSystem()
     {
         try
         {
@@ -959,7 +966,7 @@ public sealed partial class MainForm
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
         }
         RefreshDuctSystemGrid();
-        RefreshLayoutDesigner();
+        _host.RefreshLayoutDesigner();
         ApplyProjectCalculationSettings();
     }
 
@@ -1001,11 +1008,11 @@ public sealed partial class MainForm
         }
     }
 
-    private void AddOrUpdateCurrentDuct()
+    internal void AddOrUpdateCurrentDuct()
     {
-        var returnToDesigner = PendingConnectionNode() is not null || PendingLayoutNode(LayoutNodeType.Duct) is not null;
-        var historyState = returnToDesigner ? CaptureLayoutHistoryState() : null;
-        CalculateAndDisplay();
+        var returnToDesigner = _host.PendingConnectionNode() is not null || _host.PendingLayoutNode(LayoutNodeType.Duct) is not null;
+        var historyState = returnToDesigner ? _host.CaptureLayoutHistoryState() : null;
+        _host.CalculateAndDisplay();
         if (_lastCalculation is null)
             return;
 
@@ -1025,10 +1032,10 @@ public sealed partial class MainForm
                 updated.DeltaXM = existing.DeltaXM;
                 updated.DeltaYM = existing.DeltaYM;
                 updated.DeltaZM = existing.DeltaZM;
-                if (PendingConnectionNode() is not null || PendingLayoutNode(LayoutNodeType.Duct) is not null)
-                    ApplyLayoutMetadata(updated);
+                if (_host.PendingConnectionNode() is not null || _host.PendingLayoutNode(LayoutNodeType.Duct) is not null)
+                    _host.ApplyLayoutMetadata(updated);
                 _ductSystem.Ducts[index] = updated;
-                _statusLabel.Text = $"Updated duct D-{sequence:000} in the duct system.";
+                _host._statusLabel.Text = $"Updated duct D-{sequence:000} in the duct system.";
             }
             else
             {
@@ -1043,14 +1050,14 @@ public sealed partial class MainForm
         _editingDuctSequence = null;
         _addDuctButton.Text = DefaultDuctActionText;
         _addDuctButton.Visible = false;
-        _ductEditingLabel.Visible = false;
+        _host._ductEditingLabel.Visible = false;
         if (historyState is not null)
-            CommitLayoutHistoryState(historyState);
+            _host.CommitLayoutHistoryState(historyState);
         SaveDuctSystem();
         RefreshDuctSystemGrid();
         _mainTabs.SelectedTab = returnToDesigner ? _layoutTab : _systemTab;
         if (returnToDesigner)
-            _layoutStatusLabel.Text = "Duct configured and linked. Continue placing components on the grid.";
+            _host._layoutStatusLabel.Text = "Duct configured and linked. Continue placing components on the grid.";
     }
 
     private void AddNewDuct(DuctCalculationResult result)
@@ -1058,25 +1065,25 @@ public sealed partial class MainForm
         var sequence = _ductSystem.ReserveSequence();
         var duct = SavedDuct.FromResult(sequence, CreateAutomaticDescription(result), result,
             _ductSystem.DefaultAirSystemType, _ductSystem.DefaultBranchId);
-        ApplyLayoutMetadata(duct);
+        _host.ApplyLayoutMetadata(duct);
         _ductSystem.Ducts.Add(duct);
-        _statusLabel.Text = $"Added duct D-{sequence:000} to the duct system.";
+        _host._statusLabel.Text = $"Added duct D-{sequence:000} to the duct system.";
     }
 
     private string CreateAutomaticDescription(DuctCalculationResult result)
     {
         var shape = result.Input.Geometry.Shape == DuctShape.Round ? "Round" : "Rectangular";
-        var airflow = _currentUnits == UnitSystem.Imperial
+        var airflow = _host._currentUnits == UnitSystem.Imperial
             ? $"{UnitConversions.M3PerSToCfm(result.Input.AirflowM3PerS):N0} cfm"
             : $"{UnitConversions.M3PerSToLps(result.Input.AirflowM3PerS):N0} L/s";
-        return $"{shape} {FormatGeometry(result.Input.Geometry)} – {airflow}";
+        return $"{shape} {_host.FormatGeometry(result.Input.Geometry)} – {airflow}";
     }
 
     private void AutoSizeFan()
     {
         if (!TryAutoSizeFan(out var message))
         {
-            MessageBox.Show(this, message, "Auto-size Fan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(_host, message, "Auto-size Fan", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -1100,7 +1107,7 @@ public sealed partial class MainForm
             return false;
         }
 
-        UpdateCalculatedLayoutValues();
+        _host.UpdateCalculatedLayoutValues();
         var fan = fans[0];
         var requiredAirflow = FanSizing.RequiredAirflowM3PerS(_ductSystem, fan);
         if (requiredAirflow <= 0.0)
@@ -1113,13 +1120,13 @@ public sealed partial class MainForm
         fan.AirflowM3PerS = requiredAirflow;
         fan.AirflowUserSpecified = true;
         fan.AirflowOverride = false;
-        UpdateCalculatedLayoutValues();
+        _host.UpdateCalculatedLayoutValues();
 
         var route = ComputeLongestRoute();
         if (!route.IsComplete)
         {
             (fan.AirflowM3PerS, fan.AirflowUserSpecified, fan.AirflowOverride) = priorAirflow;
-            UpdateCalculatedLayoutValues();
+            _host.UpdateCalculatedLayoutValues();
             var reasons = route.Issues.Take(6).Select(issue => $"• {issue.ItemId}: {issue.Message}");
             message = route.ItemKeys.Count == 0 && route.Issues.Count == 0
                 ? "A critical route could not be determined. Define the connected ducts and components first."
@@ -1131,7 +1138,7 @@ public sealed partial class MainForm
 
         fan.FanStaticPressurePa = Math.Max(0.0, route.PressureLossPa);
         fan.IsDefined = true;
-        UpdateCalculatedLayoutValues();
+        _host.UpdateCalculatedLayoutValues();
         _criticalPathCalculated = true;
         // Show exactly the items whose losses set the fan static pressure (same as "Isolate Critical Path").
         _criticalPathFilterEnabled = true;
@@ -1162,12 +1169,12 @@ public sealed partial class MainForm
     {
         if (!TryGetFanInformation(out var information))
         {
-            MessageBox.Show(this, information, "Fan Information", MessageBoxButtons.OK,
+            MessageBox.Show(_host, information, "Fan Information", MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
         }
         using var dialog = new FanInformationDialog(information);
-        dialog.ShowDialog(this);
+        dialog.ShowDialog(_host);
     }
 
     private bool TryGetFanInformation(out string information)
@@ -1184,7 +1191,7 @@ public sealed partial class MainForm
             return false;
         }
 
-        UpdateCalculatedLayoutValues();
+        _host.UpdateCalculatedLayoutValues();
         var fan = fans[0];
         var horsepower = TryBrakeHorsepower(fan.AirflowM3PerS, fan.FanStaticPressurePa,
             fan.FanEfficiencyPercent);
@@ -1203,7 +1210,7 @@ public sealed partial class MainForm
         RefreshDuctSystemGrid();
     }
 
-    private void ResetCriticalPath()
+    internal void ResetCriticalPath()
     {
         _criticalPathCalculated = false;
         _criticalPathFilterEnabled = false;
@@ -1235,9 +1242,9 @@ public sealed partial class MainForm
     private double NodePressureLoss(SavedLayoutNode node, bool arrivedSecondary = false, SavedLayoutNode? nextChild = null) =>
         SystemSolver.NodeLoss(_ductSystem, node, arrivedSecondary, nextChild);
 
-    private static string DuctKey(int sequence) => CriticalPathAnalyzer.DuctKey(sequence);
-    private static string FittingKey(int sequence) => CriticalPathAnalyzer.FittingKey(sequence);
-    private static string LayoutKey(int sequence) => CriticalPathAnalyzer.LayoutKey(sequence);
+    internal static string DuctKey(int sequence) => CriticalPathAnalyzer.DuctKey(sequence);
+    internal static string FittingKey(int sequence) => CriticalPathAnalyzer.FittingKey(sequence);
+    internal static string LayoutKey(int sequence) => CriticalPathAnalyzer.LayoutKey(sequence);
 
     /// <summary>One line naming the items that kept the critical path from being calculated.</summary>
     private string CriticalPathIssueSummary()
@@ -1285,7 +1292,7 @@ public sealed partial class MainForm
         if (_ductGrid.Columns.Count == 0)
             return;
 
-        UpdateCalculatedLayoutValues();
+        _host.UpdateCalculatedLayoutValues();
         UpdateSystemGridHeaders();
         var availableItemCount = _ductSystem.Ducts.Count + _ductSystem.Fittings.Count
                                  + _ductSystem.LayoutNodes.Count(x =>
@@ -1491,7 +1498,7 @@ public sealed partial class MainForm
         var absoluteCoordinates = LayoutCoordinateResolver.Resolve(_ductSystem);
         foreach (DataGridViewRow row in _ductGrid.Rows)
         {
-            var node = LayoutNodeForSystemTag(row.Tag);
+            var node = _host.LayoutNodeForSystemTag(row.Tag);
             if (node is null || !absoluteCoordinates.TryGetValue(node.Sequence, out var coordinate))
             {
                 row.Cells["AbsoluteX"].Value = "—";
@@ -1518,7 +1525,7 @@ public sealed partial class MainForm
         var layoutReview = LayoutReviewMessages();
         _systemCriticalLabel.ForeColor = layoutReview.Count > 0
             ? Color.FromArgb(150, 85, 0) : Color.FromArgb(31, 120, 180);
-        _layoutToolTips.SetToolTip(_systemCriticalLabel, layoutReview.Count == 0
+        _host._layoutToolTips.SetToolTip(_systemCriticalLabel, layoutReview.Count == 0
             ? string.Empty
             : "Layout items to review:\r\n" + string.Join("\r\n", layoutReview.Take(12).Select(message => "• " + message))
               + (layoutReview.Count > 12 ? $"\r\n• and {layoutReview.Count - 12} more" : string.Empty));
@@ -1542,7 +1549,7 @@ public sealed partial class MainForm
                 }
             }
         }
-        RefreshLayoutSystemSummary();
+        _host.RefreshLayoutSystemSummary();
         UpdateSystemActionState();
     }
 
@@ -1712,11 +1719,11 @@ public sealed partial class MainForm
         return node.Id;
     }
 
-    private string FormatSystemAirflow(double cubicMetersPerSecond) => _currentUnits == UnitSystem.Imperial
+    private string FormatSystemAirflow(double cubicMetersPerSecond) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.M3PerSToCfm(cubicMetersPerSecond):N0}"
         : $"{UnitConversions.M3PerSToLps(cubicMetersPerSecond):N0}";
 
-    private string FormatSystemGeometry(DuctGeometry geometry) => _currentUnits == UnitSystem.Imperial
+    private string FormatSystemGeometry(DuctGeometry geometry) => _host._currentUnits == UnitSystem.Imperial
         ? geometry.Shape == DuctShape.Round
             ? $"{UnitConversions.MToInches(geometry.DiameterM):0.##} in round"
             : $"{UnitConversions.MToInches(geometry.WidthM):0.##} × {UnitConversions.MToInches(geometry.HeightM):0.##} in"
@@ -1724,29 +1731,29 @@ public sealed partial class MainForm
             ? $"{UnitConversions.MToMillimeters(geometry.DiameterM):0.#} mm round"
             : $"{UnitConversions.MToMillimeters(geometry.WidthM):0.#} × {UnitConversions.MToMillimeters(geometry.HeightM):0.#} mm";
 
-    private string FormatSystemLength(double meters) => _currentUnits == UnitSystem.Imperial
+    private string FormatSystemLength(double meters) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.MToFeet(meters):0.#}"
         : $"{meters:0.##}";
 
-    private string FormatSystemDelta(double meters) => _currentUnits == UnitSystem.Imperial
+    private string FormatSystemDelta(double meters) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.MToFeet(meters):0.##}"
         : $"{meters:0.##}";
 
-    private string FormatSystemArea(double squareMeters) => _currentUnits == UnitSystem.Imperial
+    private string FormatSystemArea(double squareMeters) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.SquareMetersToSquareFeet(squareMeters):0.###}"
         : $"{squareMeters:0.####}";
 
-    private string FormatSystemVelocity(double metersPerSecond) => _currentUnits == UnitSystem.Imperial
+    private string FormatSystemVelocity(double metersPerSecond) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.MpsToFpm(metersPerSecond):N0}"
         : $"{metersPerSecond:0.##}";
 
-    private string FormatSystemTemperature(double celsius) => _currentUnits == UnitSystem.Imperial
+    private string FormatSystemTemperature(double celsius) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.CelsiusToFahrenheit(celsius):0.#}"
         : $"{celsius:0.#}";
 
     private string FormatSystemPressureRate(DuctCalculationResult result)
     {
-        if (_currentUnits == UnitSystem.Imperial)
+        if (_host._currentUnits == UnitSystem.Imperial)
             return result.Friction.Regime == FlowRegime.Transitional
                 ? $"{UnitConversions.PaPerMToInchesWaterPer100Feet(result.PressureLossLowerPaPerM):0.###}–{UnitConversions.PaPerMToInchesWaterPer100Feet(result.PressureLossUpperPaPerM):0.###}"
                 : $"{UnitConversions.PaPerMToInchesWaterPer100Feet(result.PressureLossPaPerM):0.###}";
@@ -1757,7 +1764,7 @@ public sealed partial class MainForm
 
     private string FormatSystemStaticDrop(DuctCalculationResult result)
     {
-        if (_currentUnits == UnitSystem.Imperial)
+        if (_host._currentUnits == UnitSystem.Imperial)
             return result.Friction.Regime == FlowRegime.Transitional
                 ? $"{UnitConversions.PaToInchesWater(result.TotalPressureLossLowerPa):0.###}–{UnitConversions.PaToInchesWater(result.TotalPressureLossUpperPa):0.###}"
                 : $"{UnitConversions.PaToInchesWater(result.TotalPressureLossPa):0.###}";
@@ -1768,7 +1775,7 @@ public sealed partial class MainForm
 
     private string FormatSystemFittingDrop(double pascals)
     {
-        if (_currentUnits == UnitSystem.Imperial)
+        if (_host._currentUnits == UnitSystem.Imperial)
         {
             var inchesWater = NormalizeRoundedZero(UnitConversions.PaToInchesWater(pascals), 3);
             return $"{inchesWater:0.###}";
@@ -1802,8 +1809,8 @@ public sealed partial class MainForm
         var parent = _ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
         if (parent is null)
             return (double.NaN, double.NaN);
-        var loss = SafeDuctPressureLoss(ductSequence);
-        var inlet = OutletPressureToward(parent, downstream);
+        var loss = _host.SafeDuctPressureLoss(ductSequence);
+        var inlet = _host.OutletPressureToward(parent, downstream);
         return (inlet, inlet - loss);
     }
 
@@ -1836,8 +1843,8 @@ public sealed partial class MainForm
             if (parent is null)
                 return;
             // Unsized connection: close-coupled, no loss. Assigned duct that fails: NaN.
-            var ductLoss = ductSequence is int sequence ? SafeDuctPressureLoss(sequence) : 0.0;
-            incomingPressures.Add(OutletPressureToward(parent, node) - ductLoss);
+            var ductLoss = ductSequence is int sequence ? _host.SafeDuctPressureLoss(sequence) : 0.0;
+            incomingPressures.Add(_host.OutletPressureToward(parent, node) - ductLoss);
         }
     }
 
@@ -1845,7 +1852,7 @@ public sealed partial class MainForm
     {
         if (_ductGrid.Columns.Count == 0)
             return;
-        var imperial = _currentUnits == UnitSystem.Imperial;
+        var imperial = _host._currentUnits == UnitSystem.Imperial;
         _ductGrid.Columns["StaticDrop"].HeaderText = imperial ? "Static drop\n(in. w.c.)" : "Static drop\n(Pa)";
         _ductGrid.Columns["PressureIn"].HeaderText = imperial ? "Static pressure in\n(in. w.c.)" : "Static pressure in\n(Pa)";
         _ductGrid.Columns["PressureOut"].HeaderText = imperial ? "Static pressure out\n(in. w.c.)" : "Static pressure out\n(Pa)";
@@ -1863,7 +1870,7 @@ public sealed partial class MainForm
         _ductGrid.Columns["PressureRate"].HeaderText = imperial ? "Pressure rate\n(in. w.c./100 ft)" : "Pressure rate\n(Pa/m)";
     }
 
-    private string FormatSystemTotal(double pascals) => _currentUnits == UnitSystem.Imperial
+    private string FormatSystemTotal(double pascals) => _host._currentUnits == UnitSystem.Imperial
         ? $"{NormalizeRoundedZero(UnitConversions.PaToInchesWater(pascals), 3):0.###} in. w.c."
         : $"{NormalizeRoundedZero(pascals, 2):0.##} Pa";
 
@@ -1945,7 +1952,7 @@ public sealed partial class MainForm
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
             return;
         }
-        var airflow = _currentUnits == UnitSystem.Imperial
+        var airflow = _host._currentUnits == UnitSystem.Imperial
             ? UnitConversions.CfmToM3PerS(displayed)
             : UnitConversions.LpsToM3PerS(displayed);
         if (!ConfirmAirflowOverride(row, airflow))
@@ -1990,10 +1997,10 @@ public sealed partial class MainForm
                 node.AirflowUserSpecified = true;
             }
         }
-        UpdateCalculatedLayoutValues();
+        _host.UpdateCalculatedLayoutValues();
         SaveDuctSystem();
         RefreshDuctSystemGrid();
-        RefreshLayoutDesigner();
+        _host.RefreshLayoutDesigner();
     }
 
     internal bool ConfirmAirflowOverride(DataGridViewRow row, double proposedAirflow)
@@ -2028,15 +2035,15 @@ public sealed partial class MainForm
         if (node is null)
             return true;
         var parent = _ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == node.ParentNodeId);
-        if (IsConvergingLayoutNode(node))
+        if (MainForm.IsConvergingLayoutNode(node))
         {
             node.AirflowOverride = false;
             node.AirflowUserSpecified = false;
             return true;
         }
-        if (IsDivergingLayoutNode(node) && parent is not null)
+        if (MainForm.IsDivergingLayoutNode(node) && parent is not null)
         {
-            var incomingDuct = DuctForConnection(node, secondary: false);
+            var incomingDuct = _host.DuctForConnection(node, secondary: false);
             var expected = incomingDuct?.AirflowM3PerS > 0 ? incomingDuct.AirflowM3PerS : parent.AirflowM3PerS;
             var tolerance = Math.Max(UnitConversions.CfmToM3PerS(1), expected * .01);
             if (Math.Abs(proposedAirflow - expected) <= tolerance)
@@ -2045,10 +2052,10 @@ public sealed partial class MainForm
                 node.AirflowUserSpecified = false;
                 return true;
             }
-            var expectedText = _currentUnits == UnitSystem.Imperial
+            var expectedText = _host._currentUnits == UnitSystem.Imperial
                 ? $"{UnitConversions.M3PerSToCfm(expected):N0} cfm"
                 : $"{UnitConversions.M3PerSToLps(expected):N0} L/s";
-            var splitResponse = MessageBox.Show(this,
+            var splitResponse = MessageBox.Show(_host,
                 $"{itemId} common airflow does not match its calculated inlet airflow of {expectedText}.\r\n\r\nAllow this value anyway and mark the fitting orange?",
                 "Airflow Balance Notice", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button2);
@@ -2073,7 +2080,7 @@ public sealed partial class MainForm
             node.AirflowOverride = false;
             return true;
         }
-        var response = MessageBox.Show(this,
+        var response = MessageBox.Show(_host,
             $"{itemId} has an airflow that differs from the connected system without a fan, Space Source, converging fitting, or diverting fitting between the values.\r\n\r\nAllow the override and mark the affected item orange?",
             "Airflow Continuity Notice", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2);
@@ -2084,7 +2091,7 @@ public sealed partial class MainForm
         return true;
     }
 
-    private bool ConfirmConnectionAirflowOverride(LayoutConnectionRef connection, double proposedAirflow,
+    internal bool ConfirmConnectionAirflowOverride(LayoutConnectionRef connection, double proposedAirflow,
         string itemId)
     {
         var downstream = connection.Downstream;
@@ -2095,15 +2102,15 @@ public sealed partial class MainForm
         var mismatch = false;
         var expected = upstream?.AirflowM3PerS ?? proposedAirflow;
 
-        if (upstream is not null && IsDivergingLayoutNode(upstream))
+        if (upstream is not null && MainForm.IsDivergingLayoutNode(upstream))
         {
-            var siblings = LayoutConnectionsFrom(upstream).Where(x =>
+            var siblings = _host.LayoutConnectionsFrom(upstream).Where(x =>
                 !(ReferenceEquals(x.Downstream, downstream) && x.Secondary == connection.Secondary)).ToArray();
             var fixedSiblingTotal = siblings
-                .Where(x => ConnectionAirflowUserSpecified(x.Downstream, x.Secondary))
-                .Sum(x => DuctForConnection(x.Downstream, x.Secondary)?.AirflowM3PerS
+                .Where(x => MainForm.ConnectionAirflowUserSpecified(x.Downstream, x.Secondary))
+                .Sum(x => _host.DuctForConnection(x.Downstream, x.Secondary)?.AirflowM3PerS
                           ?? Math.Max(0.0, x.Downstream.AirflowM3PerS));
-            var unlockedSiblingCount = siblings.Count(x => !ConnectionAirflowUserSpecified(x.Downstream, x.Secondary));
+            var unlockedSiblingCount = siblings.Count(x => !MainForm.ConnectionAirflowUserSpecified(x.Downstream, x.Secondary));
             unlockedSiblingCount += Math.Max(0,
                 FittingCatalog.OutletPortCount(upstream.FittingGroup) - siblings.Length - 1);
             var totalIfAccepted = proposedAirflow + fixedSiblingTotal;
@@ -2118,30 +2125,30 @@ public sealed partial class MainForm
 
         if (!mismatch)
         {
-            SetConnectionAirflowUserSpecified(downstream, connection.Secondary,
-                upstream is not null && IsDivergingLayoutNode(upstream)
+            MainForm.SetConnectionAirflowUserSpecified(downstream, connection.Secondary,
+                upstream is not null && MainForm.IsDivergingLayoutNode(upstream)
                 || Math.Abs(proposedAirflow - expected) > tolerance);
-            SetConnectionAirflowOverride(downstream, connection.Secondary, false);
+            MainForm.SetConnectionAirflowOverride(downstream, connection.Secondary, false);
             return true;
         }
 
-        var expectedText = _currentUnits == UnitSystem.Imperial
+        var expectedText = _host._currentUnits == UnitSystem.Imperial
             ? $"{UnitConversions.M3PerSToCfm(expected):N0} cfm"
             : $"{UnitConversions.M3PerSToLps(expected):N0} L/s";
-        var response = MessageBox.Show(this,
+        var response = MessageBox.Show(_host,
             $"{itemId} does not match the automatically balanced airflow of {expectedText}.\r\n\r\nAllow this value anyway and mark the duct orange?",
             "Airflow Balance Notice", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2);
         if (response != DialogResult.Yes)
             return false;
-        SetConnectionAirflowUserSpecified(downstream, connection.Secondary, true);
-        SetConnectionAirflowOverride(downstream, connection.Secondary, true);
+        MainForm.SetConnectionAirflowUserSpecified(downstream, connection.Secondary, true);
+        MainForm.SetConnectionAirflowOverride(downstream, connection.Secondary, true);
         return true;
     }
 
     private static bool AllowsAirflowChange(SavedLayoutNode node) =>
         node.Type == LayoutNodeType.Fan
-        || node.Type == LayoutNodeType.Reservoir && IsSpaceSourceRole(node.SpaceRole)
+        || node.Type == LayoutNodeType.Reservoir && MainForm.IsSpaceSourceRole(node.SpaceRole)
         || node.Type == LayoutNodeType.Fitting
         && (string.Equals(node.FittingGroup, "Converging Fittings", StringComparison.OrdinalIgnoreCase)
             || string.Equals(node.FittingGroup, "Diverting Fittings", StringComparison.OrdinalIgnoreCase));
@@ -2159,7 +2166,7 @@ public sealed partial class MainForm
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
             return;
         }
-        var meters = _currentUnits == UnitSystem.Imperial ? UnitConversions.FeetToM(displayed) : displayed;
+        var meters = _host._currentUnits == UnitSystem.Imperial ? UnitConversions.FeetToM(displayed) : displayed;
         void Assign(Action<double> setX, Action<double> setY, Action<double> setZ)
         {
             if (columnName == "DeltaX") setX(meters);
@@ -2172,8 +2179,8 @@ public sealed partial class MainForm
             Assign(value => equipment.DeltaXM = value, value => equipment.DeltaYM = value, value => equipment.DeltaZM = value);
             if (!string.IsNullOrWhiteSpace(equipment.ParentNodeId))
                 equipment.ConnectionDeltaConfirmed = true;
-            SyncConnectionDuctGeometry(equipment);
-            SyncLinkedItemMetadata(equipment);
+            _host.SyncConnectionDuctGeometry(equipment);
+            _host.SyncLinkedItemMetadata(equipment);
         }
         else if (row.Tag is SystemRowTag { IsFitting: true } fittingTag)
         {
@@ -2186,7 +2193,7 @@ public sealed partial class MainForm
                 Assign(value => node.DeltaXM = value, value => node.DeltaYM = value, value => node.DeltaZM = value);
                 if (!string.IsNullOrWhiteSpace(node.ParentNodeId))
                     node.ConnectionDeltaConfirmed = true;
-                SyncConnectionDuctGeometry(node);
+                _host.SyncConnectionDuctGeometry(node);
             }
         }
         else if (row.Tag is SystemRowTag ductTag)
@@ -2205,7 +2212,7 @@ public sealed partial class MainForm
                     node.SecondaryConnectionDeltaConfirmed = true;
                 else if (!string.IsNullOrWhiteSpace(node.ParentNodeId))
                     node.ConnectionDeltaConfirmed = true;
-                SyncConnectionDuctGeometry(node);
+                _host.SyncConnectionDuctGeometry(node);
             }
             else
             {
@@ -2216,7 +2223,7 @@ public sealed partial class MainForm
         }
         SaveDuctSystem();
         RefreshDuctSystemGrid();
-        RefreshLayoutDesigner();
+        _host.RefreshLayoutDesigner();
     }
 
     private void SaveEditedSystemMetadata(int rowIndex, string columnName)
@@ -2232,7 +2239,7 @@ public sealed partial class MainForm
             else equipment.BranchId = equipmentValue;
             row.Cells[columnName].Value = equipmentValue;
             SaveDuctSystem();
-            RefreshLayoutDesigner();
+            _host.RefreshLayoutDesigner();
             return;
         }
         if (row.Tag is not SystemRowTag tag)
@@ -2270,7 +2277,7 @@ public sealed partial class MainForm
         }
         row.Cells[columnName].Value = edited;
         SaveDuctSystem();
-        RefreshLayoutDesigner();
+        _host.RefreshLayoutDesigner();
     }
 
     private void SaveEditedDescription(int rowIndex)
@@ -2313,34 +2320,34 @@ public sealed partial class MainForm
         {
             _editingDuctSequence = null;
             _editingFittingSequence = fitting.Sequence;
-            FittingScreen.LoadFittingIntoCalculator(fitting);
-            FittingScreen._fittingDescription = fitting.Description;
-            FittingScreen._fittingEditingLabel.Text = $"Editing {fitting.Id} — {fitting.Description}";
-            FittingScreen._fittingEditingLabel.Visible = true;
-            FittingScreen._addFittingButton.Text = DefaultFittingActionText;
-            FittingScreen._addFittingButton.Visible = true;
+            _host.FittingScreen.LoadFittingIntoCalculator(fitting);
+            _host.FittingScreen._fittingDescription = fitting.Description;
+            _host.FittingScreen._fittingEditingLabel.Text = $"Editing {fitting.Id} — {fitting.Description}";
+            _host.FittingScreen._fittingEditingLabel.Visible = true;
+            _host.FittingScreen._addFittingButton.Text = DefaultFittingActionText;
+            _host.FittingScreen._addFittingButton.Visible = true;
             _mainTabs.SelectedTab = _fittingTab;
-            FittingScreen._fittingStatusLabel.Text = $"Editing {fitting.Id}. Change the inputs, then click {DefaultFittingActionText}.";
-            FittingScreen._fittingStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+            _host.FittingScreen._fittingStatusLabel.Text = $"Editing {fitting.Id}. Change the inputs, then click {DefaultFittingActionText}.";
+            _host.FittingScreen._fittingStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
             return;
         }
 
         _editingFittingSequence = null;
         _editingDuctSequence = duct!.Sequence;
         LoadDuctIntoCalculator(duct);
-        _ductEditingLabel.Text = $"Editing {duct.Id} — {duct.Description}";
-        _ductEditingLabel.Visible = true;
+        _host._ductEditingLabel.Text = $"Editing {duct.Id} — {duct.Description}";
+        _host._ductEditingLabel.Visible = true;
         _addDuctButton.Text = DefaultDuctActionText;
         _addDuctButton.Visible = true;
         _mainTabs.SelectedTab = _calculatorTab;
-        _statusLabel.Text = $"Editing {duct.Id}. Change any input, then click {DefaultDuctActionText}.";
-        _statusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+        _host._statusLabel.Text = $"Editing {duct.Id}. Change any input, then click {DefaultDuctActionText}.";
+        _host._statusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
     private void ClearDuctEditingContext()
     {
         _editingDuctSequence = null;
-        _ductEditingLabel.Visible = false;
+        _host._ductEditingLabel.Visible = false;
         _addDuctButton.Text = DefaultDuctActionText;
         _addDuctButton.Visible = false;
     }
@@ -2348,60 +2355,60 @@ public sealed partial class MainForm
     private void ClearFittingEditingContext()
     {
         _editingFittingSequence = null;
-        FittingScreen._fittingEditingLabel.Visible = false;
-        FittingScreen._addFittingButton.Text = DefaultFittingActionText;
-        FittingScreen._addFittingButton.Visible = false;
+        _host.FittingScreen._fittingEditingLabel.Visible = false;
+        _host.FittingScreen._addFittingButton.Text = DefaultFittingActionText;
+        _host.FittingScreen._addFittingButton.Visible = false;
     }
 
     private void LoadDuctIntoCalculator(SavedDuct duct)
     {
-        _updatingControls = true;
+        _host._updatingControls = true;
         try
         {
-            SelectChoice(_modeCombo, CalculationMode.SizeByTargetFriction);
-            SelectChoice(_shapeCombo, duct.Shape);
-            SelectChoice(_equivalentMethodCombo, duct.EquivalentDiameterMethod);
-            SelectChoice(_pressureBasisCombo, duct.PressureLossBasis);
+            SelectChoice(_host._modeCombo, CalculationMode.SizeByTargetFriction);
+            SelectChoice(_host._shapeCombo, duct.Shape);
+            SelectChoice(_host._equivalentMethodCombo, duct.EquivalentDiameterMethod);
+            SelectChoice(_host._pressureBasisCombo, duct.PressureLossBasis);
             SelectMaterial(duct.MaterialName, duct.RoughnessFeet);
 
-            if (_currentUnits == UnitSystem.Imperial)
+            if (_host._currentUnits == UnitSystem.Imperial)
             {
-                _airflowText.Text = UnitConversions.M3PerSToCfm(duct.AirflowM3PerS).ToString("0.####", CultureInfo.CurrentCulture);
-                _temperatureText.Text = UnitConversions.CelsiusToFahrenheit(duct.TemperatureC).ToString("0.####", CultureInfo.CurrentCulture);
-                _lengthText.Text = UnitConversions.MToFeet(duct.LengthM).ToString("0.####", CultureInfo.CurrentCulture);
-                _diameterText.Text = UnitConversions.MToInches(duct.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
-                _widthText.Text = UnitConversions.MToInches(duct.WidthM).ToString("0.####", CultureInfo.CurrentCulture);
-                _heightText.Text = UnitConversions.MToInches(duct.HeightM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._airflowText.Text = UnitConversions.M3PerSToCfm(duct.AirflowM3PerS).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._temperatureText.Text = UnitConversions.CelsiusToFahrenheit(duct.TemperatureC).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._lengthText.Text = UnitConversions.MToFeet(duct.LengthM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._diameterText.Text = UnitConversions.MToInches(duct.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._widthText.Text = UnitConversions.MToInches(duct.WidthM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._heightText.Text = UnitConversions.MToInches(duct.HeightM).ToString("0.####", CultureInfo.CurrentCulture);
             }
             else
             {
-                _airflowText.Text = UnitConversions.M3PerSToLps(duct.AirflowM3PerS).ToString("0.####", CultureInfo.CurrentCulture);
-                _temperatureText.Text = duct.TemperatureC.ToString("0.####", CultureInfo.CurrentCulture);
-                _lengthText.Text = duct.LengthM.ToString("0.####", CultureInfo.CurrentCulture);
-                _diameterText.Text = UnitConversions.MToMillimeters(duct.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
-                _widthText.Text = UnitConversions.MToMillimeters(duct.WidthM).ToString("0.####", CultureInfo.CurrentCulture);
-                _heightText.Text = UnitConversions.MToMillimeters(duct.HeightM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._airflowText.Text = UnitConversions.M3PerSToLps(duct.AirflowM3PerS).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._temperatureText.Text = duct.TemperatureC.ToString("0.####", CultureInfo.CurrentCulture);
+                _host._lengthText.Text = duct.LengthM.ToString("0.####", CultureInfo.CurrentCulture);
+                _host._diameterText.Text = UnitConversions.MToMillimeters(duct.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._widthText.Text = UnitConversions.MToMillimeters(duct.WidthM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host._heightText.Text = UnitConversions.MToMillimeters(duct.HeightM).ToString("0.####", CultureInfo.CurrentCulture);
             }
-            SelectChoice(_rectangularFixedDimensionCombo, RectangularFixedDimension.Width);
-            _rectangularFixedDimensionText.Text = duct.Shape == DuctShape.Rectangular
-                ? (_currentUnits == UnitSystem.Imperial
+            SelectChoice(_host._rectangularFixedDimensionCombo, RectangularFixedDimension.Width);
+            _host._rectangularFixedDimensionText.Text = duct.Shape == DuctShape.Rectangular
+                ? (_host._currentUnits == UnitSystem.Imperial
                     ? UnitConversions.MToInches(duct.WidthM)
                     : UnitConversions.MToMillimeters(duct.WidthM)).ToString("0.####", CultureInfo.CurrentCulture)
-                : (_currentUnits == UnitSystem.Imperial ? "16" : "400");
+                : (_host._currentUnits == UnitSystem.Imperial ? "16" : "400");
         }
         finally
         {
-            _updatingControls = false;
+            _host._updatingControls = false;
         }
-        UpdateControlState();
-        CalculateAndDisplay();
+        _host.UpdateControlState();
+        _host.CalculateAndDisplay();
     }
 
     internal static void SelectChoice<T>(ComboBox combo, T value) where T : struct
     {
         for (var index = 0; index < combo.Items.Count; index++)
         {
-            if (combo.Items[index] is Choice<T> choice && EqualityComparer<T>.Default.Equals(choice.Value, value))
+            if (combo.Items[index] is MainForm.Choice<T> choice && EqualityComparer<T>.Default.Equals(choice.Value, value))
             {
                 combo.SelectedIndex = index;
                 return;
@@ -2411,13 +2418,13 @@ public sealed partial class MainForm
 
     private void SelectMaterial(string name, double roughnessFeet)
     {
-        for (var index = 0; index < _materialCombo.Items.Count; index++)
+        for (var index = 0; index < _host._materialCombo.Items.Count; index++)
         {
-            if (_materialCombo.Items[index] is DuctMaterial material
+            if (_host._materialCombo.Items[index] is DuctMaterial material
                 && (string.Equals(material.Name, name, StringComparison.OrdinalIgnoreCase)
                     || Math.Abs(material.RoughnessFeet - roughnessFeet) <= 1e-12))
             {
-                _materialCombo.SelectedIndex = index;
+                _host._materialCombo.SelectedIndex = index;
                 return;
             }
         }
@@ -2432,7 +2439,7 @@ public sealed partial class MainForm
         var id = duct?.Id ?? fitting!.Id;
         var itemDescription = duct?.Description ?? fitting!.Description;
         var response = MessageBox.Show(
-            this,
+            _host,
             $"Remove {id} ({itemDescription}) from this duct system?",
             "Remove system item",
             MessageBoxButtons.YesNo,
@@ -2463,7 +2470,7 @@ public sealed partial class MainForm
                 _editingDuctSequence = null;
                 _addDuctButton.Text = DefaultDuctActionText;
                 _addDuctButton.Visible = false;
-                _ductEditingLabel.Visible = false;
+                _host._ductEditingLabel.Visible = false;
             }
         }
         else
@@ -2475,31 +2482,31 @@ public sealed partial class MainForm
             if (_editingFittingSequence == removedFitting.Sequence)
             {
                 _editingFittingSequence = null;
-                FittingScreen._addFittingButton.Text = DefaultFittingActionText;
-                FittingScreen._addFittingButton.Visible = false;
-                FittingScreen._fittingEditingLabel.Visible = false;
+                _host.FittingScreen._addFittingButton.Text = DefaultFittingActionText;
+                _host.FittingScreen._addFittingButton.Visible = false;
+                _host.FittingScreen._fittingEditingLabel.Visible = false;
             }
         }
         SaveDuctSystem();
         RefreshDuctSystemGrid();
-        RefreshLayoutDesigner();
+        _host.RefreshLayoutDesigner();
     }
 
     private void DeleteAllSystemItems()
     {
         if (_ductSystem.Ducts.Count == 0 && _ductSystem.Fittings.Count == 0 && _ductSystem.LayoutNodes.Count == 0)
             return;
-        var response = MessageBox.Show(this,
+        var response = MessageBox.Show(_host,
             "Delete every duct, fitting, fan, coil, filter, and graphical layout item?\r\n\r\nThis cannot be undone.",
             "Delete Entire Duct System", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2);
         if (response != DialogResult.Yes)
             return;
         ClearAllSystemData();
-        ClearLayoutHistory();
+        _host.ClearLayoutHistory();
     }
 
-    private void ClearAllSystemData()
+    internal void ClearAllSystemData()
     {
         _lastExportBasePath = string.Empty;
         ResetCriticalPath();
@@ -2514,22 +2521,22 @@ public sealed partial class MainForm
         _ductSystem.CoordinateOriginXM = 0;
         _ductSystem.CoordinateOriginYM = 0;
         _ductSystem.CoordinateOriginZM = 0;
-        _layoutViewportInitialized = false;
+        _host._layoutViewportInitialized = false;
         _editingDuctSequence = null;
         _editingFittingSequence = null;
-        _pendingLayoutNodeId = null;
-        _pendingConnectionNodeId = null;
-        _pendingConnectionSecondary = false;
+        _host._pendingLayoutNodeId = null;
+        _host._pendingConnectionNodeId = null;
+        _host._pendingConnectionSecondary = false;
         _addDuctButton.Text = DefaultDuctActionText;
-        FittingScreen._addFittingButton.Text = DefaultFittingActionText;
+        _host.FittingScreen._addFittingButton.Text = DefaultFittingActionText;
         _addDuctButton.Visible = false;
-        FittingScreen._addFittingButton.Visible = false;
-        _ductEditingLabel.Visible = false;
-        FittingScreen._fittingEditingLabel.Visible = false;
+        _host.FittingScreen._addFittingButton.Visible = false;
+        _host._ductEditingLabel.Visible = false;
+        _host.FittingScreen._fittingEditingLabel.Visible = false;
         SaveDuctSystem();
         RefreshDuctSystemGrid();
-        RefreshLayoutDesigner();
-        EnsureLayoutViewportPositioned(force: true);
+        _host.RefreshLayoutDesigner();
+        _host.EnsureLayoutViewportPositioned(force: true);
         _systemStorageStatusLabel.Text = "All Duct System and Layout Designer items were deleted.";
         _systemStorageStatusLabel.ForeColor = Color.FromArgb(140, 54, 54);
     }
@@ -2539,7 +2546,7 @@ public sealed partial class MainForm
         if (_ductSystem.Ducts.Count == 0 && _ductSystem.Fittings.Count == 0 && _ductSystem.LayoutNodes.Count == 0)
             return;
         var builder = new StringBuilder();
-        var imperial = _currentUnits == UnitSystem.Imperial;
+        var imperial = _host._currentUnits == UnitSystem.Imperial;
         builder.AppendLine(imperial
             ? "Item ID\tDescription\tAir system type\tBranch ID\tUpstream item ID\tDownstream item ID\tDelta X (ft)\tDelta Y (ft)\tDelta Z (ft)\tAirflow (cfm)\tType\tSize/code\tLength (ft)\tVelocity (fpm)\tPressure rate (in. w.c./100 ft)\tStatic pressure drop (in. w.c.)"
             : "Item ID\tDescription\tAir system type\tBranch ID\tUpstream item ID\tDownstream item ID\tDelta X (m)\tDelta Y (m)\tDelta Z (m)\tAirflow (L/s)\tType\tSize/code\tLength (m)\tVelocity (m/s)\tPressure rate (Pa/m)\tStatic pressure drop (Pa)");
@@ -2639,7 +2646,7 @@ public sealed partial class MainForm
                 ValidateNames = true,
                 RestoreDirectory = true
             };
-            if (dialog.ShowDialog(this) != DialogResult.OK)
+            if (dialog.ShowDialog(_host) != DialogResult.OK)
                 return;
             basePath = Path.Combine(Path.GetDirectoryName(dialog.FileName) ?? "",
                 Path.GetFileNameWithoutExtension(dialog.FileName));
@@ -2663,7 +2670,7 @@ public sealed partial class MainForm
             _systemStorageStatusLabel.Text = $"The project could not be saved: {ex.Message}";
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
             if (!AutomationOptions.SuppressDialogs)
-                MessageBox.Show(this,
+                MessageBox.Show(_host,
                     $"The project could not be saved.\r\n\r\n{ex.Message}\r\n\r\nAny earlier copy of this project file was left unchanged. Choose another location and save again.",
                     "FanWorks Save Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
@@ -2680,7 +2687,7 @@ public sealed partial class MainForm
             Directory.CreateDirectory(targetDirectory);
             _saveButton.Enabled = false;
             _saveButton.Text = "Saving...";
-            UseWaitCursor = true;
+            _host.UseWaitCursor = true;
             _systemStorageStatusLabel.Text = "Creating the project PDF and CSV...";
             _systemStorageStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
             Application.DoEvents();
@@ -2688,13 +2695,13 @@ public sealed partial class MainForm
             RefreshDuctSystemGrid();
             var headers = new[]
             {
-                _currentUnits == UnitSystem.Imperial ? "Airflow (cfm)" : "Airflow (L/s)",
-                _currentUnits == UnitSystem.Imperial ? "Static Pressure In (in. w.c.)" : "Static Pressure In (Pa)",
-                _currentUnits == UnitSystem.Imperial ? "Static Pressure Out (in. w.c.)" : "Static Pressure Out (Pa)",
-                "Air System", _currentUnits == UnitSystem.Imperial ? "Temperature (deg F)" : "Temperature (deg C)",
-                _currentUnits == UnitSystem.Imperial ? "Pressure Rate (in. w.c./100 ft)" : "Pressure Rate (Pa/m)",
-                _currentUnits == UnitSystem.Imperial ? "Velocity (fpm)" : "Velocity (m/s)",
-                _currentUnits == UnitSystem.Imperial ? "Length (ft)" : "Length (m)", "Duct Size"
+                _host._currentUnits == UnitSystem.Imperial ? "Airflow (cfm)" : "Airflow (L/s)",
+                _host._currentUnits == UnitSystem.Imperial ? "Static Pressure In (in. w.c.)" : "Static Pressure In (Pa)",
+                _host._currentUnits == UnitSystem.Imperial ? "Static Pressure Out (in. w.c.)" : "Static Pressure Out (Pa)",
+                "Air System", _host._currentUnits == UnitSystem.Imperial ? "Temperature (deg F)" : "Temperature (deg C)",
+                _host._currentUnits == UnitSystem.Imperial ? "Pressure Rate (in. w.c./100 ft)" : "Pressure Rate (Pa/m)",
+                _host._currentUnits == UnitSystem.Imperial ? "Velocity (fpm)" : "Velocity (m/s)",
+                _host._currentUnits == UnitSystem.Imperial ? "Length (ft)" : "Length (m)", "Duct Size"
             };
             headers = new[] { "Item ID", "Description" }.Concat(headers).ToArray();
             var rows = _ductGrid.Rows.Cast<DataGridViewRow>()
@@ -2731,7 +2738,7 @@ public sealed partial class MainForm
                               ? ": " + string.Join(" ", review.Take(6))
                               : string.Empty));
             DuctSystemPdf.Export(temporaryPdfPath, "Duct System Schedule",
-                $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_currentUnits} units", headers, rows,
+                $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_host._currentUnits} units", headers, rows,
                 _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)
                     .Replace("\n", " — ", StringComparison.Ordinal),
                 metadata, BuildPdfLayout(), BuildPdfReportItems(), BuildPdfSchematics());
@@ -2741,7 +2748,7 @@ public sealed partial class MainForm
             _systemStorageStatusLabel.Text = $"Saved {Path.GetFileName(projectPath)}, {Path.GetFileName(pdfPath)}, and {Path.GetFileName(csvPath)}. Future saves overwrite these files.";
             _systemStorageStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
             if (!AutomationOptions.SuppressDialogs)
-                MessageBox.Show(this,
+                MessageBox.Show(_host,
                     $"Project saved successfully.\r\n\r\nProject: {projectPath}\r\nPDF report: {pdfPath}\r\nCSV schedule: {csvPath}",
                     "FanWorks Project Saved", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -2751,7 +2758,7 @@ public sealed partial class MainForm
             _systemStorageStatusLabel.Text = $"The project was saved, but the PDF/CSV report could not be created: {ex.Message}";
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
             if (!AutomationOptions.SuppressDialogs)
-                MessageBox.Show(this,
+                MessageBox.Show(_host,
                     $"The project file was saved:\r\n{projectPath}\r\n\r\nThe PDF report and CSV schedule could not be created.\r\n\r\n{ex.Message}\r\n\r\nEarlier copies of the report were left unchanged.",
                     "FanWorks Report Not Created", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
@@ -2769,7 +2776,7 @@ public sealed partial class MainForm
                     // Best-effort cleanup; the original export error remains the actionable result.
                 }
             }
-            UseWaitCursor = false;
+            _host.UseWaitCursor = false;
             _saveButton.Text = "Save";
             _saveButton.Enabled = true;
         }
@@ -2843,11 +2850,11 @@ public sealed partial class MainForm
             BackColor = Color.FromArgb(250, 252, 252),
             NodeSource = () => _ductSystem.LayoutNodes,
             CoordinateSource = () => LayoutCoordinateResolver.Resolve(_ductSystem),
-            CaptionSource = LayoutNodeCaption,
-            ConnectionCaptionSource = LayoutConnectionCaption,
-            ConnectionFlowReversedSource = LayoutConnectionFlowReversed,
-            CriticalPathNodeSource = IsLayoutNodeInCalculatedCriticalPath,
-            CriticalPathConnectionSource = IsLayoutConnectionInCalculatedCriticalPath,
+            CaptionSource = _host.LayoutNodeCaption,
+            ConnectionCaptionSource = _host.LayoutConnectionCaption,
+            ConnectionFlowReversedSource = MainForm.LayoutConnectionFlowReversed,
+            CriticalPathNodeSource = _host.IsLayoutNodeInCalculatedCriticalPath,
+            CriticalPathConnectionSource = _host.IsLayoutConnectionInCalculatedCriticalPath,
             PdfBackgroundSource = () => reportBackground,
             ViewMode = viewMode,
             ShowToScale = true,
@@ -2900,12 +2907,12 @@ public sealed partial class MainForm
             var inletPorts = node.Type == LayoutNodeType.CalculationPoint ? 0
                 : node.Type == LayoutNodeType.Fitting
                 ? FittingCatalog.InletPortCount(node.FittingGroup)
-                : node.Type == LayoutNodeType.Reservoir && IsSpaceSourceRole(node.SpaceRole) ? 0 : 1;
+                : node.Type == LayoutNodeType.Reservoir && MainForm.IsSpaceSourceRole(node.SpaceRole) ? 0 : 1;
             var outletPorts = node.Type == LayoutNodeType.CalculationPoint ? 0
                 : node.Type == LayoutNodeType.Fitting
                 ? FittingCatalog.OutletPortCount(node.FittingGroup)
-                : node.Type == LayoutNodeType.Reservoir && IsSpaceSinkRole(node.SpaceRole) ? 0 : 1;
-            return new DuctSystemPdfLayoutNode(node.Id, LayoutNodeCaption(node),
+                : node.Type == LayoutNodeType.Reservoir && MainForm.IsSpaceSinkRole(node.SpaceRole) ? 0 : 1;
+            return new DuctSystemPdfLayoutNode(node.Id, _host.LayoutNodeCaption(node),
                 node.Type.ToString(), node.Type == LayoutNodeType.Grd ? node.GrdType
                     : node.Type == LayoutNodeType.Reservoir ? node.SpaceRole
                     : node.Type == LayoutNodeType.CalculationPoint ? node.CalculationPointType
@@ -2925,7 +2932,7 @@ public sealed partial class MainForm
                     primaryDuct is { RequiresResizing: false },
                     node.ConnectionDuctSequence is int primarySequence ? $"D-{primarySequence:000}" : string.Empty,
                     node.BranchId,
-                    LayoutConnectionCaption(new LayoutConnectionRef(node, false)).Replace("\r", string.Empty)
+                    _host.LayoutConnectionCaption(new LayoutConnectionRef(node, false)).Replace("\r", string.Empty)
                         .Split('\n').ElementAtOrDefault(1) ?? "—"));
             }
             if (!string.IsNullOrWhiteSpace(node.SecondaryParentNodeId))
@@ -2937,7 +2944,7 @@ public sealed partial class MainForm
                     secondaryDuct is { RequiresResizing: false },
                     node.SecondaryConnectionDuctSequence is int secondarySequence ? $"D-{secondarySequence:000}" : string.Empty,
                     node.BranchId,
-                    LayoutConnectionCaption(new LayoutConnectionRef(node, true)).Replace("\r", string.Empty)
+                    _host.LayoutConnectionCaption(new LayoutConnectionRef(node, true)).Replace("\r", string.Empty)
                         .Split('\n').ElementAtOrDefault(1) ?? "—"));
             }
         }
@@ -3825,22 +3832,22 @@ public sealed partial class MainForm
 
     private static DuctSystemPdfField PdfField(string label, string value) => new(label, string.IsNullOrWhiteSpace(value) ? "-" : value);
 
-    private string PdfAirflow(double value) => $"{FormatSystemAirflow(value)} {(_currentUnits == UnitSystem.Imperial ? "cfm" : "L/s")}";
-    private string PdfTemperature(double value) => _currentUnits == UnitSystem.Imperial
+    private string PdfAirflow(double value) => $"{FormatSystemAirflow(value)} {(_host._currentUnits == UnitSystem.Imperial ? "cfm" : "L/s")}";
+    private string PdfTemperature(double value) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.CelsiusToFahrenheit(value):0.##} degF" : $"{value:0.##} degC";
-    private string PdfLength(double value) => $"{FormatSystemLength(value)} {(_currentUnits == UnitSystem.Imperial ? "ft" : "m")}";
-    private string PdfDelta(double value) => $"{FormatSystemDelta(value)} {(_currentUnits == UnitSystem.Imperial ? "ft" : "m")}";
-    private string PdfArea(double value) => $"{FormatSystemArea(value)} {(_currentUnits == UnitSystem.Imperial ? "ft2" : "m2")}";
-    private string PdfVelocity(double value) => $"{FormatSystemVelocity(value)} {(_currentUnits == UnitSystem.Imperial ? "fpm" : "m/s")}";
-    private string PdfDiameter(double value) => _currentUnits == UnitSystem.Imperial
+    private string PdfLength(double value) => $"{FormatSystemLength(value)} {(_host._currentUnits == UnitSystem.Imperial ? "ft" : "m")}";
+    private string PdfDelta(double value) => $"{FormatSystemDelta(value)} {(_host._currentUnits == UnitSystem.Imperial ? "ft" : "m")}";
+    private string PdfArea(double value) => $"{FormatSystemArea(value)} {(_host._currentUnits == UnitSystem.Imperial ? "ft2" : "m2")}";
+    private string PdfVelocity(double value) => $"{FormatSystemVelocity(value)} {(_host._currentUnits == UnitSystem.Imperial ? "fpm" : "m/s")}";
+    private string PdfDiameter(double value) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.MToInches(value):0.###} in" : $"{UnitConversions.MToMillimeters(value):0.##} mm";
     private string PdfPressure(double value) => !double.IsFinite(value)
         ? "Not connected"
-        : _currentUnits == UnitSystem.Imperial
+        : _host._currentUnits == UnitSystem.Imperial
             ? $"{UnitConversions.PaToInchesWater(value):0.####} in. w.c."
             : $"{value:0.##} Pa";
-    private string PdfPressureRate(DuctCalculationResult result) => $"{FormatSystemPressureRate(result)} {(_currentUnits == UnitSystem.Imperial ? "in. w.c./100 ft" : "Pa/m")}";
-    private string PdfRoughness(double feet) => _currentUnits == UnitSystem.Imperial
+    private string PdfPressureRate(DuctCalculationResult result) => $"{FormatSystemPressureRate(result)} {(_host._currentUnits == UnitSystem.Imperial ? "in. w.c./100 ft" : "Pa/m")}";
+    private string PdfRoughness(double feet) => _host._currentUnits == UnitSystem.Imperial
         ? $"{feet:0.######} ft" : $"{UnitConversions.FeetToM(feet) * 1000:0.###} mm";
     private static string PdfFriction(FrictionFactorResult friction) => friction.Factor is double factor
         ? $"{factor:0.######}" : $"{friction.LowerFactor:0.######} to {friction.UpperFactor:0.######}";
@@ -3885,7 +3892,7 @@ public sealed partial class MainForm
                 CheckFileExists = true,
                 Multiselect = false
             };
-            if (dialog.ShowDialog(this) != DialogResult.OK)
+            if (dialog.ShowDialog(_host) != DialogResult.OK)
                 return;
             path = dialog.FileName;
         }
@@ -3908,7 +3915,7 @@ public sealed partial class MainForm
             _systemStorageStatusLabel.Text = $"The project could not be opened: {ex.Message}";
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
             if (!AutomationOptions.SuppressDialogs)
-                MessageBox.Show(this,
+                MessageBox.Show(_host,
                     $"The project could not be opened.\r\n\r\n{path}\r\n\r\n{ex.Message}\r\n\r\nThe current project was left unchanged.",
                     "FanWorks Open Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
@@ -3929,7 +3936,7 @@ public sealed partial class MainForm
         var existingCount = _ductSystem.Ducts.Count + _ductSystem.Fittings.Count + _ductSystem.LayoutNodes.Count;
         if (existingCount == 0 || AutomationOptions.SuppressDialogs)
             return true;
-        return MessageBox.Show(this,
+        return MessageBox.Show(_host,
                    $"{question}\r\n\r\nThe current system ({existingCount} item(s)) will be closed. "
                    + "Anything not saved with Save will be lost.",
                    "Replace Current System", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
@@ -3942,18 +3949,18 @@ public sealed partial class MainForm
         _ductSystem = document;
         _lastExportBasePath = string.Empty;
         ResetCriticalPath();
-        ClearLayoutHistory();
+        _host.ClearLayoutHistory();
         _editingDuctSequence = null;
         _editingFittingSequence = null;
         _addDuctButton.Text = DefaultDuctActionText;
-        FittingScreen._addFittingButton.Text = DefaultFittingActionText;
+        _host.FittingScreen._addFittingButton.Text = DefaultFittingActionText;
         _addDuctButton.Visible = false;
-        FittingScreen._addFittingButton.Visible = false;
-        _ductEditingLabel.Visible = false;
-        FittingScreen._fittingEditingLabel.Visible = false;
+        _host.FittingScreen._addFittingButton.Visible = false;
+        _host._ductEditingLabel.Visible = false;
+        _host.FittingScreen._fittingEditingLabel.Visible = false;
         SaveDuctSystem();
         RefreshDuctSystemGrid();
-        RefreshLayoutDesigner();
+        _host.RefreshLayoutDesigner();
         ApplyProjectCalculationSettings();
     }
 
@@ -3963,7 +3970,7 @@ public sealed partial class MainForm
         {
             var imported = DuctSystemCsv.Import(path);
             var count = imported.Ducts.Count + imported.Fittings.Count;
-            if (!AutomationOptions.SuppressDialogs && MessageBox.Show(this,
+            if (!AutomationOptions.SuppressDialogs && MessageBox.Show(_host,
                     $"{Path.GetFileName(path)} is a CSV schedule. It contains {count} duct and fitting item(s) only: "
                     + "the graphical layout, connections, fan, and equipment are not stored in CSV and will not be restored."
                     + $"\r\n\r\nTo reopen a complete project, choose its {ProjectFile.Extension} file instead.\r\n\r\nImport the CSV anyway?",

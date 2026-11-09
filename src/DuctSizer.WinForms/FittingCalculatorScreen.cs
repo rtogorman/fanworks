@@ -323,7 +323,7 @@ internal sealed partial class FittingCalculatorScreen
         calculate.Margin = Padding.Empty;
         UiPolish.RoundButton(calculate);
         calculate.Click += (_, _) => CalculateFittingAndDisplay();
-        _addFittingButton.Text = MainForm.DefaultFittingActionText;
+        _addFittingButton.Text = DuctSystemScreen.DefaultFittingActionText;
         _addFittingButton.Size = new Size(176, 30);
         _addFittingButton.Margin = Padding.Empty;
         _addFittingButton.BackColor = Color.FromArgb(42, 135, 91);
@@ -1873,7 +1873,7 @@ internal sealed partial class FittingCalculatorScreen
     {
         if (definition.ReferenceDuctShape is DuctShape inferredShape)
         {
-            MainForm.SelectChoice(_fittingShapeCombo, inferredShape);
+            DuctSystemScreen.SelectChoice(_fittingShapeCombo, inferredShape);
             EnsureValidInferredGeometry(inferredShape);
         }
         _fittingShapeCombo.Enabled = definition.ReferenceDuctShape is null;
@@ -2020,54 +2020,54 @@ internal sealed partial class FittingCalculatorScreen
         CalculateFittingAndDisplay();
         if (_lastFittingCalculation is null)
             return;
-        var existing = _host._editingFittingSequence is int editingSequence
-            ? _host._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == editingSequence)
+        var existing = _host.DuctSystemScreen._editingFittingSequence is int editingSequence
+            ? _host.DuctSystemScreen._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == editingSequence)
             : null;
-        var existingNode = existing is null ? null : _host._ductSystem.LayoutNodes
+        var existingNode = existing is null ? null : _host.DuctSystemScreen._ductSystem.LayoutNodes
             .FirstOrDefault(x => x.LinkedFittingSequence == existing.Sequence);
-        if (existing is not null && !_host.ConfirmAirflowOverride(existingNode,
+        if (existing is not null && !_host.DuctSystemScreen.ConfirmAirflowOverride(existingNode,
                 _lastFittingCalculation.AirflowM3PerS ?? existing.AirflowM3PerS, existing.Id))
             return;
-        var sequence = existing?.Sequence ?? _host._ductSystem.ReserveFittingSequence();
+        var sequence = existing?.Sequence ?? _host.DuctSystemScreen._ductSystem.ReserveFittingSequence();
         var description = existing?.Description ?? _fittingDescription.Trim();
         if (string.IsNullOrWhiteSpace(description))
             description = $"{_lastFittingCalculation.Definition.Code} — {_lastFittingCalculation.Definition.Description}";
         var fitting = SavedFitting.FromResult(sequence, description, _lastFittingCalculation,
-            existing?.AirSystemType ?? _host._ductSystem.DefaultAirSystemType,
-            existing?.BranchId ?? _host._ductSystem.DefaultBranchId);
+            existing?.AirSystemType ?? _host.DuctSystemScreen._ductSystem.DefaultAirSystemType,
+            existing?.BranchId ?? _host.DuctSystemScreen._ductSystem.DefaultBranchId);
         fitting.CustomId = existing?.CustomId ?? string.Empty;
         fitting.DeltaXM = existing?.DeltaXM ?? 0;
         fitting.DeltaYM = existing?.DeltaYM ?? 0;
         fitting.DeltaZM = existing?.DeltaZM ?? 0;
         _host.ApplyLayoutMetadata(fitting, _lastFittingCalculation, allowBranchReservation: existing is null);
         if (existing is null)
-            _host._ductSystem.Fittings.Add(fitting);
+            _host.DuctSystemScreen._ductSystem.Fittings.Add(fitting);
         else
-            _host._ductSystem.Fittings[_host._ductSystem.Fittings.IndexOf(existing)] = fitting;
-        _host._editingFittingSequence = null;
-        _addFittingButton.Text = MainForm.DefaultFittingActionText;
+            _host.DuctSystemScreen._ductSystem.Fittings[_host.DuctSystemScreen._ductSystem.Fittings.IndexOf(existing)] = fitting;
+        _host.DuctSystemScreen._editingFittingSequence = null;
+        _addFittingButton.Text = DuctSystemScreen.DefaultFittingActionText;
         _addFittingButton.Visible = false;
         _fittingEditingLabel.Visible = false;
         if (historyState is not null)
             _host.CommitLayoutHistoryState(historyState);
-        _host.SaveDuctSystem();
-        _host.RefreshDuctSystemGrid();
-        _host._mainTabs.SelectedTab = returnToDesigner ? _host._layoutTab : _host._systemTab;
+        _host.DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen._mainTabs.SelectedTab = returnToDesigner ? _host.DuctSystemScreen._layoutTab : _host.DuctSystemScreen._systemTab;
         if (returnToDesigner)
             _host._layoutStatusLabel.Text = existing is null
                 ? "Fitting configured and linked. Continue placing components on the grid."
                 : $"Updated {fitting.Id} and refreshed its designer component.";
-        _host._systemStorageStatusLabel.Text = existing is null
+        _host.DuctSystemScreen._systemStorageStatusLabel.Text = existing is null
             ? $"Added fitting F-{sequence:000} and saved the duct system locally."
             : $"Updated fitting {fitting.Id} and saved the duct system locally.";
-        _host._systemStorageStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+        _host.DuctSystemScreen._systemStorageStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
     internal void LoadFittingIntoCalculator(SavedFitting fitting)
     {
         var definition = FittingCatalog.Find(fitting.FittingCode);
         SelectFittingGroup(FittingCatalog.SelectionGroup(definition), definition.Code);
-        MainForm.SelectChoice(_fittingShapeCombo, definition.ReferenceDuctShape ?? fitting.Shape);
+        DuctSystemScreen.SelectChoice(_fittingShapeCombo, definition.ReferenceDuctShape ?? fitting.Shape);
         _fittingAirflowText.Text = (_host._currentUnits == UnitSystem.Imperial
             ? UnitConversions.M3PerSToCfm(fitting.AirflowM3PerS)
             : UnitConversions.M3PerSToLps(fitting.AirflowM3PerS)).ToString("0.####", CultureInfo.CurrentCulture);
@@ -2107,7 +2107,7 @@ internal sealed partial class FittingCalculatorScreen
 
         if (fitting.Junction is { } junction)
         {
-            MainForm.SelectChoice(_junctionPathCombo, junction.Path);
+            DuctSystemScreen.SelectChoice(_junctionPathCombo, junction.Path);
             LoadJunctionPath(_junctionStraightShapeCombo, _junctionStraightAirflowText,
                 _junctionStraightDiameterText, _junctionStraightWidthText, _junctionStraightHeightText,
                 junction.StraightAirflowM3PerS, junction.StraightGeometry);
@@ -2123,7 +2123,7 @@ internal sealed partial class FittingCalculatorScreen
     private void LoadJunctionPath(ComboBox shape, TextBox airflow, TextBox diameter, TextBox width, TextBox height,
         double airflowM3PerS, DuctGeometry geometry)
     {
-        MainForm.SelectChoice(shape, geometry.Shape);
+        DuctSystemScreen.SelectChoice(shape, geometry.Shape);
         airflow.Text = (_host._currentUnits == UnitSystem.Imperial
             ? UnitConversions.M3PerSToCfm(airflowM3PerS)
             : UnitConversions.M3PerSToLps(airflowM3PerS)).ToString("0.####", CultureInfo.CurrentCulture);
