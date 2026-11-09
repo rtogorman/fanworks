@@ -55,13 +55,14 @@ public sealed partial class MainForm
     private double _criticalPathPressureLossPa;
     private string _criticalPathRoute = string.Empty;
     private IReadOnlyList<SystemCalculationIssue> _criticalPathIssues = Array.Empty<SystemCalculationIssue>();
+    private IReadOnlyList<SystemCalculationIssue> _criticalPathAssumptions = Array.Empty<SystemCalculationIssue>();
     private sealed record SystemRowTag(bool IsFitting, int Sequence);
 
     private string DuctSystemStoragePath
     {
         get
         {
-            var overridePath = Environment.GetEnvironmentVariable("DUCTSIZER_SYSTEM_PATH");
+            var overridePath = AutomationOptions.SystemStoragePath;
             if (!string.IsNullOrWhiteSpace(overridePath))
                 return overridePath;
             return Path.Combine(
@@ -358,8 +359,9 @@ public sealed partial class MainForm
             Name = "AutomaticSizingInputsMenuItem"
         };
         automaticSizingInputs.Click += (_, _) => EditAutomaticSizingInputs();
-        var importProject = new ToolStripMenuItem("Import Project…") { Name = "ImportProjectMenuItem" };
-        importProject.Click += (_, _) => ImportDuctSystem();
+        // The Name is kept from v0.92 ("Import Project") so existing automation finds the item.
+        var importProject = new ToolStripMenuItem("Open Project…") { Name = "ImportProjectMenuItem" };
+        importProject.Click += (_, _) => OpenProject();
         _settingsMenu.Items.AddRange(new ToolStripItem[]
         {
             _imperialUnitsMenuItem,
@@ -947,13 +949,39 @@ public sealed partial class MainForm
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidDataException)
         {
+            // Never let the next automatic save overwrite a file we could not read:
+            // move it aside so it can be recovered or sent with a problem report.
+            DiagnosticLog.Error($"The working project {DuctSystemStoragePath} could not be loaded.", ex);
+            var preservedPath = PreserveUnreadableWorkingFile();
             _ductSystem = new DuctSystemDocument();
-            _systemStorageStatusLabel.Text = $"The local duct system could not be loaded: {ex.Message}";
+            _systemStorageStatusLabel.Text = preservedPath is null
+                ? $"The local duct system could not be loaded: {ex.Message}"
+                : $"The local duct system could not be loaded ({ex.Message}). It was kept as {Path.GetFileName(preservedPath)} and a new empty system was started.";
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
         }
         RefreshDuctSystemGrid();
         RefreshLayoutDesigner();
         ApplyProjectCalculationSettings();
+    }
+
+    private string? PreserveUnreadableWorkingFile()
+    {
+        try
+        {
+            var path = DuctSystemStoragePath;
+            if (!File.Exists(path))
+                return null;
+            var preserved = Path.Combine(Path.GetDirectoryName(path) ?? string.Empty,
+                $"{Path.GetFileNameWithoutExtension(path)}.unreadable-{DateTime.Now:yyyyMMdd-HHmmss}{Path.GetExtension(path)}");
+            File.Move(path, preserved);
+            DiagnosticLog.Warning($"Unreadable working project moved to {preserved}.");
+            return preserved;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            DiagnosticLog.Error("The unreadable working project could not be moved aside.", ex);
+            return null;
+        }
     }
 
     private void SaveDuctSystem()
@@ -968,6 +996,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
+            DiagnosticLog.Error($"Automatic save to {DuctSystemStoragePath} failed.", ex);
             _systemStorageStatusLabel.Text = $"The duct system is still open, but could not be saved locally: {ex.Message}";
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
         }
@@ -1108,7 +1137,10 @@ public sealed partial class MainForm
         _criticalPathFilterEnabled = false;
         ApplyCriticalRoute(ComputeLongestRoute());
         var horsepower = TryBrakeHorsepower(requiredAirflow, fan.FanStaticPressurePa, fan.FanEfficiencyPercent);
-        message = $"{fan.Id} was sized to {FormatSystemAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} static pressure, and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency.";
+        message = $"{fan.Id} was sized to {FormatSystemAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} static pressure, and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency."
+                  + (_criticalPathAssumptions.Count > 0
+                      ? $"\r\n\r\nNote: the critical path {CriticalPathAssumptionNote()}. Size those connections for a complete result."
+                      : string.Empty);
         return true;
     }
 
@@ -1182,6 +1214,7 @@ public sealed partial class MainForm
         _criticalPathRoute = string.Empty;
         _criticalPathItemKeys.Clear();
         _criticalPathIssues = Array.Empty<SystemCalculationIssue>();
+        _criticalPathAssumptions = Array.Empty<SystemCalculationIssue>();
     }
 
     private void ApplyCriticalRoute(CriticalPathResult route)
@@ -1189,6 +1222,7 @@ public sealed partial class MainForm
         _criticalPathPressureLossPa = route.PressureLossPa;
         _criticalPathItemKeys = new HashSet<string>(route.ItemKeys, StringComparer.OrdinalIgnoreCase);
         _criticalPathIssues = route.Issues;
+        _criticalPathAssumptions = route.RouteAssumptions;
         _criticalPathRoute = route.StartId == route.EndId ? route.StartId : $"{route.StartId} → {route.EndId}";
     }
 
@@ -1240,6 +1274,16 @@ public sealed partial class MainForm
         var names = _criticalPathIssues.Select(x => x.ItemId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var listed = string.Join(", ", names.Take(6)) + (names.Length > 6 ? $" and {names.Length - 6} more" : string.Empty);
         return $"Incomplete: {listed} could not be calculated";
+    }
+
+    /// <summary>Short note on assumptions made on the critical route, or empty when there are none.</summary>
+    private string CriticalPathAssumptionNote()
+    {
+        if (_criticalPathAssumptions.Count == 0)
+            return string.Empty;
+        var names = _criticalPathAssumptions.Select(x => x.ItemId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var listed = string.Join(", ", names.Take(6)) + (names.Length > 6 ? $" and {names.Length - 6} more" : string.Empty);
+        return $"assumes no loss in {names.Length} unsized connection{(names.Length == 1 ? string.Empty : "s")} (into {listed})";
     }
 
     private bool ShowCriticalItem(string key) => !_criticalPathFilterEnabled || _criticalPathItemKeys.Contains(key);
@@ -1479,8 +1523,10 @@ public sealed partial class MainForm
             ? "Critical-path net pressure loss: —"
             : _criticalPathIssues.Count > 0
                 ? $"Critical-path net pressure loss: not available ({CriticalPathIssueSummary()})"
-                : $"Critical-path net pressure loss: {FormatSystemTotal(_criticalPathPressureLossPa)}";
-        _systemTotalLabel.ForeColor = _criticalPathIssues.Count > 0 ? Color.Firebrick : Color.FromArgb(22, 65, 102);
+                : $"Critical-path net pressure loss: {FormatSystemTotal(_criticalPathPressureLossPa)}"
+                  + (_criticalPathAssumptions.Count > 0 ? $" — {CriticalPathAssumptionNote()}" : string.Empty);
+        _systemTotalLabel.ForeColor = _criticalPathIssues.Count > 0 ? Color.Firebrick
+            : _criticalPathAssumptions.Count > 0 ? Color.FromArgb(150, 85, 0) : Color.FromArgb(22, 65, 102);
         _systemCountLabel.Text = itemCount == 1 ? "1 item" : $"{itemCount} items";
         _systemCriticalLabel.Text = !_criticalPathCalculated
             ? "Critical route: not available"
@@ -1794,7 +1840,8 @@ public sealed partial class MainForm
                 string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
             if (parent is null)
                 return;
-            var ductLoss = ductSequence is int sequence ? SafeDuctPressureLoss(sequence) : double.NaN;
+            // Unsized connection: close-coupled, no loss. Assigned duct that fails: NaN.
+            var ductLoss = ductSequence is int sequence ? SafeDuctPressureLoss(sequence) : 0.0;
             incomingPressures.Add(OutletPressureToward(parent, node) - ductLoss);
         }
     }
@@ -2565,7 +2612,8 @@ public sealed partial class MainForm
         }
         builder.AppendLine(_criticalPathIssues.Count > 0
             ? $"Critical-path total pressure loss\tnot available ({CriticalPathIssueSummary()})"
-            : $"Critical-path total pressure loss\t{FormatSystemTotal(_criticalPathPressureLossPa)}");
+            : $"Critical-path total pressure loss\t{FormatSystemTotal(_criticalPathPressureLossPa)}"
+              + (_criticalPathAssumptions.Count > 0 ? $"\t{CriticalPathAssumptionNote()}" : string.Empty));
         try
         {
             Clipboard.SetText(builder.ToString());
@@ -2581,17 +2629,17 @@ public sealed partial class MainForm
 
     private void ExportDuctSystem()
     {
-        var automatedExportPath = Environment.GetEnvironmentVariable("DUCTSIZER_EXPORT_BASE_PATH");
+        var automatedExportPath = AutomationOptions.ExportBasePath;
         var basePath = string.IsNullOrWhiteSpace(automatedExportPath) ? _lastExportBasePath : automatedExportPath;
         if (string.IsNullOrWhiteSpace(basePath))
         {
             using var dialog = new SaveFileDialog
             {
-                Title = "Save duct system report and project data",
-                Filter = "FanWorks report (*.pdf)|*.pdf|FanWorks project data (*.csv)|*.csv",
-                DefaultExt = "pdf",
+                Title = "Save FanWorks project, report, and schedule",
+                Filter = "FanWorks project (*.fanworks)|*.fanworks|FanWorks report (*.pdf)|*.pdf",
+                DefaultExt = "fanworks",
                 AddExtension = true,
-                FileName = $"DuctSystem-{DateTime.Now:yyyyMMdd-HHmm}.pdf",
+                FileName = $"DuctSystem-{DateTime.Now:yyyyMMdd-HHmm}{ProjectFile.Extension}",
                 OverwritePrompt = true,
                 CheckPathExists = true,
                 ValidateNames = true,
@@ -2602,8 +2650,30 @@ public sealed partial class MainForm
             basePath = Path.Combine(Path.GetDirectoryName(dialog.FileName) ?? "",
                 Path.GetFileNameWithoutExtension(dialog.FileName));
         }
+        var projectPath = basePath + ProjectFile.Extension;
         var csvPath = basePath + ".csv";
         var pdfPath = basePath + ".pdf";
+        // The project file is written first and on its own, so a failure while
+        // building the PDF report can never cost the user their model.
+        try
+        {
+            _ductSystem.LastEditedUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            ProjectFile.Save(projectPath, _ductSystem);
+            _lastExportBasePath = basePath;
+            DiagnosticLog.Info($"Project saved to {projectPath}.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                                       or NotSupportedException or System.Security.SecurityException)
+        {
+            DiagnosticLog.Error($"Project save to {projectPath} failed.", ex);
+            _systemStorageStatusLabel.Text = $"The project could not be saved: {ex.Message}";
+            _systemStorageStatusLabel.ForeColor = Color.Firebrick;
+            if (!AutomationOptions.SuppressDialogs)
+                MessageBox.Show(this,
+                    $"The project could not be saved.\r\n\r\n{ex.Message}\r\n\r\nAny earlier copy of this project file was left unchanged. Choose another location and save again.",
+                    "FanWorks Save Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
         var targetDirectory = Path.GetDirectoryName(pdfPath);
         var temporaryStem = $".{Path.GetFileName(basePath)}-{Guid.NewGuid():N}";
         var temporaryPdfPath = Path.Combine(targetDirectory ?? string.Empty, temporaryStem + ".pdf.tmp");
@@ -2661,7 +2731,8 @@ public sealed partial class MainForm
                     ? "Not calculated"
                     : _criticalPathIssues.Count > 0
                         ? $"Not available. {CriticalPathIssueSummary()}."
-                        : $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss)");
+                        : $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss"
+                          + (_criticalPathAssumptions.Count > 0 ? $"; {CriticalPathAssumptionNote()})" : ")"));
             DuctSystemPdf.Export(temporaryPdfPath, "Duct System Schedule",
                 $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_currentUnits} units", headers, rows,
                 _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)
@@ -2670,24 +2741,22 @@ public sealed partial class MainForm
             DuctSystemCsv.Export(temporaryCsvPath, _ductSystem);
             File.Move(temporaryPdfPath, pdfPath, overwrite: true);
             File.Move(temporaryCsvPath, csvPath, overwrite: true);
-            _lastExportBasePath = basePath;
-            _systemStorageStatusLabel.Text = $"Saved {Path.GetFileName(pdfPath)} and {Path.GetFileName(csvPath)}. Future saves overwrite these files.";
+            _systemStorageStatusLabel.Text = $"Saved {Path.GetFileName(projectPath)}, {Path.GetFileName(pdfPath)}, and {Path.GetFileName(csvPath)}. Future saves overwrite these files.";
             _systemStorageStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
-            if (!string.Equals(Environment.GetEnvironmentVariable("DUCTSIZER_AUTOMATED_VERIFICATION"), "1",
-                    StringComparison.Ordinal))
+            if (!AutomationOptions.SuppressDialogs)
                 MessageBox.Show(this,
-                    $"Project saved successfully.\r\n\r\nPDF: {pdfPath}\r\nCSV: {csvPath}",
+                    $"Project saved successfully.\r\n\r\nProject: {projectPath}\r\nPDF report: {pdfPath}\r\nCSV schedule: {csvPath}",
                     "FanWorks Project Saved", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            _systemStorageStatusLabel.Text = $"The duct system could not be exported: {ex.Message}";
+            DiagnosticLog.Error($"Report export to {pdfPath} failed after the project was saved.", ex);
+            _systemStorageStatusLabel.Text = $"The project was saved, but the PDF/CSV report could not be created: {ex.Message}";
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
-            if (!string.Equals(Environment.GetEnvironmentVariable("DUCTSIZER_AUTOMATED_VERIFICATION"), "1",
-                    StringComparison.Ordinal))
+            if (!AutomationOptions.SuppressDialogs)
                 MessageBox.Show(this,
-                    $"The project could not be saved.\r\n\r\n{ex.Message}\r\n\r\nNo completed export was written. Choose Save again to select another location.",
-                    "FanWorks Save Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    $"The project file was saved:\r\n{projectPath}\r\n\r\nThe PDF report and CSV schedule could not be created.\r\n\r\n{ex.Message}\r\n\r\nEarlier copies of the report were left unchanged.",
+                    "FanWorks Report Not Created", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally
         {
@@ -3800,31 +3869,111 @@ public sealed partial class MainForm
         _ => node.Type.ToString()
     };
 
-    private void ImportDuctSystem()
+    /// <summary>
+    /// Opens a saved .fanworks project (the full model: layout, connections, fan,
+    /// settings). A CSV schedule can also be chosen; it carries ducts and fittings only,
+    /// so the user is told that layout and connections will not be restored.
+    /// </summary>
+    private void OpenProject()
     {
-        using var dialog = new OpenFileDialog
+        var path = AutomationOptions.OpenProjectPath;
+        if (string.IsNullOrWhiteSpace(path))
         {
-            Title = "Import a FanWorks system CSV",
-            Filter = "FanWorks CSV file (*.csv)|*.csv|All files (*.*)|*.*",
-            CheckFileExists = true,
-            Multiselect = false
-        };
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+            using var dialog = new OpenFileDialog
+            {
+                Title = "Open a FanWorks project",
+                Filter = $"FanWorks project (*{ProjectFile.Extension})|*{ProjectFile.Extension}"
+                         + "|FanWorks CSV schedule - ducts and fittings only (*.csv)|*.csv",
+                CheckFileExists = true,
+                Multiselect = false
+            };
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
+            path = dialog.FileName;
+        }
+        if (string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            ImportDuctSystem(path);
             return;
+        }
+
+        DuctSystemDocument opened;
         try
         {
-            var imported = DuctSystemCsv.Import(dialog.FileName);
+            opened = ProjectFile.Load(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
+                                       or ArgumentException or NotSupportedException
+                                       or System.Text.Json.JsonException)
+        {
+            DiagnosticLog.Error($"Opening project {path} failed.", ex);
+            _systemStorageStatusLabel.Text = $"The project could not be opened: {ex.Message}";
+            _systemStorageStatusLabel.ForeColor = Color.Firebrick;
+            if (!AutomationOptions.SuppressDialogs)
+                MessageBox.Show(this,
+                    $"The project could not be opened.\r\n\r\n{path}\r\n\r\n{ex.Message}\r\n\r\nThe current project was left unchanged.",
+                    "FanWorks Open Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        if (!ConfirmReplaceCurrentSystem($"Open {Path.GetFileName(path)}?"))
+            return;
+        ReplaceCurrentSystem(opened);
+        _lastExportBasePath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty,
+            Path.GetFileNameWithoutExtension(path));
+        DiagnosticLog.Info($"Project opened from {path}.");
+        _systemStorageStatusLabel.Text = $"Opened {Path.GetFileName(path)}. Save writes back to this project.";
+        _systemStorageStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+    }
+
+    private bool ConfirmReplaceCurrentSystem(string question)
+    {
+        var existingCount = _ductSystem.Ducts.Count + _ductSystem.Fittings.Count + _ductSystem.LayoutNodes.Count;
+        if (existingCount == 0 || AutomationOptions.SuppressDialogs)
+            return true;
+        return MessageBox.Show(this,
+                   $"{question}\r\n\r\nThe current system ({existingCount} item(s)) will be closed. "
+                   + "Anything not saved with Save will be lost.",
+                   "Replace Current System", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                   MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+    }
+
+    /// <summary>Makes <paramref name="document"/> the working system and resets all editing state.</summary>
+    private void ReplaceCurrentSystem(DuctSystemDocument document)
+    {
+        _ductSystem = document;
+        _lastExportBasePath = string.Empty;
+        ResetCriticalPath();
+        ClearLayoutHistory();
+        _editingDuctSequence = null;
+        _editingFittingSequence = null;
+        _addDuctButton.Text = DefaultDuctActionText;
+        _addFittingButton.Text = DefaultFittingActionText;
+        _addDuctButton.Visible = false;
+        _addFittingButton.Visible = false;
+        _ductEditingLabel.Visible = false;
+        _fittingEditingLabel.Visible = false;
+        SaveDuctSystem();
+        RefreshDuctSystemGrid();
+        RefreshLayoutDesigner();
+        ApplyProjectCalculationSettings();
+    }
+
+    private void ImportDuctSystem(string path)
+    {
+        try
+        {
+            var imported = DuctSystemCsv.Import(path);
             var count = imported.Ducts.Count + imported.Fittings.Count;
-            var existingCount = _ductSystem.Ducts.Count + _ductSystem.Fittings.Count;
-            if (existingCount > 0)
-            {
-                var replace = MessageBox.Show(this,
-                    $"Replace the current {existingCount}-item duct system with {count} imported item(s)?",
-                    "Import duct system", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
-                    MessageBoxDefaultButton.Button2);
-                if (replace != DialogResult.Yes)
-                    return;
-            }
+            if (!AutomationOptions.SuppressDialogs && MessageBox.Show(this,
+                    $"{Path.GetFileName(path)} is a CSV schedule. It contains {count} duct and fitting item(s) only: "
+                    + "the graphical layout, connections, fan, and equipment are not stored in CSV and will not be restored."
+                    + $"\r\n\r\nTo reopen a complete project, choose its {ProjectFile.Extension} file instead.\r\n\r\nImport the CSV anyway?",
+                    "Import CSV Schedule", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+            if (!ConfirmReplaceCurrentSystem($"Import {count} item(s) from {Path.GetFileName(path)}?"))
+                return;
             imported.UserName = _ductSystem.UserName;
             imported.ProjectName = _ductSystem.ProjectName;
             imported.ProjectNumber = _ductSystem.ProjectNumber;
@@ -3835,27 +3984,15 @@ public sealed partial class MainForm
             imported.DefaultSizeRoundingDirection = _ductSystem.DefaultSizeRoundingDirection;
             imported.DefaultEquivalentDiameterMethod = _ductSystem.DefaultEquivalentDiameterMethod;
             imported.DefaultPressureLossBasis = _ductSystem.DefaultPressureLossBasis;
-            _ductSystem = imported;
-            _lastExportBasePath = string.Empty;
-            ResetCriticalPath();
-            ClearLayoutHistory();
-            _editingDuctSequence = null;
-            _editingFittingSequence = null;
-            _addDuctButton.Text = DefaultDuctActionText;
-            _addFittingButton.Text = DefaultFittingActionText;
-            _addDuctButton.Visible = false;
-            _addFittingButton.Visible = false;
-            _ductEditingLabel.Visible = false;
-            _fittingEditingLabel.Visible = false;
-            SaveDuctSystem();
-            RefreshDuctSystemGrid();
-            RefreshLayoutDesigner();
-            _systemStorageStatusLabel.Text = $"Imported {count} item(s) from {Path.GetFileName(dialog.FileName)} and saved locally.";
+            ReplaceCurrentSystem(imported);
+            DiagnosticLog.Info($"CSV schedule imported from {path} ({count} items).");
+            _systemStorageStatusLabel.Text = $"Imported {count} item(s) from {Path.GetFileName(path)}. Layout and connections were not in the CSV.";
             _systemStorageStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
                                    or ArgumentException or InvalidOperationException or System.Text.Json.JsonException)
         {
+            DiagnosticLog.Error($"CSV import from {path} failed.", ex);
             _systemStorageStatusLabel.Text = $"The CSV could not be imported: {ex.Message}";
             _systemStorageStatusLabel.ForeColor = Color.Firebrick;
         }

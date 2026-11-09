@@ -659,7 +659,9 @@ public static class DuctSystemStore
         if (document.SchemaVersion == 11)
             document.SchemaVersion = 12;
         if (document.SchemaVersion != 12)
-            throw new InvalidDataException($"Unsupported duct-system file version {document.SchemaVersion}.");
+            throw new InvalidDataException(document.SchemaVersion > 12
+                ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."
+                : $"Unsupported duct-system file version {document.SchemaVersion}.");
         if (document.Ducts.Any(x => x.Sequence <= 0)
             || document.Ducts.Select(x => x.Sequence).Distinct().Count() != document.Ducts.Count)
             throw new InvalidDataException("The local duct-system file contains invalid or duplicate duct IDs.");

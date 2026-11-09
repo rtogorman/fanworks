@@ -144,11 +144,33 @@ internal static class SystemTests
         if (result.IsComplete || !result.Issues.Any(x => x.ItemId == system.BranchDuct.Id))
             throw new Exception("A duct that cannot be calculated must make the critical path incomplete and be named.");
 
-        var unlinked = BuildDivergingSystem();
-        unlinked.BranchSink.ConnectionDuctSequence = null;
-        var missingDuct = CriticalPathAnalyzer.Analyze(unlinked.Document);
-        if (missingDuct.IsComplete || !missingDuct.Issues.Any(x => x.ItemId == unlinked.BranchSink.Id))
-            throw new Exception("A connection with no duct record must make the critical path incomplete.");
+        var dangling = BuildDivergingSystem();
+        dangling.BranchSink.ConnectionDuctSequence = 999;
+        var missingDuct = CriticalPathAnalyzer.Analyze(dangling.Document);
+        if (missingDuct.IsComplete || !missingDuct.Issues.Any(x => x.ItemId == dangling.BranchSink.Id))
+            throw new Exception("A connection that refers to a missing duct record must make the critical path incomplete.");
+    }
+
+    public static void UnsizedConnectionIsAReportedAssumption()
+    {
+        // A drawn connection with no duct assigned is close-coupled (no loss). The result stays usable,
+        // but the route must say so, so the engineer can see what was assumed.
+        var sized = CriticalPathAnalyzer.Analyze(BuildDivergingSystem().Document);
+        if (sized.RouteAssumptions.Count != 0)
+            throw new Exception("A fully sized route must not report assumptions.");
+
+        var system = BuildDivergingSystem();
+        system.MainSink.ConnectionDuctSequence = null;
+        system.BranchSink.ConnectionDuctSequence = null;
+        var result = CriticalPathAnalyzer.Analyze(system.Document);
+        if (!result.IsComplete)
+            throw new Exception("Unsized connections alone must not block the critical path.");
+        if (!result.RouteAssumptions.Any(x => x.ItemId == result.EndId))
+            throw new Exception("The unsized connection on the reported route must be listed as an assumption.");
+        if (result.ItemKeys.Any(key => key.StartsWith("U:", StringComparison.Ordinal)))
+            throw new Exception("Assumption markers must not leak into the route's item keys.");
+        if (result.PressureLossPa >= sized.PressureLossPa)
+            throw new Exception("Removing duct losses must not increase the critical-path total.");
     }
 
     public static void ProjectFileRoundTripsTheFullModel()
@@ -194,6 +216,22 @@ internal static class SystemTests
             catch (FileNotFoundException) { missing = true; }
             if (!missing)
                 throw new Exception("Opening a missing project file must fail, not return an empty project.");
+
+            // A project from a newer FanWorks must be refused with a clear message, not half-read.
+            var newerPath = Path.Combine(directory, "newer" + ProjectFile.Extension);
+            File.WriteAllText(newerPath, File.ReadAllText(path)
+                .Replace("\"SchemaVersion\": 12", "\"SchemaVersion\": 99", StringComparison.Ordinal));
+            var refused = false;
+            try { ProjectFile.Load(newerPath); }
+            catch (InvalidDataException ex) when (ex.Message.Contains("newer version", StringComparison.Ordinal))
+            { refused = true; }
+            if (!refused)
+                throw new Exception("A project saved by a newer FanWorks must be refused with an update message.");
+
+            // A second save keeps the previous file as a backup.
+            ProjectFile.Save(path, document);
+            if (!File.Exists(path + ".bak"))
+                throw new Exception("Saving over a project must keep the previous version as a backup.");
         }
         finally
         {

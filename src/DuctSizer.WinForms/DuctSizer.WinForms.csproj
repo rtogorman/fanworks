@@ -9,10 +9,13 @@
     <AssemblyName>FanWorks</AssemblyName>
     <Product>FanWorks</Product>
     <Description>Standalone HVAC duct sizing and pressure-loss calculator.</Description>
-    <Version>0.92.0</Version>
+    <Version>0.93.0</Version>
     <ApplicationIcon>Assets\DuctSizerCentrifugalIcon.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DuctSizer.UiVerification" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DuctSizer.Core\DuctSizer.Core.csproj" />
     <PackageReference Include="bblanchon.PDFium.Win32" Version="156.0.8076" />

@@ -1211,8 +1211,7 @@ public sealed partial class MainForm
     {
         if (_ductSystem.LayoutPdfBackground is null)
             return;
-        var confirmed = string.Equals(Environment.GetEnvironmentVariable("DUCTSIZER_AUTOMATED_VERIFICATION"), "1",
-                            StringComparison.Ordinal)
+        var confirmed = AutomationOptions.SuppressDialogs
                         || MessageBox.Show(this, "Remove the imported PDF background from this project?",
                             "Delete PDF Background", MessageBoxButtons.YesNo,
                             MessageBoxIcon.Warning) == DialogResult.Yes;
@@ -1336,8 +1335,7 @@ public sealed partial class MainForm
             const string message = "Only one fan is allowed in the duct system. Remove the existing fan before adding another.";
             _layoutStatusLabel.Text = message;
             _layoutStatusLabel.ForeColor = Color.Firebrick;
-            if (!string.Equals(Environment.GetEnvironmentVariable("DUCTSIZER_AUTOMATED_COORDINATES"), "1",
-                    StringComparison.Ordinal))
+            if (!AutomatedLayoutVerification)
                 MessageBox.Show(this, message, "Only One Fan Allowed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -1462,7 +1460,7 @@ public sealed partial class MainForm
     private LayoutDuctInsertionChoice ConfirmLayoutDuctInsertion(LayoutNodeType type, string? fittingGroup,
         LayoutConnectionRef connection)
     {
-        var automatedChoice = Environment.GetEnvironmentVariable("DUCTSIZER_AUTOMATED_DUCT_INSERTION");
+        var automatedChoice = AutomationOptions.DuctInsertionChoice;
         if (AutomatedLayoutVerification)
             return string.Equals(automatedChoice, "1", StringComparison.Ordinal)
                 ? LayoutDuctInsertionChoice.Insert
@@ -1755,8 +1753,7 @@ public sealed partial class MainForm
     private bool ConfirmConnectionCoordinates(SavedLayoutNode downstream, SavedLayoutNode upstream, bool secondary,
         string? editableAxis = null)
     {
-        if (string.Equals(Environment.GetEnvironmentVariable("DUCTSIZER_AUTOMATED_COORDINATES"), "1",
-                StringComparison.Ordinal))
+        if (AutomatedLayoutVerification)
         {
             if (secondary)
                 downstream.SecondaryConnectionDeltaConfirmed = true;
@@ -3553,8 +3550,9 @@ public sealed partial class MainForm
                     point.VelocityMPerS = 0;
                 }
             }
-            // NaN (shown as "—") when the observed duct cannot be calculated; never a silent zero loss.
-            var ductLoss = incomingSequence is int ductSequence ? SafeDuctPressureLoss(ductSequence) : double.NaN;
+            // An unsized connection is close-coupled (no loss, reported as an assumption on the critical path).
+            // NaN (shown as "—") when an assigned duct cannot be calculated; never a silent zero loss.
+            var ductLoss = incomingSequence is int ductSequence ? SafeDuctPressureLoss(ductSequence) : 0.0;
             point.PressurePa = OutletPressureToward(upstream, downstream)
                                - ductLoss * Math.Clamp(point.CalculationConnectionFraction, 0.0, 1.0);
         }
@@ -3593,9 +3591,10 @@ public sealed partial class MainForm
                     var airflow = ResolveConnectionAirflow(parent.Node, node, parent.Secondary, duct);
                     if (duct is not null)
                         duct.TemperatureC = parent.Node.TemperatureC;
-                    // A missing or uncalculable duct makes downstream pressures "not available" (NaN),
-                    // instead of silently treating the duct as having no loss.
-                    var loss = sequence is int lossSequence ? SafeDuctPressureLoss(lossSequence) : double.NaN;
+                    // An assigned duct that cannot be calculated makes downstream pressures "not available" (NaN)
+                    // instead of silently treating it as having no loss. An unsized connection (no duct assigned)
+                    // is close-coupled; the critical path reports it as an assumption.
+                    var loss = sequence is int lossSequence ? SafeDuctPressureLoss(lossSequence) : 0.0;
                     return new
                     {
                         Parent = parent.Node,
@@ -4289,9 +4288,7 @@ public sealed partial class MainForm
                 "Automatic Sizing Completed with Notices", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
-    private static bool AutomatedLayoutVerification =>
-        string.Equals(Environment.GetEnvironmentVariable("DUCTSIZER_AUTOMATED_COORDINATES"), "1",
-            StringComparison.Ordinal);
+    private static bool AutomatedLayoutVerification => AutomationOptions.AcceptDefaultCoordinates;
 
     private static bool IsAutomaticSizingComponent(SavedLayoutNode node)
     {

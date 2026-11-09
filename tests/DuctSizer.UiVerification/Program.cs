@@ -12,9 +12,9 @@ internal static class Program
     {
         var testDirectory = Path.Combine(Path.GetTempPath(), "DuctSizer-ui-tests", Guid.NewGuid().ToString("N"));
         var systemPath = Path.Combine(testDirectory, "duct-system.json");
-        Environment.SetEnvironmentVariable("DUCTSIZER_SYSTEM_PATH", systemPath);
-        Environment.SetEnvironmentVariable("DUCTSIZER_AUTOMATED_COORDINATES", "1");
-        Environment.SetEnvironmentVariable("DUCTSIZER_AUTOMATED_VERIFICATION", "1");
+        AutomationOptions.SystemStoragePath = systemPath;
+        AutomationOptions.AcceptDefaultCoordinates = true;
+        AutomationOptions.SuppressDialogs = true;
         ApplicationConfiguration.Initialize();
         try
         {
@@ -2150,7 +2150,8 @@ internal static class Program
                     && Math.Abs(fanNode.FanStaticPressurePa - criticalLoss) < 1e-9
                     && fanNode.AirflowM3PerS > 0
                     && Convert.ToString(autoSizeArguments[0])!.Contains(fanNode.Id, StringComparison.Ordinal),
-                "Auto-size Fan should set the single fan to the required system airflow and current critical-path net loss.");
+                "Auto-size Fan should set the single fan to the required system airflow and current critical-path net loss. "
+                + $"Result: {autoSizeArguments[0]}");
             var fanInformationMethod = typeof(MainForm).GetMethod("TryGetFanInformation",
                                            BindingFlags.Instance | BindingFlags.NonPublic)
                                        ?? throw new InvalidOperationException("Could not inspect fan information.");
@@ -2531,7 +2532,7 @@ internal static class Program
             Application.DoEvents();
 
             var greenSaveBasePath = Path.Combine(testDirectory, "green-save-project");
-            Environment.SetEnvironmentVariable("DUCTSIZER_EXPORT_BASE_PATH", greenSaveBasePath);
+            AutomationOptions.ExportBasePath = greenSaveBasePath;
             try
             {
                 typeof(MainForm).GetMethod("ExportDuctSystem", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -2539,13 +2540,27 @@ internal static class Program
             }
             finally
             {
-                Environment.SetEnvironmentVariable("DUCTSIZER_EXPORT_BASE_PATH", null);
+                AutomationOptions.ExportBasePath = null;
             }
             var greenSavePdfPath = greenSaveBasePath + ".pdf";
             var greenSaveCsvPath = greenSaveBasePath + ".csv";
+            var greenSaveProjectPath = greenSaveBasePath + ProjectFile.Extension;
             Require(File.Exists(greenSavePdfPath) && new FileInfo(greenSavePdfPath).Length > 10_000
-                    && File.Exists(greenSaveCsvPath) && new FileInfo(greenSaveCsvPath).Length > 100,
-                "The green Save button should create both the project PDF and CSV at the selected base path.");
+                    && File.Exists(greenSaveCsvPath) && new FileInfo(greenSaveCsvPath).Length > 100
+                    && File.Exists(greenSaveProjectPath),
+                "The green Save button should create the project file, PDF, and CSV at the selected base path.");
+            {
+                var savedModel = (DuctSystemDocument)typeof(MainForm)
+                    .GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+                var expectedNodes = savedModel.LayoutNodes.Count;
+                var expectedDucts = savedModel.Ducts.Count;
+                var expectedFittings = savedModel.Fittings.Count;
+                var reopened = ProjectFile.Load(greenSaveProjectPath);
+                Require(reopened.LayoutNodes.Count == expectedNodes && reopened.Ducts.Count == expectedDucts
+                        && reopened.Fittings.Count == expectedFittings && expectedNodes > 0,
+                    "The saved project file should carry the full model, including the graphical layout.");
+
+            }
             var greenSavePdf = Encoding.ASCII.GetString(File.ReadAllBytes(greenSavePdfPath));
             var greenProjectSummaryIndex = greenSavePdf.IndexOf("Project Summary", StringComparison.Ordinal);
             var greenFirstViewIndex = greenSavePdf.IndexOf("Layout Designer - Isometric Positive", StringComparison.Ordinal);
@@ -3542,6 +3557,30 @@ internal static class Program
                 "Deleting all system items should clear the table and its graphical layout together.");
             form.Hide();
 
+            // Open Project (run last: it replaces the form's model object that earlier checks hold).
+            {
+                var savedProject = ProjectFile.Load(greenSaveProjectPath);
+                AutomationOptions.OpenProjectPath = greenSaveProjectPath;
+                try
+                {
+                    typeof(MainForm).GetMethod("OpenProject", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .Invoke(form, null);
+                }
+                finally
+                {
+                    AutomationOptions.OpenProjectPath = null;
+                }
+                Application.DoEvents();
+                var openedModel = (DuctSystemDocument)typeof(MainForm)
+                    .GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+                Require(openedModel.LayoutNodes.Count == savedProject.LayoutNodes.Count
+                        && openedModel.LayoutNodes.Count > 0
+                        && openedModel.Ducts.Count == savedProject.Ducts.Count
+                        && openedModel.Fittings.Count == savedProject.Fittings.Count
+                        && (string)typeof(MainForm).GetField("_lastExportBasePath",
+                            BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)! == greenSaveBasePath,
+                    "Open Project should restore the full model and make later saves write back to the opened project.");
+            }
             Console.WriteLine("PASS  Responsive wide layout");
             Console.WriteLine("PASS  Responsive stacked layout");
             Console.WriteLine("PASS  Calculation method dropdowns remain enabled");
@@ -3552,7 +3591,7 @@ internal static class Program
             Console.WriteLine("PASS  Compact system-table layout");
             Console.WriteLine("PASS  Duct edit and update workflow");
             Console.WriteLine("PASS  Junction path and fitting-specific dropdown inputs");
-            Console.WriteLine("PASS  System PDF/CSV export and CSV import actions");
+            Console.WriteLine("PASS  Project file save/open, PDF/CSV export, and CSV import actions");
             Console.WriteLine("PASS  Requested dropdown labels and fitting-description autofill");
             Console.WriteLine("PASS  Embedded ASHRAE fitting-image selector");
             Console.WriteLine("PASS  Complete fitting images, visual gallery, and editable fitting IDs");
@@ -3561,11 +3600,16 @@ internal static class Program
             Console.WriteLine("16/16 UI verification checks passed.");
             return 0;
         }
+        catch (Exception ex)
+        {
+            var failure = ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
+            Console.WriteLine($"FAIL  {failure.Message}");
+            Console.WriteLine(failure.StackTrace);
+            return 1;
+        }
         finally
         {
-            Environment.SetEnvironmentVariable("DUCTSIZER_SYSTEM_PATH", null);
-            Environment.SetEnvironmentVariable("DUCTSIZER_AUTOMATED_COORDINATES", null);
-            Environment.SetEnvironmentVariable("DUCTSIZER_AUTOMATED_VERIFICATION", null);
+            AutomationOptions.Reset();
             if (Directory.Exists(testDirectory))
                 Directory.Delete(testDirectory, recursive: true);
         }

@@ -38,6 +38,7 @@ var tests = new (string Name, Action Run)[]
     ("Junction legs use the connected duct sizes", SystemTests.JunctionLegsUseConnectedDuctSizes),
     ("Critical path charges each junction outlet its own coefficient", SystemTests.CriticalPathChargesEachOutletItsOwnCoefficient),
     ("A failed item blocks the critical-path total", SystemTests.FailedItemBlocksCriticalPathTotal),
+    ("An unsized connection is a reported assumption", SystemTests.UnsizedConnectionIsAReportedAssumption),
     ("Project file round-trips the full model", SystemTests.ProjectFileRoundTripsTheFullModel),
     ("Out-of-range table lookups are flagged", SystemTests.OutOfRangeTableLookupsAreFlagged),
     ("Transitional flow uses the upper bound everywhere", SystemTests.TransitionalFlowUsesTheUpperBoundEverywhere),
