@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DuctSizer.WinForms</RootNamespace>
+    <AssemblyName>FanWorks</AssemblyName>
+    <Product>FanWorks</Product>
+    <Description>Standalone HVAC duct sizing and pressure-loss calculator.</Description>
+    <Version>0.92.0</Version>
+    <ApplicationIcon>Assets\DuctSizerCentrifugalIcon.ico</ApplicationIcon>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DuctSizer.Core\DuctSizer.Core.csproj" />
+    <PackageReference Include="bblanchon.PDFium.Win32" Version="156.0.8076" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Fittings\*.png" />
+    <EmbeddedResource Include="Assets\OpenSourceIcons\png\*.png" />
+    <EmbeddedResource Include="Assets\DuctSizerCentrifugalIcon.ico" />
+    <EmbeddedResource Include="Assets\DuctSizerCentrifugalIcon.png" />
+    <None Include="Assets\OpenSourceIcons\LICENSE.txt" Link="THIRD-PARTY-NOTICES\Pictogrammers-MDI-LICENSE.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="Assets\OpenSourceIcons\PUBLIC-DOMAIN-HVAC-SYMBOLS.txt" Link="THIRD-PARTY-NOTICES\PUBLIC-DOMAIN-HVAC-SYMBOLS.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="Assets\OpenSourceIcons\GOOGLE-MATERIAL-SYMBOLS-NOTICE.txt" Link="THIRD-PARTY-NOTICES\GOOGLE-MATERIAL-SYMBOLS-NOTICE.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="Assets\OpenSourceIcons\APACHE-2.0-LICENSE.txt" Link="THIRD-PARTY-NOTICES\APACHE-2.0-LICENSE.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="Assets\OpenSourceIcons\PDFIUM-WINDOWS-NOTICE.txt" Link="THIRD-PARTY-NOTICES\PDFIUM-WINDOWS-NOTICE.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="Assets\OpenSourceIcons\TOOLBOX-ICON-SOURCE-NOTICE.txt" Link="THIRD-PARTY-NOTICES\TOOLBOX-ICON-SOURCE-NOTICE.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+Google Material Symbols — range_hood (rounded)
+
+Source:
+https://github.com/google/material-design-icons/blob/master/symbols/web/range_hood/materialsymbolsrounded/range_hood_24px.svg
+
+License: Apache License 2.0
+https://github.com/google/material-design-icons/blob/master/LICENSE
+
+The full Apache License 2.0 text is included in this asset folder as
+APACHE-2.0-LICENSE.txt.

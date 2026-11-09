@@ -1,0 +1,10 @@
+bin/
+obj/
+work/
+tmp/
+output/
+outputs/
+.vs/
+*.user
+*.suo
+TestResults/

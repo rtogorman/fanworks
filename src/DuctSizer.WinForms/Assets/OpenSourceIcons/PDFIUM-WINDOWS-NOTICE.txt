@@ -1,0 +1,10 @@
+PDFium for Windows native binaries
+
+Package: bblanchon.PDFium.Win32 156.0.8076
+Project: https://github.com/bblanchon/pdfium-binaries
+License: Apache License 2.0
+
+FanWorks uses the Windows PDFium native binary from this package to render a
+selected construction-sheet PDF page as the Layout Designer background.
+The Apache License 2.0 text is distributed in this application's
+THIRD-PARTY-NOTICES folder as APACHE-2.0-LICENSE.txt.

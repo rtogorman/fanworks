@@ -1,0 +1,24 @@
+DuctSizer blue engineering-toolbox icons
+
+Source supplied by the project owner on October 13, 2026 from the
+toolbox-icons-blue asset package. The supplied 256 x 256 transparent PNGs
+were mapped to DuctSizer component types without tracing or substituting a
+second visual family.
+
+Direct mappings:
+- Pump -> fan
+- Pipe Drawing Tool -> duct
+- Tee-Wye -> split and merge
+- Bend -> elbow
+- Area Change -> transition
+- Round-Duct-Coil -> coil
+- Screen -> filter
+- Volume Balance -> damper
+- Dead End -> terminal
+- Reservoir -> source and sink
+- Assigned Flow -> airflow calculation point
+- Assigned Pressure -> pressure calculation point
+- General Component -> other component
+
+Temperature, velocity, and GRD variants are drawn by DuctSizer in the same
+black-outline, blue-fill visual treatment.

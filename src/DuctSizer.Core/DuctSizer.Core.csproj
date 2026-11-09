@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DuctSizer.Core</RootNamespace>
+    <AssemblyName>DuctSizer.Core</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data\TitusTbd80D.csv" />
+    <EmbeddedResource Include="Data\Titus350R.csv" />
+  </ItemGroup>
+</Project>

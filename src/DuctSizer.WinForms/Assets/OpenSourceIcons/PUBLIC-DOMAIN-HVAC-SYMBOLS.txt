@@ -1,0 +1,22 @@
+DuctSizer public-domain HVAC symbol sources
+
+The following source SVGs are redistributed and rendered into the application:
+
+- dust-trap.svg — "Dust trap", public domain, Wikimedia Commons:
+  https://commons.wikimedia.org/wiki/File:Dust_trap.svg
+- reducer-iso.svg — "Reducer (ISO 10628-2)", released into the public domain, Wikimedia Commons:
+  https://commons.wikimedia.org/wiki/File:Reducer_(ISO_10628-2).svg
+- airflow-outlet.svg — "ISO 7000 - Ref-No 1865", CC0 1.0 / public-domain dedication, Wikimedia Commons:
+  https://commons.wikimedia.org/wiki/File:ISO_7000_-_Ref-No_1865.svg
+
+The heating-coil, filter, airflow Q, and other layout symbols are from the
+Pictogrammers Material Design Icons package under Apache License 2.0. See
+Pictogrammers-MDI-LICENSE.txt in this release.
+
+The terminal tool uses Google's Apache-2.0 Material Symbols range-hood glyph
+instead of a speaker-shaped glyph. See GOOGLE-MATERIAL-SYMBOLS-NOTICE.txt.
+Pipe elbow HVAC CAD symbol
+Source: https://www.innerscene.com/tools/library/drawings/pipe-elbow-symbol-plumbing-and-hvac-cad-symbol-5a9ebcfd
+License: CC0 1.0 / public domain dedication
+Use in DuctSizer: the elbow pictogram is a simplified, closed-outline adaptation of the published two-line CAD geometry.
+

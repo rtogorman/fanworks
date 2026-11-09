@@ -1,0 +1,36 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DuctSizer.Core", "src\DuctSizer.Core\DuctSizer.Core.csproj", "{E51B44B2-104C-4B19-8E80-919A6A1C43E1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DuctSizer.WinForms", "src\DuctSizer.WinForms\DuctSizer.WinForms.csproj", "{3C1C6AA9-121D-4E24-A414-EC7E407B2AD0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DuctSizer.Verification", "tests\DuctSizer.Verification\DuctSizer.Verification.csproj", "{29B3E872-E11E-4974-B761-B3E2AD43AE6D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DuctSizer.UiVerification", "tests\DuctSizer.UiVerification\DuctSizer.UiVerification.csproj", "{A6E54EA1-0BEF-48D2-9F69-BDFE28B36DF3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E51B44B2-104C-4B19-8E80-919A6A1C43E1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E51B44B2-104C-4B19-8E80-919A6A1C43E1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E51B44B2-104C-4B19-8E80-919A6A1C43E1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E51B44B2-104C-4B19-8E80-919A6A1C43E1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3C1C6AA9-121D-4E24-A414-EC7E407B2AD0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3C1C6AA9-121D-4E24-A414-EC7E407B2AD0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3C1C6AA9-121D-4E24-A414-EC7E407B2AD0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3C1C6AA9-121D-4E24-A414-EC7E407B2AD0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{29B3E872-E11E-4974-B761-B3E2AD43AE6D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{29B3E872-E11E-4974-B761-B3E2AD43AE6D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{29B3E872-E11E-4974-B761-B3E2AD43AE6D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{29B3E872-E11E-4974-B761-B3E2AD43AE6D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A6E54EA1-0BEF-48D2-9F69-BDFE28B36DF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6E54EA1-0BEF-48D2-9F69-BDFE28B36DF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6E54EA1-0BEF-48D2-9F69-BDFE28B36DF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6E54EA1-0BEF-48D2-9F69-BDFE28B36DF3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
