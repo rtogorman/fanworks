@@ -7,8 +7,15 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-public sealed partial class MainForm
+internal sealed partial class LayoutDesignerScreen
 {
+    private readonly MainForm _host;
+
+    internal LayoutDesignerScreen(MainForm host)
+    {
+        _host = host;
+    }
+
     private LayoutDesignerCanvas? _layoutCanvas;
     internal readonly Label _layoutStatusLabel = new();
     private LayoutNodeType? _selectedLayoutTool;
@@ -70,7 +77,7 @@ public sealed partial class MainForm
             ColumnCount = 1,
             RowCount = 4,
             Padding = new Padding(10),
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
@@ -111,7 +118,7 @@ public sealed partial class MainForm
             ColumnCount = 1,
             RowCount = 2,
             Padding = new Padding(0, 6, 0, 0),
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         workspace.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
@@ -124,7 +131,7 @@ public sealed partial class MainForm
             RowCount = 1,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         leftHost.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var zoomBar = new FlowLayoutPanel
@@ -133,7 +140,7 @@ public sealed partial class MainForm
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Padding = new Padding(0, 3, 0, 3),
-            BackColor = BackColor,
+            BackColor = _host.BackColor,
             AutoScroll = true
         };
         var zoomValue = new Label
@@ -337,8 +344,8 @@ public sealed partial class MainForm
             Name = "LayoutDesignerCanvas",
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(250, 252, 252),
-            NodeSource = () => DuctSystemScreen._ductSystem.LayoutNodes,
-            CoordinateSource = () => LayoutCoordinateResolver.Resolve(DuctSystemScreen._ductSystem),
+            NodeSource = () => _host.DuctSystemScreen._ductSystem.LayoutNodes,
+            CoordinateSource = () => LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem),
             CaptionSource = LayoutNodeCaption,
             ConnectionCaptionSource = LayoutConnectionCaption,
             ConnectionSizeCaptionSource = LayoutConnectionSizeCaption,
@@ -347,7 +354,7 @@ public sealed partial class MainForm
             ConnectionFlowReversedSource = LayoutConnectionFlowReversed,
             CriticalPathNodeSource = IsLayoutNodeOnCriticalPath,
             CriticalPathConnectionSource = IsLayoutConnectionOnCriticalPath,
-            PdfBackgroundSource = () => DuctSystemScreen._ductSystem.LayoutPdfBackground
+            PdfBackgroundSource = () => _host.DuctSystemScreen._ductSystem.LayoutPdfBackground
         };
         _layoutCanvas.ToolDropped += (type, group, x, y) => PlaceLayoutNode(type, x, y, group);
         _layoutCanvas.NodeMoved += MoveLayoutNode;
@@ -534,7 +541,7 @@ public sealed partial class MainForm
             RowCount = 1,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         canvasArea.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));
         canvasArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -602,7 +609,7 @@ public sealed partial class MainForm
             ColumnCount = 2,
             RowCount = 1,
             Margin = Padding.Empty,
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -615,7 +622,7 @@ public sealed partial class MainForm
             WrapContents = false,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         scaleTitle.Margin = new Padding(2, 6, 1, 0);
         _layoutScaleInput.Margin = new Padding(2, 0, 2, 0);
@@ -798,10 +805,10 @@ public sealed partial class MainForm
 
     internal void RefreshLayoutSystemSummary()
     {
-        if (_layoutSystemSummaryGrid.Columns.Count == 0 || DuctSystemScreen._ductGrid.Columns.Count == 0)
+        if (_layoutSystemSummaryGrid.Columns.Count == 0 || _host.DuctSystemScreen._ductGrid.Columns.Count == 0)
             return;
         _layoutSystemSummaryGrid.Rows.Clear();
-        foreach (DataGridViewRow source in DuctSystemScreen._ductGrid.Rows)
+        foreach (DataGridViewRow source in _host.DuctSystemScreen._ductGrid.Rows)
         {
             if (source.IsNewRow)
                 continue;
@@ -835,7 +842,7 @@ public sealed partial class MainForm
         {
             if (tag is DuctSystemScreen.SystemRowTag { IsFitting: false } ductTag)
             {
-                var connectionNode = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
+                var connectionNode = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
                     x.ConnectionDuctSequence == ductTag.Sequence || x.SecondaryConnectionDuctSequence == ductTag.Sequence);
                 if (connectionNode is not null)
                 {
@@ -856,9 +863,9 @@ public sealed partial class MainForm
     internal SavedLayoutNode? LayoutNodeForSystemTag(object? tag) => tag switch
     {
         SavedLayoutNode node => node,
-        DuctSystemScreen.SystemRowTag { IsFitting: true } fittingTag => DuctSystemScreen._ductSystem.LayoutNodes
+        DuctSystemScreen.SystemRowTag { IsFitting: true } fittingTag => _host.DuctSystemScreen._ductSystem.LayoutNodes
             .FirstOrDefault(x => x.LinkedFittingSequence == fittingTag.Sequence),
-        DuctSystemScreen.SystemRowTag ductTag => DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
+        DuctSystemScreen.SystemRowTag ductTag => _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
             x.LinkedDuctSequence == ductTag.Sequence || x.ConnectionDuctSequence == ductTag.Sequence
                                                     || x.SecondaryConnectionDuctSequence == ductTag.Sequence),
         _ => null
@@ -949,18 +956,18 @@ public sealed partial class MainForm
         // The rendered construction sheet can be several megabytes and the company logo is project
         // identity, not a Designer edit. Keep both persistent in the project file, but do not duplicate
         // them into every in-memory undo entry (RestoreLayoutHistoryState restores both from the current project).
-        var pdfBackground = DuctSystemScreen._ductSystem.LayoutPdfBackground;
-        var logo = DuctSystemScreen._ductSystem.CompanyLogoPngBase64;
-        DuctSystemScreen._ductSystem.LayoutPdfBackground = null;
-        DuctSystemScreen._ductSystem.CompanyLogoPngBase64 = string.Empty;
+        var pdfBackground = _host.DuctSystemScreen._ductSystem.LayoutPdfBackground;
+        var logo = _host.DuctSystemScreen._ductSystem.CompanyLogoPngBase64;
+        _host.DuctSystemScreen._ductSystem.LayoutPdfBackground = null;
+        _host.DuctSystemScreen._ductSystem.CompanyLogoPngBase64 = string.Empty;
         try
         {
-            return JsonSerializer.Serialize(DuctSystemScreen._ductSystem, LayoutHistoryJsonOptions);
+            return JsonSerializer.Serialize(_host.DuctSystemScreen._ductSystem, LayoutHistoryJsonOptions);
         }
         finally
         {
-            DuctSystemScreen._ductSystem.LayoutPdfBackground = pdfBackground;
-            DuctSystemScreen._ductSystem.CompanyLogoPngBase64 = logo;
+            _host.DuctSystemScreen._ductSystem.LayoutPdfBackground = pdfBackground;
+            _host.DuctSystemScreen._ductSystem.CompanyLogoPngBase64 = logo;
         }
     }
 
@@ -992,37 +999,37 @@ public sealed partial class MainForm
 
     private void RestoreLayoutHistoryState(string state, string status)
     {
-        var pdfBackground = DuctSystemScreen._ductSystem.LayoutPdfBackground;
+        var pdfBackground = _host.DuctSystemScreen._ductSystem.LayoutPdfBackground;
         var restored = JsonSerializer.Deserialize<DuctSystemDocument>(state, LayoutHistoryJsonOptions)
                        ?? new DuctSystemDocument();
         restored.LayoutPdfBackground = pdfBackground;
-        restored.UserName = DuctSystemScreen._ductSystem.UserName;
-        restored.ProjectName = DuctSystemScreen._ductSystem.ProjectName;
-        restored.ProjectNumber = DuctSystemScreen._ductSystem.ProjectNumber;
-        restored.ProjectDate = DuctSystemScreen._ductSystem.ProjectDate;
-        restored.LastEditedUtc = DuctSystemScreen._ductSystem.LastEditedUtc;
-        restored.CompanyLogoPngBase64 = DuctSystemScreen._ductSystem.CompanyLogoPngBase64;
-        restored.DefaultSizingIncrementM = DuctSystemScreen._ductSystem.DefaultSizingIncrementM;
-        restored.DefaultSizeRoundingDirection = DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection;
-        restored.DefaultEquivalentDiameterMethod = DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod;
-        restored.DefaultPressureLossBasis = DuctSystemScreen._ductSystem.DefaultPressureLossBasis;
-        DuctSystemScreen._ductSystem = restored;
-        DuctSystemScreen._editingDuctSequence = null;
-        DuctSystemScreen._editingFittingSequence = null;
+        restored.UserName = _host.DuctSystemScreen._ductSystem.UserName;
+        restored.ProjectName = _host.DuctSystemScreen._ductSystem.ProjectName;
+        restored.ProjectNumber = _host.DuctSystemScreen._ductSystem.ProjectNumber;
+        restored.ProjectDate = _host.DuctSystemScreen._ductSystem.ProjectDate;
+        restored.LastEditedUtc = _host.DuctSystemScreen._ductSystem.LastEditedUtc;
+        restored.CompanyLogoPngBase64 = _host.DuctSystemScreen._ductSystem.CompanyLogoPngBase64;
+        restored.DefaultSizingIncrementM = _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM;
+        restored.DefaultSizeRoundingDirection = _host.DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection;
+        restored.DefaultEquivalentDiameterMethod = _host.DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod;
+        restored.DefaultPressureLossBasis = _host.DuctSystemScreen._ductSystem.DefaultPressureLossBasis;
+        _host.DuctSystemScreen._ductSystem = restored;
+        _host.DuctSystemScreen._editingDuctSequence = null;
+        _host.DuctSystemScreen._editingFittingSequence = null;
         _pendingLayoutNodeId = null;
         _pendingConnectionNodeId = null;
         _pendingConnectionSecondary = false;
-        DuctSystemScreen._addDuctButton.Text = DuctSystemScreen.DefaultDuctActionText;
-        FittingScreen._addFittingButton.Text = DuctSystemScreen.DefaultFittingActionText;
-        DuctSystemScreen._addDuctButton.Visible = false;
-        FittingScreen._addFittingButton.Visible = false;
-        _ductEditingLabel.Visible = false;
-        FittingScreen._fittingEditingLabel.Visible = false;
-        DuctSystemScreen.ResetCriticalPath();
-        DuctSystemScreen.ApplyProjectCalculationSettings();
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen._addDuctButton.Text = DuctSystemScreen.DefaultDuctActionText;
+        _host.FittingScreen._addFittingButton.Text = DuctSystemScreen.DefaultFittingActionText;
+        _host.DuctSystemScreen._addDuctButton.Visible = false;
+        _host.FittingScreen._addFittingButton.Visible = false;
+        _host._ductEditingLabel.Visible = false;
+        _host.FittingScreen._fittingEditingLabel.Visible = false;
+        _host.DuctSystemScreen.ResetCriticalPath();
+        _host.DuctSystemScreen.ApplyProjectCalculationSettings();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
         _layoutStatusLabel.Text = status;
         _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
         UpdateLayoutHistoryButtons();
@@ -1088,13 +1095,13 @@ public sealed partial class MainForm
 
     private void ManageLayoutPdfBackground()
     {
-        if (DuctSystemScreen._ductSystem.LayoutPdfBackground is null)
+        if (_host.DuctSystemScreen._ductSystem.LayoutPdfBackground is null)
         {
             ImportLayoutPdfBackground();
             return;
         }
 
-        var background = DuctSystemScreen._ductSystem.LayoutPdfBackground;
+        var background = _host.DuctSystemScreen._ductSystem.LayoutPdfBackground;
         _layoutPdfMenu?.Dispose();
         var menu = new ContextMenuStrip
         {
@@ -1114,7 +1121,7 @@ public sealed partial class MainForm
             (_, _) => RunLayoutPdfCommand(ToggleLayoutPdfVisibility));
         menu.Items.Add("Move / Change Scale...", null,
             (_, _) => RunLayoutPdfCommand(EditLayoutPdfBackground));
-        if (DuctSystemScreen._ductSystem.LayoutViewMode != LayoutViewMode.TopDown)
+        if (_host.DuctSystemScreen._ductSystem.LayoutViewMode != LayoutViewMode.TopDown)
             menu.Items.Add("Switch to Top-Down View", null,
                 (_, _) => RunLayoutPdfCommand(SwitchLayoutToTopDown));
         menu.Items.Add("Replace PDF...", null,
@@ -1129,8 +1136,8 @@ public sealed partial class MainForm
             // A ToolStrip item raises Click while its owner is closing. Disposing the
             // menu synchronously here invalidates the item before its command runs.
             // Queue disposal until the current UI event has completed.
-            if (IsHandleCreated && !IsDisposed)
-                BeginInvoke(new Action(menu.Dispose));
+            if (_host.IsHandleCreated && !_host.IsDisposed)
+                _host.BeginInvoke(new Action(menu.Dispose));
             else
                 menu.Dispose();
         };
@@ -1148,7 +1155,7 @@ public sealed partial class MainForm
         {
             _layoutStatusLabel.Text = $"The PDF background could not be updated: {ex.Message}";
             _layoutStatusLabel.ForeColor = Color.Firebrick;
-            MessageBox.Show(this, ex.Message, "PDF Background",
+            MessageBox.Show(_host, ex.Message, "PDF Background",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -1162,18 +1169,18 @@ public sealed partial class MainForm
             CheckFileExists = true,
             Multiselect = false
         };
-        if (picker.ShowDialog(this) != DialogResult.OK)
+        if (picker.ShowDialog(_host) != DialogResult.OK)
             return;
         try
         {
             using var session = new PdfPageRenderSession(picker.FileName);
             using var dialog = new PdfBackgroundImportDialog(picker.FileName, session);
-            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Background is null)
+            if (dialog.ShowDialog(_host) != DialogResult.OK || dialog.Background is null)
                 return;
-            DuctSystemScreen._ductSystem.LayoutPdfBackground = dialog.Background;
-            DuctSystemScreen._ductSystem.LayoutViewMode = LayoutViewMode.TopDown;
+            _host.DuctSystemScreen._ductSystem.LayoutPdfBackground = dialog.Background;
+            _host.DuctSystemScreen._ductSystem.LayoutViewMode = LayoutViewMode.TopDown;
             ApplyLayoutScaleSettings();
-            DuctSystemScreen.SaveDuctSystem();
+            _host.DuctSystemScreen.SaveDuctSystem();
             RefreshLayoutDesigner();
             _layoutStatusLabel.Text = $"PDF page {dialog.Background.PageNumber} imported at "
                                       + $"{dialog.Background.PaperInches:0.###} in = {dialog.Background.DrawingFeet:0.###} ft. "
@@ -1183,16 +1190,16 @@ public sealed partial class MainForm
         catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException
                                    or DllNotFoundException or BadImageFormatException)
         {
-            MessageBox.Show(this, ex.Message, "PDF Background", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(_host, ex.Message, "PDF Background", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
     private void ToggleLayoutPdfVisibility()
     {
-        if (DuctSystemScreen._ductSystem.LayoutPdfBackground is not { } background)
+        if (_host.DuctSystemScreen._ductSystem.LayoutPdfBackground is not { } background)
             return;
         background.Visible = !background.Visible;
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
         _layoutStatusLabel.Text = background.Visible
             ? "The PDF background is visible in Top-Down view."
@@ -1201,13 +1208,13 @@ public sealed partial class MainForm
 
     private void EditLayoutPdfBackground()
     {
-        if (DuctSystemScreen._ductSystem.LayoutPdfBackground is not { } background)
+        if (_host.DuctSystemScreen._ductSystem.LayoutPdfBackground is not { } background)
             return;
         using var dialog = new PdfBackgroundPropertiesDialog(background);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        if (dialog.ShowDialog(_host) != DialogResult.OK)
             return;
         dialog.ApplyTo(background);
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
         _layoutStatusLabel.Text = "PDF scale and center location updated. The sheet remains proportional to the current grid scale.";
         _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
@@ -1215,16 +1222,16 @@ public sealed partial class MainForm
 
     private void DeleteLayoutPdfBackground()
     {
-        if (DuctSystemScreen._ductSystem.LayoutPdfBackground is null)
+        if (_host.DuctSystemScreen._ductSystem.LayoutPdfBackground is null)
             return;
         var confirmed = AutomationOptions.SuppressDialogs
-                        || MessageBox.Show(this, "Remove the imported PDF background from this project?",
+                        || MessageBox.Show(_host, "Remove the imported PDF background from this project?",
                             "Delete PDF Background", MessageBoxButtons.YesNo,
                             MessageBoxIcon.Warning) == DialogResult.Yes;
         if (!confirmed)
             return;
-        DuctSystemScreen._ductSystem.LayoutPdfBackground = null;
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen._ductSystem.LayoutPdfBackground = null;
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
         _layoutStatusLabel.Text = "The PDF background was removed. Layout components and coordinates were not changed.";
         _layoutStatusLabel.ForeColor = Color.FromArgb(72, 92, 110);
@@ -1232,14 +1239,14 @@ public sealed partial class MainForm
 
     private void SwitchLayoutToTopDown()
     {
-        if (DuctSystemScreen._ductSystem.LayoutViewMode == LayoutViewMode.TopDown)
+        if (_host.DuctSystemScreen._ductSystem.LayoutViewMode == LayoutViewMode.TopDown)
             return;
         _layoutViewModeSelector.SelectedIndex = 2;
     }
 
     private void UpdateLayoutPdfButton()
     {
-        var background = DuctSystemScreen._ductSystem.LayoutPdfBackground;
+        var background = _host.DuctSystemScreen._ductSystem.LayoutPdfBackground;
         _layoutPdfButton.Text = background is null ? "Upload PDF"
             : background.Visible ? "PDF Background" : "PDF Hidden";
         _layoutPdfButton.BackColor = background is null ? Color.White
@@ -1269,7 +1276,7 @@ public sealed partial class MainForm
         _layoutViewportStartSignature = startSignature;
     }
 
-    private SavedLayoutNode? LayoutStartNode() => DuctSystemScreen._ductSystem.LayoutNodes
+    private SavedLayoutNode? LayoutStartNode() => _host.DuctSystemScreen._ductSystem.LayoutNodes
         .Where(node => string.IsNullOrWhiteSpace(node.ParentNodeId)
                        && string.IsNullOrWhiteSpace(node.SecondaryParentNodeId))
         .OrderBy(node => node.Sequence)
@@ -1302,23 +1309,23 @@ public sealed partial class MainForm
         var selected = _layoutCanvas?.SelectedNode;
         if (selected is null || selected.Type == LayoutNodeType.CalculationPoint)
         {
-            MessageBox.Show(this, "Select a component on the graph, then click Origin.",
+            MessageBox.Show(_host, "Select a component on the graph, then click Origin.",
                 "Select Coordinate Origin", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        var coordinates = LayoutCoordinateResolver.Resolve(DuctSystemScreen._ductSystem);
+        var coordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
         coordinates.TryGetValue(selected.Sequence, out var current);
-        using var dialog = new LayoutCoordinateOriginDialog(selected.Id, current, _currentUnits);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        using var dialog = new LayoutCoordinateOriginDialog(selected.Id, current, _host._currentUnits);
+        if (dialog.ShowDialog(_host) != DialogResult.OK)
             return;
         var historyState = CaptureLayoutHistoryState();
-        DuctSystemScreen._ductSystem.CoordinateOriginNodeId = selected.Id;
-        DuctSystemScreen._ductSystem.CoordinateOriginXM = dialog.Coordinate.XM;
-        DuctSystemScreen._ductSystem.CoordinateOriginYM = dialog.Coordinate.YM;
-        DuctSystemScreen._ductSystem.CoordinateOriginZM = dialog.Coordinate.ZM;
+        _host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId = selected.Id;
+        _host.DuctSystemScreen._ductSystem.CoordinateOriginXM = dialog.Coordinate.XM;
+        _host.DuctSystemScreen._ductSystem.CoordinateOriginYM = dialog.Coordinate.YM;
+        _host.DuctSystemScreen._ductSystem.CoordinateOriginZM = dialog.Coordinate.ZM;
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.SaveDuctSystem();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
         RefreshLayoutDesigner();
         _layoutCanvas?.SelectNode(selected);
         _layoutStatusLabel.Text = $"{selected.Id} is now the coordinate origin/reference point.";
@@ -1336,13 +1343,13 @@ public sealed partial class MainForm
     {
         if (type == LayoutNodeType.Duct)
             return;
-        if (type == LayoutNodeType.Fan && DuctSystemScreen._ductSystem.LayoutNodes.Any(x => x.Type == LayoutNodeType.Fan))
+        if (type == LayoutNodeType.Fan && _host.DuctSystemScreen._ductSystem.LayoutNodes.Any(x => x.Type == LayoutNodeType.Fan))
         {
             const string message = "Only one fan is allowed in the duct system. Remove the existing fan before adding another.";
             _layoutStatusLabel.Text = message;
             _layoutStatusLabel.ForeColor = Color.Firebrick;
             if (!AutomatedLayoutVerification)
-                MessageBox.Show(this, message, "Only One Fan Allowed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(_host, message, "Only One Fan Allowed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         var historyState = CaptureLayoutHistoryState();
@@ -1359,7 +1366,7 @@ public sealed partial class MainForm
         var insertionConnection = FindNearestLayoutConnection(displayGrid.X, displayGrid.Y, null);
         if (type == LayoutNodeType.CalculationPoint && insertionConnection is null)
         {
-            MessageBox.Show(this,
+            MessageBox.Show(_host,
                 "Place a calculation point directly on an existing duct line. It will observe that duct without splitting it.",
                 "Duct Required", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
@@ -1380,14 +1387,14 @@ public sealed partial class MainForm
         if (!insertIntoDuct && type != LayoutNodeType.CalculationPoint)
             insertionConnection = null;
         var parent = insertionConnection is LayoutConnectionRef insertion
-            ? DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == (insertion.Secondary
+            ? _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == (insertion.Secondary
                 ? insertion.Downstream.SecondaryParentNodeId : insertion.Downstream.ParentNodeId))
             : null;
-        var branch = parent?.BranchId ?? DuctSystemScreen._ductSystem.DefaultBranchId;
-        var firstComponent = !DuctSystemScreen._ductSystem.LayoutNodes.Any(x => x.Type != LayoutNodeType.CalculationPoint);
+        var branch = parent?.BranchId ?? _host.DuctSystemScreen._ductSystem.DefaultBranchId;
+        var firstComponent = !_host.DuctSystemScreen._ductSystem.LayoutNodes.Any(x => x.Type != LayoutNodeType.CalculationPoint);
         var node = new SavedLayoutNode
         {
-            Sequence = DuctSystemScreen._ductSystem.ReserveLayoutSequence(),
+            Sequence = _host.DuctSystemScreen._ductSystem.ReserveLayoutSequence(),
             Type = type,
             GridX = gridX,
             GridY = gridY,
@@ -1399,7 +1406,7 @@ public sealed partial class MainForm
             Description = type == LayoutNodeType.CustomComponent ? "Custom Component" : string.Empty,
             SpaceRole = spaceRole,
             CalculationPointType = type == LayoutNodeType.CalculationPoint ? fittingGroup ?? "Pressure" : string.Empty,
-            AirSystemType = parent?.AirSystemType ?? DuctSystemScreen._ductSystem.DefaultAirSystemType,
+            AirSystemType = parent?.AirSystemType ?? _host.DuctSystemScreen._ductSystem.DefaultAirSystemType,
             BranchId = branch,
             AirflowM3PerS = insertIntoDuct
                 ? DuctForConnection(insertionConnection!.Value.Downstream, insertionConnection.Value.Secondary)?.AirflowM3PerS
@@ -1415,13 +1422,13 @@ public sealed partial class MainForm
             node.BranchId = "Main";
         if (!firstComponent && type != LayoutNodeType.CalculationPoint)
             SetAbsoluteAnchorFromCanonicalGrid(node, canonicalGrid);
-        DuctSystemScreen._ductSystem.LayoutNodes.Add(node);
+        _host.DuctSystemScreen._ductSystem.LayoutNodes.Add(node);
         if (firstComponent && type != LayoutNodeType.CalculationPoint)
         {
-            DuctSystemScreen._ductSystem.CoordinateOriginNodeId = node.Id;
-            DuctSystemScreen._ductSystem.CoordinateOriginXM = 0;
-            DuctSystemScreen._ductSystem.CoordinateOriginYM = 0;
-            DuctSystemScreen._ductSystem.CoordinateOriginZM = 0;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId = node.Id;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginXM = 0;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginYM = 0;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginZM = 0;
         }
         if (type == LayoutNodeType.CalculationPoint && insertionConnection is LayoutConnectionRef connection)
             AttachCalculationPointToConnection(node, connection);
@@ -1442,9 +1449,9 @@ public sealed partial class MainForm
             _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
         }
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
 
         if (!insertIntoDuct)
         {
@@ -1479,7 +1486,7 @@ public sealed partial class MainForm
             .Split('\n').FirstOrDefault();
         if (string.IsNullOrWhiteSpace(ductName))
             ductName = "this unsized duct";
-        var result = MessageBox.Show(this,
+        var result = MessageBox.Show(_host,
             $"Insert this {componentName} into {ductName}?\r\n\r\n"
             + "Yes — split the duct at this grid point and inherit its engineering inputs.\r\n"
             + "No — place the component here without connecting it.\r\n"
@@ -1502,7 +1509,7 @@ public sealed partial class MainForm
             return true;
         if (node.LinkedFittingSequence is not int sequence)
             return false;
-        var fitting = DuctSystemScreen._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence);
+        var fitting = _host.DuctSystemScreen._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence);
         if (fitting is null)
             return false;
         try
@@ -1524,7 +1531,7 @@ public sealed partial class MainForm
     {
         LayoutConnectionRef? best = null;
         var bestDistance = double.MaxValue;
-        foreach (var downstream in DuctSystemScreen._ductSystem.LayoutNodes)
+        foreach (var downstream in _host.DuctSystemScreen._ductSystem.LayoutNodes)
         {
             foreach (var connection in new[]
                      {
@@ -1535,7 +1542,7 @@ public sealed partial class MainForm
                 var parentId = connection.Secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
                 if (string.IsNullOrWhiteSpace(parentId))
                     continue;
-                var parent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
+                var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
                 if (parent is null || excluded is not null
                     && (parent.Id == excluded.Id || downstream.Id == excluded.Id
                         || IsLayoutDescendant(parent, excluded) || IsLayoutDescendant(downstream, excluded)))
@@ -1594,13 +1601,13 @@ public sealed partial class MainForm
         Math.Sqrt(Math.Pow((firstX - secondX) / 2.0, 2) + Math.Pow((firstY - secondY) / 4.0, 2));
 
     private double LayoutFeetPerGridCell =>
-        double.IsFinite(DuctSystemScreen._ductSystem.LayoutFeetPerGridCell) && DuctSystemScreen._ductSystem.LayoutFeetPerGridCell > 0
-            ? Math.Clamp(DuctSystemScreen._ductSystem.LayoutFeetPerGridCell, 0.1, 1000.0)
+        double.IsFinite(_host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell) && _host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell > 0
+            ? Math.Clamp(_host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell, 0.1, 1000.0)
             : 1.0;
 
     private Point CanonicalLayoutGridPoint(SavedLayoutNode node)
     {
-        var coordinates = LayoutCoordinateResolver.Resolve(DuctSystemScreen._ductSystem);
+        var coordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
         if (!UsesResolvedLayoutCoordinate(node)
             || !coordinates.TryGetValue(node.Sequence, out var coordinate))
             return new Point(node.GridX, node.GridY);
@@ -1615,12 +1622,12 @@ public sealed partial class MainForm
         DisplayGridPointFromCanonical(CanonicalLayoutGridPoint(node));
 
     private Point DisplayGridPointFromCanonical(Point canonical) =>
-        DuctSystemScreen._ductSystem.LayoutViewMode == LayoutViewMode.IsometricNegative
+        _host.DuctSystemScreen._ductSystem.LayoutViewMode == LayoutViewMode.IsometricNegative
             ? new Point(canonical.Y, -canonical.X)
             : canonical;
 
     private Point CanonicalGridPointFromDisplay(Point display) =>
-        DuctSystemScreen._ductSystem.LayoutViewMode == LayoutViewMode.IsometricNegative
+        _host.DuctSystemScreen._ductSystem.LayoutViewMode == LayoutViewMode.IsometricNegative
             ? new Point(-display.Y, display.X)
             : display;
 
@@ -1637,7 +1644,7 @@ public sealed partial class MainForm
 
     private bool UsesResolvedLayoutCoordinate(SavedLayoutNode node) =>
         node.HasAbsoluteCoordinateAnchor || node.ConnectionDeltaConfirmed || node.SecondaryConnectionDeltaConfirmed
-        || DuctSystemScreen._ductSystem.LayoutNodes.Any(child =>
+        || _host.DuctSystemScreen._ductSystem.LayoutNodes.Any(child =>
             (child.ConnectionDeltaConfirmed
              && string.Equals(child.ParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase))
             || (child.SecondaryConnectionDeltaConfirmed
@@ -1665,7 +1672,7 @@ public sealed partial class MainForm
         var deltaColumn = nodeGrid.X - parentGrid.X;
         var deltaRow = nodeGrid.Y - parentGrid.Y;
         var feetPerCell = LayoutFeetPerGridCell;
-        if (DuctSystemScreen._ductSystem.LayoutViewMode == LayoutViewMode.IsometricNegative)
+        if (_host.DuctSystemScreen._ductSystem.LayoutViewMode == LayoutViewMode.IsometricNegative)
         {
             return (UnitConversions.FeetToM((deltaColumn - deltaRow) / 2.0 * feetPerCell),
                 UnitConversions.FeetToM((deltaColumn + deltaRow) / 2.0 * feetPerCell), 0.0);
@@ -1677,7 +1684,7 @@ public sealed partial class MainForm
     private (double XM, double YM, double ZM) ConnectionDeltaPreservingAbsolutePosition(
         SavedLayoutNode upstream, SavedLayoutNode downstream)
     {
-        if (DuctSystemScreen._ductSystem.LayoutViewMode != LayoutViewMode.TopDown)
+        if (_host.DuctSystemScreen._ductSystem.LayoutViewMode != LayoutViewMode.TopDown)
         {
             var parentGrid = CanonicalLayoutGridPoint(upstream);
             var nodeGrid = CanonicalLayoutGridPoint(downstream);
@@ -1692,7 +1699,7 @@ public sealed partial class MainForm
                 return (0.0, 0.0, -deltaRow / 2.0 * cellM);
         }
 
-        var coordinates = LayoutCoordinateResolver.Resolve(DuctSystemScreen._ductSystem);
+        var coordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
         if (coordinates.TryGetValue(upstream.Sequence, out var upstreamCoordinate)
             && coordinates.TryGetValue(downstream.Sequence, out var downstreamCoordinate))
         {
@@ -1763,7 +1770,7 @@ public sealed partial class MainForm
                 downstream.ConnectionDeltaConfirmed = true;
             return true;
         }
-        var displayedGridIncrement = _currentUnits == UnitSystem.Imperial
+        var displayedGridIncrement = _host._currentUnits == UnitSystem.Imperial
             ? LayoutFeetPerGridCell
             : UnitConversions.FeetToM(LayoutFeetPerGridCell);
         var target = downstream;
@@ -1779,9 +1786,9 @@ public sealed partial class MainForm
                 DeltaZM = delta.ZM
             };
         }
-        using var dialog = new LayoutComponentPlacementDialog(target, upstream.Id, _currentUnits, editableAxis,
+        using var dialog = new LayoutComponentPlacementDialog(target, upstream.Id, _host._currentUnits, editableAxis,
             displayedGridIncrement);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        if (dialog.ShowDialog(_host) != DialogResult.OK)
             return false;
         if (secondary)
         {
@@ -1797,7 +1804,7 @@ public sealed partial class MainForm
         SavedLayoutNode downstream, bool secondary)
     {
         var parentId = secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
-        var parent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
+        var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
             string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
         if (parent is null || !(secondary
                 ? downstream.SecondaryConnectionDeltaConfirmed
@@ -1819,7 +1826,7 @@ public sealed partial class MainForm
             previousGrid = GridPointAfterAxisDelta(previousGrid, segment.XM, segment.YM, segment.ZM);
             var elbow = new SavedLayoutNode
             {
-                Sequence = DuctSystemScreen._ductSystem.ReserveLayoutSequence(),
+                Sequence = _host.DuctSystemScreen._ductSystem.ReserveLayoutSequence(),
                 Type = LayoutNodeType.Fitting,
                 FittingGroup = "Elbows",
                 GridX = previousGrid.X,
@@ -1838,7 +1845,7 @@ public sealed partial class MainForm
                 ConnectionDeltaConfirmed = true,
                 IsDefined = false
             };
-            DuctSystemScreen._ductSystem.LayoutNodes.Add(elbow);
+            _host.DuctSystemScreen._ductSystem.LayoutNodes.Add(elbow);
             inserted.Add(elbow);
             EnsureInitialConnectionDuct(elbow, previous, secondary: false);
             SyncLinkedItemMetadata(elbow);
@@ -1911,13 +1918,13 @@ public sealed partial class MainForm
             if (string.IsNullOrWhiteSpace(parentId))
                 continue;
             var confirmed = secondary ? node.SecondaryConnectionDeltaConfirmed : node.ConnectionDeltaConfirmed;
-            var parent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
+            var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
                 string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
             if (!confirmed && parent is not null && !ConfirmConnectionCoordinates(node, parent, secondary))
                 return false;
         }
 
-        foreach (var child in DuctSystemScreen._ductSystem.LayoutNodes.Where(x =>
+        foreach (var child in _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x =>
                      string.Equals(x.ParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)
                      || string.Equals(x.SecondaryParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)).ToArray())
         {
@@ -1933,18 +1940,18 @@ public sealed partial class MainForm
     {
         var downstream = connection.Downstream;
         var parentId = connection.Secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
-        var parent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
+        var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
         if (parent is null)
             return;
         var inheritedSequence = connection.Secondary
             ? downstream.SecondaryConnectionDuctSequence
             : downstream.ConnectionDuctSequence;
         var inheritedDuct = inheritedSequence is int sequence
-            ? DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == sequence)
+            ? _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == sequence)
             : null;
         var inheritedSnapshot = inheritedDuct is null ? null : CloneDuct(inheritedDuct);
         var observedPoints = inheritedSequence is int observedSequence
-            ? DuctSystemScreen._ductSystem.LayoutNodes.Where(point => point.Type == LayoutNodeType.CalculationPoint
+            ? _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(point => point.Type == LayoutNodeType.CalculationPoint
                                                      && point.ObservedDuctSequence == observedSequence)
                 .Select(point => (Point: point, Fraction: point.CalculationConnectionFraction)).ToArray()
             : Array.Empty<(SavedLayoutNode Point, double Fraction)>();
@@ -1970,10 +1977,10 @@ public sealed partial class MainForm
             var upstreamSegment = CreateInheritedDuctSegment(inheritedSnapshot, inheritedSnapshot.Sequence,
                 parent, node, node.DeltaXM, node.DeltaYM, node.DeltaZM);
             var remainingDelta = ConnectionDelta(downstream, connection.Secondary);
-            var downstreamSegment = CreateInheritedDuctSegment(inheritedSnapshot, DuctSystemScreen._ductSystem.ReserveSequence(),
+            var downstreamSegment = CreateInheritedDuctSegment(inheritedSnapshot, _host.DuctSystemScreen._ductSystem.ReserveSequence(),
                 node, downstream, remainingDelta.XM, remainingDelta.YM, remainingDelta.ZM);
-            DuctSystemScreen._ductSystem.Ducts.Add(upstreamSegment);
-            DuctSystemScreen._ductSystem.Ducts.Add(downstreamSegment);
+            _host.DuctSystemScreen._ductSystem.Ducts.Add(upstreamSegment);
+            _host.DuctSystemScreen._ductSystem.Ducts.Add(downstreamSegment);
             node.ConnectionDuctSequence = upstreamSegment.Sequence;
             if (connection.Secondary)
                 downstream.SecondaryConnectionDuctSequence = downstreamSegment.Sequence;
@@ -2029,7 +2036,7 @@ public sealed partial class MainForm
     {
         var downstream = connection.Downstream;
         var parentId = connection.Secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
-        var parent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
+        var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
         if (parent is null)
             return;
 
@@ -2086,32 +2093,32 @@ public sealed partial class MainForm
                 length = UnitConversions.FeetToM(Math.Max(1.0, gridDistance * 5.0));
             }
             var material = DuctMaterialCatalog.All.First(x => x.Name == "Galvanized Spiral Duct");
-            var increment = DuctSystemScreen._ductSystem.DefaultSizingIncrementM > 0
-                ? DuctSystemScreen._ductSystem.DefaultSizingIncrementM
+            var increment = _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM > 0
+                ? _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM
                 : UnitConversions.InchesToM(0.5);
             var sizing = DuctSizingSolver.Size(new DuctSizingInput(
                 upstream.AirflowM3PerS,
                 upstream.TemperatureC,
-                FixedRelativeHumidity,
-                FixedAtmosphericPressurePa,
+                MainForm.FixedRelativeHumidity,
+                MainForm.FixedAtmosphericPressurePa,
                 DuctShape.Round,
                 1.0,
                 material,
-                DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod,
-                DuctSystemScreen._ductSystem.DefaultPressureLossBasis,
+                _host.DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod,
+                _host.DuctSystemScreen._ductSystem.DefaultPressureLossBasis,
                 length,
                 CalculationMode.SizeByTargetFriction,
                 UnitConversions.InchesWaterPer100FeetToPaPerM(0.08),
                 1.0,
                 increment,
-                DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection));
-            var sequence = DuctSystemScreen._ductSystem.ReserveSequence();
+                _host.DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection));
+            var sequence = _host.DuctSystemScreen._ductSystem.ReserveSequence();
             var duct = SavedDuct.FromResult(sequence, $"Designer duct {upstream.Id} to {downstream.Id}",
                 sizing.Calculation, downstream.AirSystemType, downstream.BranchId);
             duct.DeltaXM = delta.XM;
             duct.DeltaYM = delta.YM;
             duct.DeltaZM = delta.ZM;
-            DuctSystemScreen._ductSystem.Ducts.Add(duct);
+            _host.DuctSystemScreen._ductSystem.Ducts.Add(duct);
             if (secondary)
                 downstream.SecondaryConnectionDuctSequence = sequence;
             else
@@ -2138,9 +2145,9 @@ public sealed partial class MainForm
             {
                 AttachCalculationPointToConnection(node, observedConnection);
                 CommitLayoutHistoryState(historyState);
-                DuctSystemScreen.SaveDuctSystem();
+                _host.DuctSystemScreen.SaveDuctSystem();
                 RefreshLayoutDesigner();
-                DuctSystemScreen.RefreshDuctSystemGrid();
+                _host.DuctSystemScreen.RefreshDuctSystemGrid();
                 _layoutStatusLabel.Text = $"Moved {node.Id} onto {LayoutConnectionCaption(observedConnection)} without changing the duct topology.";
                 _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
             }
@@ -2155,7 +2162,7 @@ public sealed partial class MainForm
         if (_layoutRearrangeMode)
         {
             CommitLayoutHistoryState(historyState);
-            DuctSystemScreen.SaveDuctSystem();
+            _host.DuctSystemScreen.SaveDuctSystem();
             RefreshLayoutDesigner();
             _layoutStatusLabel.Text = $"Moved {node.Id} visually. Existing connections, duct data, and fitting data were preserved.";
             _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
@@ -2163,7 +2170,7 @@ public sealed partial class MainForm
         }
         var parentId = !string.IsNullOrWhiteSpace(node.ParentNodeId)
             ? node.ParentNodeId : node.SecondaryParentNodeId;
-        var parent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
+        var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
             string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
         if (parent is null)
         {
@@ -2179,7 +2186,7 @@ public sealed partial class MainForm
             SetConnectionDelta(node, secondaryConnection, movedDelta.XM, movedDelta.YM, movedDelta.ZM);
             if (!secondaryConnection && !string.IsNullOrWhiteSpace(node.SecondaryParentNodeId))
             {
-                var secondaryParent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
+                var secondaryParent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
                     string.Equals(x.Id, node.SecondaryParentNodeId, StringComparison.OrdinalIgnoreCase));
                 if (secondaryParent is not null)
                 {
@@ -2202,9 +2209,9 @@ public sealed partial class MainForm
         }
         SyncLinkedItemMetadata(node);
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
         _layoutStatusLabel.Text = $"Moved {node.Id} without creating or changing any nearby connection.";
         _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
     }
@@ -2214,10 +2221,10 @@ public sealed partial class MainForm
         if (node.Type == LayoutNodeType.CalculationPoint)
         {
             UpdateCalculatedLayoutValues();
-            using var calculationDialog = new LayoutEquipmentDialog(node, DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption);
-            calculationDialog.ShowDialog(this);
+            using var calculationDialog = new LayoutEquipmentDialog(node, _host.DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption);
+            calculationDialog.ShowDialog(_host);
             RefreshLayoutDesigner();
-            DuctSystemScreen.RefreshDuctSystemGrid();
+            _host.DuctSystemScreen.RefreshDuctSystemGrid();
             return;
         }
         if (node.Type is LayoutNodeType.Reservoir or LayoutNodeType.Fan or LayoutNodeType.Coil
@@ -2229,10 +2236,10 @@ public sealed partial class MainForm
                 if (ShowSourceSinkEditor())
                 {
                     CommitLayoutHistoryState(historyState);
-                    DuctSystemScreen.ResetCriticalPath();
-                    DuctSystemScreen.SaveDuctSystem();
+                    _host.DuctSystemScreen.ResetCriticalPath();
+                    _host.DuctSystemScreen.SaveDuctSystem();
                     RefreshLayoutDesigner();
-                    DuctSystemScreen.RefreshDuctSystemGrid();
+                    _host.DuctSystemScreen.RefreshDuctSystemGrid();
                 }
                 return;
             }
@@ -2241,12 +2248,12 @@ public sealed partial class MainForm
                 : new Dictionary<int, double>();
             var previousAirflow = node.AirflowM3PerS;
             UpdateCalculatedLayoutValues();
-            var resolvedCoordinates = LayoutCoordinateResolver.Resolve(DuctSystemScreen._ductSystem);
+            var resolvedCoordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
             using var dialog = resolvedCoordinates.TryGetValue(node.Sequence, out var absoluteCoordinate)
-                ? new LayoutEquipmentDialog(node, DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption, absoluteCoordinate,
+                ? new LayoutEquipmentDialog(node, _host.DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption, absoluteCoordinate,
                     EditableAxesForNode(node), PositionReferenceFor(node, resolvedCoordinates))
-                : new LayoutEquipmentDialog(node, DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption);
-            if (dialog.ShowDialog(this) == DialogResult.OK)
+                : new LayoutEquipmentDialog(node, _host.DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption);
+            if (dialog.ShowDialog(_host) == DialogResult.OK)
             {
                 var selectedParent = node.Type == LayoutNodeType.Reservoir && IsSpaceSourceRole(node.SpaceRole)
                     ? string.Empty
@@ -2269,26 +2276,26 @@ public sealed partial class MainForm
                 SyncConnectionDuctGeometry(node);
                 SyncLinkedItemMetadata(node);
                 if (node.Type == LayoutNodeType.Fan)
-                    DuctSystemScreen._ductSystem.DefaultAirSystemType = node.AirSystemType;
+                    _host.DuctSystemScreen._ductSystem.DefaultAirSystemType = node.AirSystemType;
                 CommitLayoutHistoryState(historyState);
-                DuctSystemScreen.SaveDuctSystem();
+                _host.DuctSystemScreen.SaveDuctSystem();
                 RefreshLayoutDesigner();
-                DuctSystemScreen.RefreshDuctSystemGrid();
+                _host.DuctSystemScreen.RefreshDuctSystemGrid();
             }
             return;
         }
 
         if (node.Type == LayoutNodeType.Duct && node.LinkedDuctSequence is int ductSequence)
         {
-            var duct = DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
+            var duct = _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
             if (duct is not null)
             {
                 var historyState = CaptureLayoutHistoryState();
-                using var editor = new LayoutDuctEditDialog(CloneDuct(duct), _currentUnits,
-                    DuctSystemScreen._ductSystem.DefaultSizingIncrementM, DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection);
-                if (editor.ShowDialog(this) != DialogResult.OK || editor.Result is not SavedDuct edited)
+                using var editor = new LayoutDuctEditDialog(CloneDuct(duct), _host._currentUnits,
+                    _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM, _host.DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection);
+                if (editor.ShowDialog(_host) != DialogResult.OK || editor.Result is not SavedDuct edited)
                     return;
-                if (!DuctSystemScreen.ConfirmAirflowOverride(node, edited.AirflowM3PerS, duct.Id))
+                if (!_host.DuctSystemScreen.ConfirmAirflowOverride(node, edited.AirflowM3PerS, duct.Id))
                     return;
                 CopyDuctValues(edited, duct);
                 duct.RequiresResizing = false;
@@ -2296,8 +2303,8 @@ public sealed partial class MainForm
                 node.TemperatureC = duct.TemperatureC;
                 SyncLinkedItemMetadata(node);
                 CommitLayoutHistoryState(historyState);
-                DuctSystemScreen.SaveDuctSystem();
-                DuctSystemScreen.RefreshDuctSystemGrid();
+                _host.DuctSystemScreen.SaveDuctSystem();
+                _host.DuctSystemScreen.RefreshDuctSystemGrid();
                 RefreshLayoutDesigner();
                 _layoutStatusLabel.Text = $"Updated {duct.Id} without leaving Layout Designer.";
                 _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
@@ -2309,23 +2316,23 @@ public sealed partial class MainForm
         {
             var historyState = CaptureLayoutHistoryState();
             var linkedFitting = node.LinkedFittingSequence is int sequence
-                ? DuctSystemScreen._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence)
+                ? _host.DuctSystemScreen._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence)
                 : null;
-            var resolvedCoordinates = LayoutCoordinateResolver.Resolve(DuctSystemScreen._ductSystem);
+            var resolvedCoordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
             LayoutCoordinate? absoluteCoordinate = resolvedCoordinates.TryGetValue(node.Sequence, out var resolved)
                 ? resolved : null;
-            using var dialog = new LayoutFittingNodeDialog(node, DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption,
+            using var dialog = new LayoutFittingNodeDialog(node, _host.DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption,
                 linkedFitting, absoluteCoordinate, EditableAxesForNode(node),
                 PositionReferenceFor(node, resolvedCoordinates));
-            if (dialog.ShowDialog(this) != DialogResult.OK)
+            if (dialog.ShowDialog(_host) != DialogResult.OK)
                 return;
             var draft = linkedFitting is null
                 ? CreateLayoutFittingDraft(node)
                 : CloneFitting(linkedFitting);
-            using var editor = new LayoutFittingEditDialog(draft, node.FittingGroup, _currentUnits);
-            if (editor.ShowDialog(this) != DialogResult.OK || editor.Result is not SavedFitting edited)
+            using var editor = new LayoutFittingEditDialog(draft, node.FittingGroup, _host._currentUnits);
+            if (editor.ShowDialog(_host) != DialogResult.OK || editor.Result is not SavedFitting edited)
                 return;
-            if (!DuctSystemScreen.ConfirmAirflowOverride(node, edited.AirflowM3PerS,
+            if (!_host.DuctSystemScreen.ConfirmAirflowOverride(node, edited.AirflowM3PerS,
                     linkedFitting?.Id ?? node.Id))
                 return;
             if (!ConfirmAndApplyJunctionFlows(node, edited, linkedFitting?.Id ?? node.Id))
@@ -2358,13 +2365,13 @@ public sealed partial class MainForm
             }
             if (linkedFitting is null)
             {
-                edited.Sequence = DuctSystemScreen._ductSystem.ReserveFittingSequence();
+                edited.Sequence = _host.DuctSystemScreen._ductSystem.ReserveFittingSequence();
                 edited.AirSystemType = node.AirSystemType;
                 edited.BranchId = node.BranchId;
                 edited.DeltaXM = node.DeltaXM;
                 edited.DeltaYM = node.DeltaYM;
                 edited.DeltaZM = node.DeltaZM;
-                DuctSystemScreen._ductSystem.Fittings.Add(edited);
+                _host.DuctSystemScreen._ductSystem.Fittings.Add(edited);
                 node.LinkedFittingSequence = edited.Sequence;
                 linkedFitting = edited;
             }
@@ -2374,9 +2381,9 @@ public sealed partial class MainForm
             SyncLinkedItemMetadata(node);
             UpdateCalculatedLayoutValues();
             CommitLayoutHistoryState(historyState);
-            DuctSystemScreen.SaveDuctSystem();
+            _host.DuctSystemScreen.SaveDuctSystem();
             RefreshLayoutDesigner();
-            DuctSystemScreen.RefreshDuctSystemGrid();
+            _host.DuctSystemScreen.RefreshDuctSystemGrid();
             _layoutStatusLabel.Text = $"Updated {linkedFitting.Id} without leaving Layout Designer.";
             _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
         }
@@ -2391,7 +2398,7 @@ public sealed partial class MainForm
                                 - junction.StraightAirflowM3PerS - junction.BranchAirflowM3PerS) <= tolerance;
         if (!balanced)
         {
-            var response = MessageBox.Show(this,
+            var response = MessageBox.Show(_host,
                 $"{itemId} does not balance: the two path airflows must add up to the common airflow.\r\n\r\nAllow this value anyway and mark the fitting orange?",
                 "Airflow Balance Notice", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button2);
@@ -2410,7 +2417,7 @@ public sealed partial class MainForm
                 var mainPath = string.Equals(outlet.Downstream.BranchId, node.BranchId,
                     StringComparison.OrdinalIgnoreCase);
                 var flow = mainPath ? junction.StraightAirflowM3PerS : junction.BranchAirflowM3PerS;
-                if (!DuctSystemScreen.ConfirmConnectionAirflowOverride(outlet, flow, DuctForConnection(outlet.Downstream, outlet.Secondary)?.Id
+                if (!_host.DuctSystemScreen.ConfirmConnectionAirflowOverride(outlet, flow, DuctForConnection(outlet.Downstream, outlet.Secondary)?.Id
                     ?? $"duct from {node.Id}"))
                     return false;
                 SetConnectionFlow(outlet, flow);
@@ -2427,7 +2434,7 @@ public sealed partial class MainForm
             for (var index = 0; index < inputs.Length; index++)
             {
                 var flow = index == 0 ? junction.StraightAirflowM3PerS : junction.BranchAirflowM3PerS;
-                if (!DuctSystemScreen.ConfirmConnectionAirflowOverride(inputs[index], flow,
+                if (!_host.DuctSystemScreen.ConfirmConnectionAirflowOverride(inputs[index], flow,
                         DuctForConnection(node, inputs[index].Secondary)?.Id ?? $"inlet duct to {node.Id}"))
                     return false;
                 SetConnectionFlow(inputs[index], flow);
@@ -2468,8 +2475,8 @@ public sealed partial class MainForm
             Shape = DuctShape.Round,
             DiameterM = diameter,
             TemperatureC = node.TemperatureC,
-            RelativeHumidity = FixedRelativeHumidity,
-            AtmosphericPressurePa = FixedAtmosphericPressurePa
+            RelativeHumidity = MainForm.FixedRelativeHumidity,
+            AtmosphericPressurePa = MainForm.FixedAtmosphericPressurePa
         };
     }
 
@@ -2530,13 +2537,13 @@ public sealed partial class MainForm
             ? downstream.SecondaryConnectionDuctSequence
             : downstream.ConnectionDuctSequence;
         var linkedDuct = linkedDuctSequence is int existingSequence
-            ? DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == existingSequence)
+            ? _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == existingSequence)
             : null;
         if (showConnectionDialog)
         {
             using var connectionDialog = new LayoutDuctConnectionDialog(parentId, downstream.Id,
                 downstream.AirSystemType, linkedDuct is not null);
-            if (connectionDialog.ShowDialog(this) != DialogResult.OK)
+            if (connectionDialog.ShowDialog(_host) != DialogResult.OK)
                 return;
             if (connectionDialog.ReverseRequested)
             {
@@ -2546,8 +2553,8 @@ public sealed partial class MainForm
                 else
                     downstream.ConnectionFlowReversed = !downstream.ConnectionFlowReversed;
                 CommitLayoutHistoryState(reverseFlowHistoryState);
-                DuctSystemScreen.SaveDuctSystem();
-                DuctSystemScreen.RefreshDuctSystemGrid();
+                _host.DuctSystemScreen.SaveDuctSystem();
+                _host.DuctSystemScreen.RefreshDuctSystemGrid();
                 RefreshLayoutDesigner();
                 var direction = LayoutConnectionFlowReversed(connection)
                     ? $"{downstream.Id} to {parentId}"
@@ -2559,28 +2566,28 @@ public sealed partial class MainForm
             downstream.AirSystemType = connectionDialog.SelectedAirSystemType;
             if (linkedDuct is not null)
                 linkedDuct.AirSystemType = downstream.AirSystemType;
-            DuctSystemScreen.SaveDuctSystem();
-            DuctSystemScreen.RefreshDuctSystemGrid();
+            _host.DuctSystemScreen.SaveDuctSystem();
+            _host.DuctSystemScreen.RefreshDuctSystemGrid();
             RefreshLayoutDesigner();
         }
         var historyState = CaptureLayoutHistoryState();
-        var upstream = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
+        var upstream = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
         var draft = linkedDuct is null
             ? CreateLayoutDuctDraftForConnection(upstream, downstream, connection.Secondary)
             : CloneDuct(linkedDuct);
-        using var editor = new LayoutDuctEditDialog(draft, _currentUnits,
-            DuctSystemScreen._ductSystem.DefaultSizingIncrementM, DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection);
-        if (editor.ShowDialog(this) != DialogResult.OK || editor.Result is not SavedDuct edited)
+        using var editor = new LayoutDuctEditDialog(draft, _host._currentUnits,
+            _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM, _host.DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection);
+        if (editor.ShowDialog(_host) != DialogResult.OK || editor.Result is not SavedDuct edited)
             return;
-        if (!DuctSystemScreen.ConfirmConnectionAirflowOverride(connection, edited.AirflowM3PerS,
+        if (!_host.DuctSystemScreen.ConfirmConnectionAirflowOverride(connection, edited.AirflowM3PerS,
                 linkedDuct?.Id ?? $"duct {parentId} to {downstream.Id}"))
             return;
 
         if (linkedDuct is null)
         {
-            edited.Sequence = DuctSystemScreen._ductSystem.ReserveSequence();
+            edited.Sequence = _host.DuctSystemScreen._ductSystem.ReserveSequence();
             edited.Description = $"Designer duct {parentId} to {downstream.Id}";
-            DuctSystemScreen._ductSystem.Ducts.Add(edited);
+            _host.DuctSystemScreen._ductSystem.Ducts.Add(edited);
             if (connection.Secondary)
                 downstream.SecondaryConnectionDuctSequence = edited.Sequence;
             else
@@ -2603,8 +2610,8 @@ public sealed partial class MainForm
         downstream.TemperatureC = savedDuct.TemperatureC;
         UpdateCalculatedLayoutValues();
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.SaveDuctSystem();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
         RefreshLayoutDesigner();
         _layoutStatusLabel.Text = $"Updated {savedDuct.Id} without leaving Layout Designer.";
         _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
@@ -2625,15 +2632,15 @@ public sealed partial class MainForm
         if (length <= 0)
             length = UnitConversions.FeetToM(10);
         var material = DuctMaterialCatalog.All.First(x => x.Name == "Galvanized Spiral Duct");
-        var increment = DuctSystemScreen._ductSystem.DefaultSizingIncrementM > 0
-            ? DuctSystemScreen._ductSystem.DefaultSizingIncrementM
+        var increment = _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM > 0
+            ? _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM
             : UnitConversions.InchesToM(0.5);
         var sizing = DuctSizingSolver.Size(new DuctSizingInput(
-            airflow, temperature, FixedRelativeHumidity, FixedAtmosphericPressurePa,
-            DuctShape.Round, 1.0, material, DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod,
-            DuctSystemScreen._ductSystem.DefaultPressureLossBasis, length, CalculationMode.SizeByTargetFriction,
+            airflow, temperature, MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa,
+            DuctShape.Round, 1.0, material, _host.DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod,
+            _host.DuctSystemScreen._ductSystem.DefaultPressureLossBasis, length, CalculationMode.SizeByTargetFriction,
             UnitConversions.InchesWaterPer100FeetToPaPerM(0.08), 1.0, increment,
-            DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection));
+            _host.DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection));
         return SavedDuct.FromResult(0, string.Empty, sizing.Calculation, downstream.AirSystemType, downstream.BranchId);
     }
 
@@ -2683,31 +2690,31 @@ public sealed partial class MainForm
     private void LoadConnectionConditionsIntoCalculator(SavedLayoutNode downstream)
     {
         var parentId = _pendingConnectionSecondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
-        var upstream = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
+        var upstream = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
         var airflow = downstream.AirflowM3PerS > 0 ? downstream.AirflowM3PerS : upstream?.AirflowM3PerS ?? 0.0;
         var temperature = downstream.TemperatureC;
-        _updatingControls = true;
+        _host._updatingControls = true;
         try
         {
             if (airflow > 0)
-                _airflowText.Text = (_currentUnits == UnitSystem.Imperial
+                _host._airflowText.Text = (_host._currentUnits == UnitSystem.Imperial
                     ? UnitConversions.M3PerSToCfm(airflow)
                     : UnitConversions.M3PerSToLps(airflow)).ToString("0.##", CultureInfo.CurrentCulture);
-            _temperatureText.Text = (_currentUnits == UnitSystem.Imperial
+            _host._temperatureText.Text = (_host._currentUnits == UnitSystem.Imperial
                 ? UnitConversions.CelsiusToFahrenheit(temperature)
                 : temperature).ToString("0.##", CultureInfo.CurrentCulture);
         }
         finally
         {
-            _updatingControls = false;
+            _host._updatingControls = false;
         }
-        UpdateControlState();
-        CalculateAndDisplay();
+        _host.UpdateControlState();
+        _host.CalculateAndDisplay();
     }
 
     private void RemoveLayoutNode(SavedLayoutNode node)
     {
-        var answer = MessageBox.Show(this,
+        var answer = MessageBox.Show(_host,
             $"Remove {node.Id} from the graphical layout? Its calculated Duct System record will be retained.",
             "Remove Layout Item", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
             MessageBoxDefaultButton.Button2);
@@ -2718,42 +2725,42 @@ public sealed partial class MainForm
         CommitLayoutHistoryState(historyState);
         if (_pendingLayoutNodeId == node.Id)
             _pendingLayoutNodeId = null;
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
     }
 
     private void RemoveLayoutNodePreservingCoordinates(SavedLayoutNode node)
     {
-        var coordinates = LayoutCoordinateResolver.Resolve(DuctSystemScreen._ductSystem);
+        var coordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
         InvalidateConnectionDuct(node, secondary: false);
         InvalidateConnectionDuct(node, secondary: true);
-        foreach (var child in DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.ParentNodeId == node.Id).ToArray())
+        foreach (var child in _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.ParentNodeId == node.Id).ToArray())
         {
             InvalidateConnectionDuct(child);
             child.ParentNodeId = string.Empty;
             child.ConnectionDeltaConfirmed = false;
             PreserveNodeCoordinateAgainstParent(child, null, coordinates);
         }
-        foreach (var child in DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.SecondaryParentNodeId == node.Id).ToArray())
+        foreach (var child in _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.SecondaryParentNodeId == node.Id).ToArray())
         {
             InvalidateConnectionDuct(child, secondary: true);
             child.SecondaryParentNodeId = string.Empty;
             child.SecondaryConnectionDeltaConfirmed = false;
             PreserveNodeCoordinateAgainstParent(child, child.ParentNodeId, coordinates);
         }
-        DuctSystemScreen._ductSystem.LayoutNodes.Remove(node);
-        if (string.Equals(DuctSystemScreen._ductSystem.CoordinateOriginNodeId, node.Id, StringComparison.OrdinalIgnoreCase))
+        _host.DuctSystemScreen._ductSystem.LayoutNodes.Remove(node);
+        if (string.Equals(_host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId, node.Id, StringComparison.OrdinalIgnoreCase))
         {
-            var replacementOrigin = DuctSystemScreen._ductSystem.LayoutNodes
+            var replacementOrigin = _host.DuctSystemScreen._ductSystem.LayoutNodes
                 .Where(x => x.Type != LayoutNodeType.CalculationPoint && coordinates.ContainsKey(x.Sequence))
                 .OrderBy(x => x.Sequence).FirstOrDefault();
-            DuctSystemScreen._ductSystem.CoordinateOriginNodeId = replacementOrigin?.Id ?? string.Empty;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId = replacementOrigin?.Id ?? string.Empty;
             if (replacementOrigin is not null && coordinates.TryGetValue(replacementOrigin.Sequence, out var originCoordinate))
             {
-                DuctSystemScreen._ductSystem.CoordinateOriginXM = originCoordinate.XM;
-                DuctSystemScreen._ductSystem.CoordinateOriginYM = originCoordinate.YM;
-                DuctSystemScreen._ductSystem.CoordinateOriginZM = originCoordinate.ZM;
+                _host.DuctSystemScreen._ductSystem.CoordinateOriginXM = originCoordinate.XM;
+                _host.DuctSystemScreen._ductSystem.CoordinateOriginYM = originCoordinate.YM;
+                _host.DuctSystemScreen._ductSystem.CoordinateOriginZM = originCoordinate.ZM;
                 replacementOrigin.HasAbsoluteCoordinateAnchor = false;
             }
         }
@@ -2771,7 +2778,7 @@ public sealed partial class MainForm
             ? connection.Downstream.SecondaryConnectionDuctSequence
             : connection.Downstream.ConnectionDuctSequence;
         var ductLabel = ductSequence is int sequence ? $"D-{sequence:000}" : "this unsized duct";
-        var answer = MessageBox.Show(this,
+        var answer = MessageBox.Show(_host,
             $"Remove {ductLabel} between {parentId} and {connection.Downstream.Id}? The graphical connection and its Duct System row will be deleted.",
             "Remove Duct Connection", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
             MessageBoxDefaultButton.Button2);
@@ -2780,14 +2787,14 @@ public sealed partial class MainForm
         var historyState = CaptureLayoutHistoryState();
         RemoveLayoutConnectionPreservingCoordinates(connection);
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
     }
 
     private void RemoveLayoutConnectionPreservingCoordinates(LayoutConnectionRef connection)
     {
-        var coordinates = LayoutCoordinateResolver.Resolve(DuctSystemScreen._ductSystem);
+        var coordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
         InvalidateConnectionDuct(connection.Downstream, connection.Secondary);
         if (connection.Secondary)
         {
@@ -2811,7 +2818,7 @@ public sealed partial class MainForm
     {
         if (!coordinates.TryGetValue(node.Sequence, out var coordinate))
             return;
-        var parent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
+        var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
             string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
         if (parent is not null && coordinates.TryGetValue(parent.Sequence, out var parentCoordinate))
         {
@@ -2832,10 +2839,10 @@ public sealed partial class MainForm
 
     private void AnchorDisconnectedLayoutRoots(IReadOnlyDictionary<int, LayoutCoordinate> coordinates)
     {
-        var nodeIds = DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.Type != LayoutNodeType.CalculationPoint)
+        var nodeIds = _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.Type != LayoutNodeType.CalculationPoint)
             .Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var root in DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.Type != LayoutNodeType.CalculationPoint
-                     && !string.Equals(x.Id, DuctSystemScreen._ductSystem.CoordinateOriginNodeId, StringComparison.OrdinalIgnoreCase)
+        foreach (var root in _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.Type != LayoutNodeType.CalculationPoint
+                     && !string.Equals(x.Id, _host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId, StringComparison.OrdinalIgnoreCase)
                      && (string.IsNullOrWhiteSpace(x.ParentNodeId) || !nodeIds.Contains(x.ParentNodeId))
                      && (string.IsNullOrWhiteSpace(x.SecondaryParentNodeId) || !nodeIds.Contains(x.SecondaryParentNodeId))))
         {
@@ -2850,26 +2857,26 @@ public sealed partial class MainForm
 
     private void RebaseLayoutToAbsoluteCoordinates(IReadOnlyDictionary<int, LayoutCoordinate> coordinates)
     {
-        var nodes = DuctSystemScreen._ductSystem.LayoutNodes
+        var nodes = _host.DuctSystemScreen._ductSystem.LayoutNodes
             .Where(x => x.Type != LayoutNodeType.CalculationPoint)
             .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
         if (nodes.Count == 0)
             return;
 
-        if (!nodes.TryGetValue(DuctSystemScreen._ductSystem.CoordinateOriginNodeId, out var origin)
+        if (!nodes.TryGetValue(_host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId, out var origin)
             || !coordinates.TryGetValue(origin.Sequence, out var originCoordinate))
         {
             origin = nodes.Values.Where(x => coordinates.ContainsKey(x.Sequence))
                 .OrderBy(x => x.Sequence).FirstOrDefault();
             if (origin is not null && coordinates.TryGetValue(origin.Sequence, out originCoordinate))
-                DuctSystemScreen._ductSystem.CoordinateOriginNodeId = origin.Id;
+                _host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId = origin.Id;
         }
 
         if (origin is not null && coordinates.TryGetValue(origin.Sequence, out originCoordinate))
         {
-            DuctSystemScreen._ductSystem.CoordinateOriginXM = originCoordinate.XM;
-            DuctSystemScreen._ductSystem.CoordinateOriginYM = originCoordinate.YM;
-            DuctSystemScreen._ductSystem.CoordinateOriginZM = originCoordinate.ZM;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginXM = originCoordinate.XM;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginYM = originCoordinate.YM;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginZM = originCoordinate.ZM;
         }
 
         foreach (var node in nodes.Values)
@@ -2926,9 +2933,9 @@ public sealed partial class MainForm
 
     private void ClearLayoutDesigner()
     {
-        if (DuctSystemScreen._ductSystem.LayoutNodes.Count == 0)
+        if (_host.DuctSystemScreen._ductSystem.LayoutNodes.Count == 0)
             return;
-        var answer = MessageBox.Show(this,
+        var answer = MessageBox.Show(_host,
             "Clear every item from the graphical layout?\r\n\r\nYes = clear the layout AND delete all Duct System table values\r\nNo = clear the layout only and retain calculated duct and fitting rows\r\nCancel = keep everything",
             "Clear Layout", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button3);
@@ -2937,24 +2944,24 @@ public sealed partial class MainForm
         var historyState = CaptureLayoutHistoryState();
         if (answer == DialogResult.Yes)
         {
-            DuctSystemScreen.ClearAllSystemData();
+            _host.DuctSystemScreen.ClearAllSystemData();
             CommitLayoutHistoryState(historyState);
             return;
         }
-        DuctSystemScreen._ductSystem.LayoutNodes.Clear();
-        DuctSystemScreen._ductSystem.CoordinateOriginNodeId = string.Empty;
-        DuctSystemScreen._ductSystem.CoordinateOriginXM = 0;
-        DuctSystemScreen._ductSystem.CoordinateOriginYM = 0;
-        DuctSystemScreen._ductSystem.CoordinateOriginZM = 0;
+        _host.DuctSystemScreen._ductSystem.LayoutNodes.Clear();
+        _host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId = string.Empty;
+        _host.DuctSystemScreen._ductSystem.CoordinateOriginXM = 0;
+        _host.DuctSystemScreen._ductSystem.CoordinateOriginYM = 0;
+        _host.DuctSystemScreen._ductSystem.CoordinateOriginZM = 0;
         _layoutViewportInitialized = false;
-        DuctSystemScreen.ResetCriticalPath();
+        _host.DuctSystemScreen.ResetCriticalPath();
         _pendingLayoutNodeId = null;
         _pendingConnectionNodeId = null;
         _pendingConnectionSecondary = false;
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
         EnsureLayoutViewportPositioned(force: true);
     }
 
@@ -2966,27 +2973,27 @@ public sealed partial class MainForm
 
         var newParent = string.IsNullOrWhiteSpace(newParentId)
             ? null
-            : DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == newParentId);
+            : _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == newParentId);
         if (!string.IsNullOrWhiteSpace(newParentId) && newParent is null)
         {
-            MessageBox.Show(this, "The selected upstream item no longer exists.", "Upstream Item Not Found",
+            MessageBox.Show(_host, "The selected upstream item no longer exists.", "Upstream Item Not Found",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return false;
         }
         if (newParent is not null && (newParent.Id == node.Id || IsLayoutDescendant(newParent, node)))
         {
-            MessageBox.Show(this, "That change would create a circular layout connection.", "Invalid Upstream Item",
+            MessageBox.Show(_host, "That change would create a circular layout connection.", "Invalid Upstream Item",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return false;
         }
 
         var existingChildren = newParent is null
             ? Array.Empty<SavedLayoutNode>()
-            : DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.ParentNodeId == newParent.Id && x.Id != node.Id).ToArray();
+            : _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.ParentNodeId == newParent.Id && x.Id != node.Id).ToArray();
         var splittingParent = newParent is not null && IsSplittingFitting(newParent);
         if (splittingParent && existingChildren.Length >= 2)
         {
-            MessageBox.Show(this, $"{newParent!.Id} already has two downstream connections.",
+            MessageBox.Show(_host, $"{newParent!.Id} already has two downstream connections.",
                 "Two Outputs Already Used", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return false;
         }
@@ -3004,7 +3011,7 @@ public sealed partial class MainForm
         else if (splittingParent)
         {
             using var branchDialog = new LayoutBranchChoiceDialog(newParent!.Id, node.Id);
-            if (branchDialog.ShowDialog(this) != DialogResult.OK)
+            if (branchDialog.ShowDialog(_host) != DialogResult.OK)
                 return false;
             createNewBranch = branchDialog.NewBranchSelected;
         }
@@ -3044,7 +3051,7 @@ public sealed partial class MainForm
                 node.AirflowM3PerS = newParent.AirflowM3PerS;
 
             if (createNewBranch)
-                node.BranchId = DuctSystemScreen._ductSystem.ReserveBranchId();
+                node.BranchId = _host.DuctSystemScreen._ductSystem.ReserveBranchId();
 
             if (displacedChild is not null)
             {
@@ -3086,7 +3093,7 @@ public sealed partial class MainForm
         {
             if (sequence is not int ductSequence)
                 return;
-            var duct = DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
+            var duct = _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
             if (duct is null)
                 return;
             var delta = ConnectionDelta(downstream, secondary);
@@ -3110,7 +3117,7 @@ public sealed partial class MainForm
     private LayoutPositionReference? PositionReferenceFor(SavedLayoutNode node,
         IReadOnlyDictionary<int, LayoutCoordinate> coordinates)
     {
-        var byId = DuctSystemScreen._ductSystem.LayoutNodes
+        var byId = _host.DuctSystemScreen._ductSystem.LayoutNodes
             .Where(candidate => candidate.Type != LayoutNodeType.CalculationPoint)
             .ToDictionary(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase);
         foreach (var parentId in new[] { node.ParentNodeId, node.SecondaryParentNodeId })
@@ -3119,7 +3126,7 @@ public sealed partial class MainForm
                 && coordinates.TryGetValue(parent.Sequence, out var parentCoordinate))
                 return new LayoutPositionReference(parent.Id, parentCoordinate, IsDownstream: false);
         }
-        var downstream = DuctSystemScreen._ductSystem.LayoutNodes
+        var downstream = _host.DuctSystemScreen._ductSystem.LayoutNodes
             .Where(candidate => candidate.Type != LayoutNodeType.CalculationPoint
                                 && (string.Equals(candidate.ParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)
                                     || string.Equals(candidate.SecondaryParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)))
@@ -3151,12 +3158,12 @@ public sealed partial class MainForm
         }
         else
         {
-            DuctSystemScreen._ductSystem.CoordinateOriginNodeId = node.Id;
-            DuctSystemScreen._ductSystem.CoordinateOriginXM += dx;
-            DuctSystemScreen._ductSystem.CoordinateOriginYM += dy;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId = node.Id;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginXM += dx;
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginYM += dy;
         }
 
-        var children = DuctSystemScreen._ductSystem.LayoutNodes.Where(child =>
+        var children = _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(child =>
             string.Equals(child.ParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)
             || string.Equals(child.SecondaryParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
         foreach (var child in children)
@@ -3178,7 +3185,7 @@ public sealed partial class MainForm
             // component therefore translates every component on both sides of it, while retaining
             // all relative duct geometry and leaving disconnected systems untouched.
             var connectedSequences = ConnectedLayoutNodeSequences(node);
-            var translatedCoordinates = LayoutCoordinateResolver.Resolve(DuctSystemScreen._ductSystem)
+            var translatedCoordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem)
                 .ToDictionary(pair => pair.Key, pair => connectedSequences.Contains(pair.Key)
                     ? new LayoutCoordinate(pair.Value.XM, pair.Value.YM, pair.Value.ZM + dz)
                     : pair.Value);
@@ -3188,7 +3195,7 @@ public sealed partial class MainForm
 
     private HashSet<int> ConnectedLayoutNodeSequences(SavedLayoutNode start)
     {
-        var nodesById = DuctSystemScreen._ductSystem.LayoutNodes
+        var nodesById = _host.DuctSystemScreen._ductSystem.LayoutNodes
             .Where(candidate => candidate.Type != LayoutNodeType.CalculationPoint)
             .ToDictionary(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase);
         var connected = new HashSet<int>();
@@ -3215,9 +3222,9 @@ public sealed partial class MainForm
 
     private void ToggleLayoutCriticalPathHighlight()
     {
-        if (!DuctSystemScreen._criticalPathCalculated || DuctSystemScreen._criticalPathItemKeys.Count == 0)
-            DuctSystemScreen.RefreshDuctSystemGrid();
-        if (!DuctSystemScreen._criticalPathCalculated || DuctSystemScreen._criticalPathItemKeys.Count == 0)
+        if (!_host.DuctSystemScreen._criticalPathCalculated || _host.DuctSystemScreen._criticalPathItemKeys.Count == 0)
+            _host.DuctSystemScreen.RefreshDuctSystemGrid();
+        if (!_host.DuctSystemScreen._criticalPathCalculated || _host.DuctSystemScreen._criticalPathItemKeys.Count == 0)
         {
             _layoutStatusLabel.Text = "Add and define a connected system before highlighting its critical path.";
             _layoutStatusLabel.ForeColor = Color.DarkOrange;
@@ -3248,39 +3255,39 @@ public sealed partial class MainForm
 
     private bool IsLayoutNodeOnCriticalPath(SavedLayoutNode node)
     {
-        if (!_layoutCriticalPathHighlighted || !DuctSystemScreen._criticalPathCalculated)
+        if (!_layoutCriticalPathHighlighted || !_host.DuctSystemScreen._criticalPathCalculated)
             return false;
         return IsLayoutNodeInCalculatedCriticalPath(node);
     }
 
     internal bool IsLayoutNodeInCalculatedCriticalPath(SavedLayoutNode node)
     {
-        if (!DuctSystemScreen._criticalPathCalculated)
+        if (!_host.DuctSystemScreen._criticalPathCalculated)
             return false;
         if (node.LinkedFittingSequence is int fittingSequence
-            && DuctSystemScreen._criticalPathItemKeys.Contains(DuctSystemScreen.FittingKey(fittingSequence)))
+            && _host.DuctSystemScreen._criticalPathItemKeys.Contains(DuctSystemScreen.FittingKey(fittingSequence)))
             return true;
         if (node.LinkedDuctSequence is int ductSequence
-            && DuctSystemScreen._criticalPathItemKeys.Contains(DuctSystemScreen.DuctKey(ductSequence)))
+            && _host.DuctSystemScreen._criticalPathItemKeys.Contains(DuctSystemScreen.DuctKey(ductSequence)))
             return true;
-        return DuctSystemScreen._criticalPathItemKeys.Contains(DuctSystemScreen.LayoutKey(node.Sequence));
+        return _host.DuctSystemScreen._criticalPathItemKeys.Contains(DuctSystemScreen.LayoutKey(node.Sequence));
     }
 
     private bool IsLayoutConnectionOnCriticalPath(LayoutConnectionRef connection)
     {
-        if (!_layoutCriticalPathHighlighted || !DuctSystemScreen._criticalPathCalculated)
+        if (!_layoutCriticalPathHighlighted || !_host.DuctSystemScreen._criticalPathCalculated)
             return false;
         return IsLayoutConnectionInCalculatedCriticalPath(connection);
     }
 
     internal bool IsLayoutConnectionInCalculatedCriticalPath(LayoutConnectionRef connection)
     {
-        if (!DuctSystemScreen._criticalPathCalculated)
+        if (!_host.DuctSystemScreen._criticalPathCalculated)
             return false;
         var sequence = connection.Secondary
             ? connection.Downstream.SecondaryConnectionDuctSequence
             : connection.Downstream.ConnectionDuctSequence;
-        return sequence is int ductSequence && DuctSystemScreen._criticalPathItemKeys.Contains(DuctSystemScreen.DuctKey(ductSequence));
+        return sequence is int ductSequence && _host.DuctSystemScreen._criticalPathItemKeys.Contains(DuctSystemScreen.DuctKey(ductSequence));
     }
 
     private bool IsLayoutDescendant(SavedLayoutNode possibleDescendant, SavedLayoutNode ancestor)
@@ -3297,7 +3304,7 @@ public sealed partial class MainForm
             {
                 if (string.Equals(parentId, ancestor.Id, StringComparison.OrdinalIgnoreCase))
                     return true;
-                var parent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
+                var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
                 if (parent is not null)
                     pending.Enqueue(parent);
             }
@@ -3333,7 +3340,7 @@ public sealed partial class MainForm
     {
         root.GridX += deltaX;
         root.GridY += deltaY;
-        foreach (var child in DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.ParentNodeId == root.Id).ToArray())
+        foreach (var child in _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.ParentNodeId == root.Id).ToArray())
             MoveLayoutSubtree(child, deltaX, deltaY);
     }
 
@@ -3343,7 +3350,7 @@ public sealed partial class MainForm
             return;
         root.GridX += deltaX;
         root.GridY += deltaY;
-        foreach (var child in DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.ParentNodeId == root.Id).ToArray())
+        foreach (var child in _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.ParentNodeId == root.Id).ToArray())
             ShiftLayoutSubtreeExcept(child, excluded, deltaX, deltaY);
     }
 
@@ -3356,10 +3363,10 @@ public sealed partial class MainForm
             SetConnectionAirflowOverride(downstream, secondary, false);
             return;
         }
-        var duct = DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
+        var duct = _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
         if (duct is not null)
-            DuctSystemScreen._ductSystem.Ducts.Remove(duct);
-        foreach (var point in DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.Type == LayoutNodeType.CalculationPoint
+            _host.DuctSystemScreen._ductSystem.Ducts.Remove(duct);
+        foreach (var point in _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x => x.Type == LayoutNodeType.CalculationPoint
                                                                   && (x.ObservedDuctSequence == ductSequence
                                                                       || string.Equals(x.CalculationConnectionNodeId,
                                                                           downstream.Id, StringComparison.OrdinalIgnoreCase)
@@ -3369,12 +3376,12 @@ public sealed partial class MainForm
             point.CalculationConnectionNodeId = string.Empty;
             point.IsDefined = false;
         }
-        if (DuctSystemScreen._editingDuctSequence == ductSequence)
+        if (_host.DuctSystemScreen._editingDuctSequence == ductSequence)
         {
-            DuctSystemScreen._editingDuctSequence = null;
-            DuctSystemScreen._addDuctButton.Text = DuctSystemScreen.DefaultDuctActionText;
-            DuctSystemScreen._addDuctButton.Visible = false;
-            _ductEditingLabel.Visible = false;
+            _host.DuctSystemScreen._editingDuctSequence = null;
+            _host.DuctSystemScreen._addDuctButton.Text = DuctSystemScreen.DefaultDuctActionText;
+            _host.DuctSystemScreen._addDuctButton.Visible = false;
+            _host._ductEditingLabel.Visible = false;
         }
         if (secondary)
             downstream.SecondaryConnectionDuctSequence = null;
@@ -3389,27 +3396,27 @@ public sealed partial class MainForm
     {
         if (downstream.Type == LayoutNodeType.Reservoir && IsSpaceSourceRole(downstream.SpaceRole))
         {
-            MessageBox.Show(this, "A Space Source cannot have an upstream duct.",
+            MessageBox.Show(_host, "A Space Source cannot have an upstream duct.",
                 "Invalid Space Connection", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         if (upstream.Id == downstream.Id || IsLayoutDescendant(upstream, downstream))
         {
-            MessageBox.Show(this, "That port connection would create a circular layout.", "Invalid Connection",
+            MessageBox.Show(_host, "That port connection would create a circular layout.", "Invalid Connection",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         var inputCapacity = LayoutInletCapacity(downstream);
         if (inputIndex >= inputCapacity || ConnectedLayoutInputCount(downstream) >= inputCapacity)
         {
-            MessageBox.Show(this, $"{downstream.Id} has no unused inlet ports.", "No Inlet Available",
+            MessageBox.Show(_host, $"{downstream.Id} has no unused inlet ports.", "No Inlet Available",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         var secondary = inputIndex == 1;
         if (secondary && FittingCatalog.InletPortCount(downstream.FittingGroup) < 2)
             return;
-        var existingOutputs = DuctSystemScreen._ductSystem.LayoutNodes.Count(x =>
+        var existingOutputs = _host.DuctSystemScreen._ductSystem.LayoutNodes.Count(x =>
             (x.ParentNodeId == upstream.Id && !(x.Id == downstream.Id && !secondary))
             || (x.SecondaryParentNodeId == upstream.Id && !(x.Id == downstream.Id && secondary)));
         var outputCapacity = upstream.Type == LayoutNodeType.Fitting
@@ -3419,7 +3426,7 @@ public sealed partial class MainForm
                 : 1;
         if (existingOutputs >= outputCapacity)
         {
-            MessageBox.Show(this, $"{upstream.Id} has no unused outlet ports.", "No Outlet Available",
+            MessageBox.Show(_host, $"{upstream.Id} has no unused outlet ports.", "No Outlet Available",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
@@ -3457,13 +3464,13 @@ public sealed partial class MainForm
                 downstream.BranchId = upstream.BranchId;
             else
             {
-                var existingBranch = DuctSystemScreen._ductSystem.LayoutNodes
+                var existingBranch = _host.DuctSystemScreen._ductSystem.LayoutNodes
                     .Where(x => x.ParentNodeId == upstream.Id && x.Id != downstream.Id
                                 && !string.Equals(x.BranchId, upstream.BranchId, StringComparison.OrdinalIgnoreCase))
                     .Select(x => x.BranchId)
                     .FirstOrDefault();
                 downstream.BranchId = string.IsNullOrWhiteSpace(existingBranch)
-                    ? DuctSystemScreen._ductSystem.ReserveBranchId()
+                    ? _host.DuctSystemScreen._ductSystem.ReserveBranchId()
                     : existingBranch;
             }
         }
@@ -3476,9 +3483,9 @@ public sealed partial class MainForm
             EnsureInitialConnectionDuct(downstream, upstream, secondary);
         SyncLinkedItemMetadata(downstream);
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
         _layoutStatusLabel.Text = $"Connected outlet {outputIndex + 1} on {upstream.Id} to inlet {inputIndex + 1} on {downstream.Id}. The new duct is red until sized.";
     }
 
@@ -3518,15 +3525,15 @@ public sealed partial class MainForm
     /// (see <see cref="SystemSolver.OutletPressureToward"/>).
     /// </summary>
     internal double OutletPressureToward(SavedLayoutNode parent, SavedLayoutNode child) =>
-        SystemSolver.OutletPressureToward(DuctSystemScreen._ductSystem, _systemSolution, parent, child);
+        SystemSolver.OutletPressureToward(_host.DuctSystemScreen._ductSystem, _systemSolution, parent, child);
 
     /// <summary>
     /// Recalculates airflow, temperature and static pressure through the drawn system. The solver lives in
     /// DuctSizer.Core (<see cref="SystemSolver"/>) so it is covered by the engineering verification suite.
     /// </summary>
-    internal void UpdateCalculatedLayoutValues() => _systemSolution = SystemSolver.Solve(DuctSystemScreen._ductSystem);
+    internal void UpdateCalculatedLayoutValues() => _systemSolution = SystemSolver.Solve(_host.DuctSystemScreen._ductSystem);
 
-    private SavedLayoutNode[] LayoutBoundaryNodes() => DuctSystemScreen._ductSystem.LayoutNodes
+    private SavedLayoutNode[] LayoutBoundaryNodes() => _host.DuctSystemScreen._ductSystem.LayoutNodes
         .Where(node => node.Type == LayoutNodeType.Reservoir)
         .OrderBy(node => node.Sequence).ToArray();
 
@@ -3568,7 +3575,7 @@ public sealed partial class MainForm
         if (boundaries.Length == 0)
             return false;
         using var editor = new SourceSinkEditorDialog(boundaries);
-        if (editor.ShowDialog(this) != DialogResult.OK)
+        if (editor.ShowDialog(_host) != DialogResult.OK)
             return false;
         foreach (var boundary in boundaries)
         {
@@ -3589,7 +3596,7 @@ public sealed partial class MainForm
         var boundaries = LayoutBoundaryNodes();
         if (boundaries.Length == 0)
         {
-            MessageBox.Show(this,
+            MessageBox.Show(_host,
                 "Add at least one Space Source and one Space Sink in the Layout Designer before opening the Source/Sink Editor.",
                 "Source/Sink Editor", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
@@ -3597,7 +3604,7 @@ public sealed partial class MainForm
         if (!boundaries.Any(boundary => IsSpaceSourceRole(boundary.SpaceRole))
             || !boundaries.Any(boundary => !IsSpaceSourceRole(boundary.SpaceRole)))
         {
-            MessageBox.Show(this,
+            MessageBox.Show(_host,
                 "The Source/Sink Editor requires at least one source and one sink.",
                 "Source/Sink Editor", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
@@ -3608,15 +3615,15 @@ public sealed partial class MainForm
         if (!ShowSourceSinkEditor())
             return;
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.ResetCriticalPath();
-        DuctSystemScreen.SaveDuctSystem();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.ResetCriticalPath();
+        _host.DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
         RefreshLayoutDesigner();
     }
 
     private void ApplyBalancedBoundaryAirflows(IReadOnlyCollection<SavedLayoutNode> boundaries)
     {
-        foreach (var node in DuctSystemScreen._ductSystem.LayoutNodes)
+        foreach (var node in _host.DuctSystemScreen._ductSystem.LayoutNodes)
         {
             if (!string.IsNullOrWhiteSpace(node.ParentNodeId))
                 SetConnectionAirflowUserSpecified(node, false, false);
@@ -3624,7 +3631,7 @@ public sealed partial class MainForm
                 SetConnectionAirflowUserSpecified(node, true, false);
         }
         var connectedSequences = boundaries.SelectMany(ConnectedLayoutNodeSequences).ToHashSet();
-        foreach (var node in DuctSystemScreen._ductSystem.LayoutNodes.Where(node => connectedSequences.Contains(node.Sequence)))
+        foreach (var node in _host.DuctSystemScreen._ductSystem.LayoutNodes.Where(node => connectedSequences.Contains(node.Sequence)))
             foreach (var duct in new[] { DuctForConnection(node, false), DuctForConnection(node, true) }
                          .Where(duct => duct is not null))
                 duct!.RequiresResizing = true;
@@ -3646,14 +3653,14 @@ public sealed partial class MainForm
             }
         }
         UpdateCalculatedLayoutValues();
-        foreach (var node in DuctSystemScreen._ductSystem.LayoutNodes)
+        foreach (var node in _host.DuctSystemScreen._ductSystem.LayoutNodes)
             SyncLinkedItemMetadata(node);
     }
 
     private void ApplyReservoirAirflowChange(SavedLayoutNode reservoir)
     {
         var connectedSequences = ConnectedLayoutNodeSequences(reservoir);
-        var connectedNodes = DuctSystemScreen._ductSystem.LayoutNodes
+        var connectedNodes = _host.DuctSystemScreen._ductSystem.LayoutNodes
             .Where(node => connectedSequences.Contains(node.Sequence))
             .ToArray();
         foreach (var node in connectedNodes)
@@ -3732,7 +3739,7 @@ public sealed partial class MainForm
 
     internal IEnumerable<LayoutConnectionRef> LayoutConnectionsFrom(SavedLayoutNode upstream)
     {
-        foreach (var node in DuctSystemScreen._ductSystem.LayoutNodes)
+        foreach (var node in _host.DuctSystemScreen._ductSystem.LayoutNodes)
         {
             if (string.Equals(node.ParentNodeId, upstream.Id, StringComparison.OrdinalIgnoreCase))
                 yield return new LayoutConnectionRef(node, false);
@@ -3744,7 +3751,7 @@ public sealed partial class MainForm
     internal SavedDuct? DuctForConnection(SavedLayoutNode downstream, bool secondary)
     {
         var sequence = secondary ? downstream.SecondaryConnectionDuctSequence : downstream.ConnectionDuctSequence;
-        return sequence is int value ? DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == value) : null;
+        return sequence is int value ? _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == value) : null;
     }
 
     internal static bool ConnectionAirflowUserSpecified(SavedLayoutNode downstream, bool secondary) =>
@@ -3770,15 +3777,15 @@ public sealed partial class MainForm
             downstream.ConnectionAirflowOverride = value;
     }
 
-    internal double SafeDuctPressureLoss(int sequence) => SystemSolver.DuctLoss(DuctSystemScreen._ductSystem, sequence);
+    internal double SafeDuctPressureLoss(int sequence) => SystemSolver.DuctLoss(_host.DuctSystemScreen._ductSystem, sequence);
 
-    private double SafeFittingPressureLoss(int sequence) => SystemSolver.FittingLoss(DuctSystemScreen._ductSystem, sequence);
+    private double SafeFittingPressureLoss(int sequence) => SystemSolver.FittingLoss(_host.DuctSystemScreen._ductSystem, sequence);
 
     private string FormatLayoutPressure(double pascals)
     {
         if (!double.IsFinite(pascals))
             return "—";
-        return _currentUnits == UnitSystem.Imperial
+        return _host._currentUnits == UnitSystem.Imperial
             ? $"{UnitConversions.PaToInchesWater(pascals):0.###} in.w.g."
             : $"{pascals:0.##} Pa";
     }
@@ -3793,7 +3800,7 @@ public sealed partial class MainForm
     private bool EnsureExplicitElbowsForAxisChanges()
     {
         var changed = false;
-        var connections = DuctSystemScreen._ductSystem.LayoutNodes.SelectMany(downstream => new[]
+        var connections = _host.DuctSystemScreen._ductSystem.LayoutNodes.SelectMany(downstream => new[]
         {
             string.IsNullOrWhiteSpace(downstream.ParentNodeId)
                 ? (LayoutConnectionRef?)null : new LayoutConnectionRef(downstream, false),
@@ -3820,18 +3827,18 @@ public sealed partial class MainForm
     {
         if (_layoutCanvas is null)
             return;
-        var feetPerCell = double.IsFinite(DuctSystemScreen._ductSystem.LayoutFeetPerGridCell)
-                          && DuctSystemScreen._ductSystem.LayoutFeetPerGridCell > 0
-            ? Math.Clamp(DuctSystemScreen._ductSystem.LayoutFeetPerGridCell, 0.1, 1000.0)
+        var feetPerCell = double.IsFinite(_host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell)
+                          && _host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell > 0
+            ? Math.Clamp(_host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell, 0.1, 1000.0)
             : 1.0;
-        DuctSystemScreen._ductSystem.LayoutShowToScale = true;
+        _host.DuctSystemScreen._ductSystem.LayoutShowToScale = true;
         _layoutCanvas.ShowToScale = true;
         _layoutCanvas.FeetPerGridCell = feetPerCell;
-        _layoutCanvas.ViewMode = DuctSystemScreen._ductSystem.LayoutViewMode;
+        _layoutCanvas.ViewMode = _host.DuctSystemScreen._ductSystem.LayoutViewMode;
         _updatingLayoutViewMode = true;
         try
         {
-            _layoutViewModeSelector.SelectedIndex = DuctSystemScreen._ductSystem.LayoutViewMode switch
+            _layoutViewModeSelector.SelectedIndex = _host.DuctSystemScreen._ductSystem.LayoutViewMode switch
             {
                 LayoutViewMode.IsometricNegative => 1,
                 LayoutViewMode.TopDown => 2,
@@ -3858,20 +3865,20 @@ public sealed partial class MainForm
             2 => LayoutViewMode.TopDown,
             _ => LayoutViewMode.Isometric
         };
-        if (DuctSystemScreen._ductSystem.LayoutViewMode == selected)
+        if (_host.DuctSystemScreen._ductSystem.LayoutViewMode == selected)
             return;
         var viewAnchor = _layoutCanvas?.SelectedNode ?? LayoutStartNode();
         var anchorScreenPosition = viewAnchor is null || _layoutCanvas is null
             ? (Point?)null : _layoutCanvas.VisualLocation(viewAnchor);
         var historyState = CaptureLayoutHistoryState();
-        DuctSystemScreen._ductSystem.LayoutViewMode = selected;
+        _host.DuctSystemScreen._ductSystem.LayoutViewMode = selected;
         CommitLayoutHistoryState(historyState);
         ApplyLayoutScaleSettings();
         if (viewAnchor is not null && anchorScreenPosition is Point desiredAnchorPosition)
             _layoutCanvas?.KeepNodeAtScreenPosition(viewAnchor, desiredAnchorPosition);
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         _layoutCanvas?.Invalidate();
-        _layoutStatusLabel.Text = DuctSystemScreen._ductSystem.LayoutViewMode switch
+        _layoutStatusLabel.Text = _host.DuctSystemScreen._ductSystem.LayoutViewMode switch
         {
             LayoutViewMode.TopDown => "Top-down view active: +X runs right, +Y runs down, and component Z remains editable.",
             LayoutViewMode.IsometricNegative => "Isometric Negative view active: the positive grid is rotated 90 degrees counterclockwise (+Y follows the former +X direction; +X follows the former -Y direction).",
@@ -3886,15 +3893,15 @@ public sealed partial class MainForm
                 out var feetPerCell)
             || !double.IsFinite(feetPerCell) || feetPerCell < 0.1 || feetPerCell > 1000.0)
         {
-            _layoutScaleInput.Text = DuctSystemScreen._ductSystem.LayoutFeetPerGridCell.ToString("0.##", CultureInfo.CurrentCulture);
+            _layoutScaleInput.Text = _host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell.ToString("0.##", CultureInfo.CurrentCulture);
             _layoutStatusLabel.Text = "Scale must be a number from 0.1 through 1000 feet per grid cell.";
             _layoutStatusLabel.ForeColor = Color.Firebrick;
             return false;
         }
 
-        DuctSystemScreen._ductSystem.LayoutFeetPerGridCell = feetPerCell;
+        _host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell = feetPerCell;
         ApplyLayoutScaleSettings();
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.SaveDuctSystem();
         _layoutStatusLabel.Text = $"Drawing scale set to {feetPerCell:0.##} feet per grid cell.";
         _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
         return true;
@@ -3906,7 +3913,7 @@ public sealed partial class MainForm
         var resized = 0;
         var failures = new List<string>();
         UpdateCalculatedLayoutValues();
-        var connections = DuctSystemScreen._ductSystem.LayoutNodes.OrderBy(node => node.Sequence)
+        var connections = _host.DuctSystemScreen._ductSystem.LayoutNodes.OrderBy(node => node.Sequence)
             .SelectMany(node => new[]
             {
                 string.IsNullOrWhiteSpace(node.ParentNodeId)
@@ -3932,10 +3939,10 @@ public sealed partial class MainForm
 
         UpdateCalculatedLayoutValues();
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.ResetCriticalPath();
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.ResetCriticalPath();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
         _layoutStatusLabel.Text = resized == 0
             ? "No connected ductwork was available to recalculate."
             : $"Recalculated {resized} duct section(s) from the current source and sink airflows."
@@ -3943,7 +3950,7 @@ public sealed partial class MainForm
         _layoutStatusLabel.ForeColor = failures.Count == 0
             ? Color.FromArgb(30, 100, 55) : Color.DarkOrange;
         if (failures.Count > 0 && !AutomatedLayoutVerification)
-            MessageBox.Show(this, string.Join("\r\n", failures.Take(12)), "Ductwork Recalculation Notices",
+            MessageBox.Show(_host, string.Join("\r\n", failures.Take(12)), "Ductwork Recalculation Notices",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
@@ -3955,7 +3962,7 @@ public sealed partial class MainForm
         var failures = new List<string>();
         UpdateCalculatedLayoutValues();
 
-        foreach (var node in DuctSystemScreen._ductSystem.LayoutNodes
+        foreach (var node in _host.DuctSystemScreen._ductSystem.LayoutNodes
                      .Where(x => !x.IsDefined && IsAutomaticSizingComponent(x))
                      .OrderBy(x => x.Sequence).ToArray())
         {
@@ -3975,7 +3982,7 @@ public sealed partial class MainForm
         }
 
         UpdateCalculatedLayoutValues();
-        foreach (var connection in DuctSystemScreen._ductSystem.LayoutNodes.OrderBy(x => x.Sequence)
+        foreach (var connection in _host.DuctSystemScreen._ductSystem.LayoutNodes.OrderBy(x => x.Sequence)
                      .SelectMany(node => new[]
                      {
                          string.IsNullOrWhiteSpace(node.ParentNodeId) ? (LayoutConnectionRef?)null : new LayoutConnectionRef(node, false),
@@ -4002,7 +4009,7 @@ public sealed partial class MainForm
                 ? "There are no supported undefined components or ducts to size."
                 : "No undefined items could be sized. " + string.Join("  ", failures.Take(3));
             if (!AutomatedLayoutVerification)
-                MessageBox.Show(this, message, "Size Undefined Components",
+                MessageBox.Show(_host, message, "Size Undefined Components",
                     MessageBoxButtons.OK, failures.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             _layoutStatusLabel.Text = message;
             _layoutStatusLabel.ForeColor = failures.Count == 0 ? Color.FromArgb(30, 100, 55) : Color.DarkOrange;
@@ -4011,15 +4018,15 @@ public sealed partial class MainForm
 
         UpdateCalculatedLayoutValues();
         CommitLayoutHistoryState(historyState);
-        DuctSystemScreen.ResetCriticalPath();
-        DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.ResetCriticalPath();
+        _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
-        DuctSystemScreen.RefreshDuctSystemGrid();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
         _layoutStatusLabel.Text = $"Automatically sized {componentCount} component(s) and {ductCount} duct(s)."
                                   + (failures.Count > 0 ? $" {failures.Count} item(s) still need attention." : string.Empty);
         _layoutStatusLabel.ForeColor = failures.Count == 0 ? Color.FromArgb(30, 100, 55) : Color.DarkOrange;
         if (failures.Count > 0 && !AutomatedLayoutVerification)
-            MessageBox.Show(this,
+            MessageBox.Show(_host,
                 "Some items remain undefined:\r\n\r\n" + string.Join("\r\n", failures.Take(12)),
                 "Automatic Sizing Completed with Notices", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
@@ -4048,20 +4055,20 @@ public sealed partial class MainForm
         switch (node.Type)
         {
             case LayoutNodeType.Coil:
-                node.TemperatureC = DuctSystemScreen._ductSystem.AutomaticSizing.Coil.TemperatureC;
-                node.PressureDropPa = DuctSystemScreen._ductSystem.AutomaticSizing.Coil.PressureDropPa;
+                node.TemperatureC = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Coil.TemperatureC;
+                node.PressureDropPa = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Coil.PressureDropPa;
                 break;
             case LayoutNodeType.Filter:
-                node.PressureDropPa = DuctSystemScreen._ductSystem.AutomaticSizing.Filter.PressureDropPa;
+                node.PressureDropPa = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Filter.PressureDropPa;
                 break;
             case LayoutNodeType.Grd:
-                node.GrdType = DuctSystemScreen._ductSystem.AutomaticSizing.Grd.GrdType;
-                node.GrdNominalDuctSizeIn = DuctSystemScreen._ductSystem.AutomaticSizing.Grd.NominalDuctSizeIn;
-                node.GrdFaceSizeIn = DuctSystemScreen._ductSystem.AutomaticSizing.Grd.FaceSizeIn;
-                node.GrdNeckDiameterIn = DuctSystemScreen._ductSystem.AutomaticSizing.Grd.NeckDiameterIn;
-                node.GrdLengthFt = DuctSystemScreen._ductSystem.AutomaticSizing.Grd.LengthFt;
-                node.GrdSlotWidthIn = DuctSystemScreen._ductSystem.AutomaticSizing.Grd.SlotWidthIn;
-                node.GrdSlotCount = DuctSystemScreen._ductSystem.AutomaticSizing.Grd.SlotCount;
+                node.GrdType = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Grd.GrdType;
+                node.GrdNominalDuctSizeIn = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Grd.NominalDuctSizeIn;
+                node.GrdFaceSizeIn = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Grd.FaceSizeIn;
+                node.GrdNeckDiameterIn = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Grd.NeckDiameterIn;
+                node.GrdLengthFt = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Grd.LengthFt;
+                node.GrdSlotWidthIn = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Grd.SlotWidthIn;
+                node.GrdSlotCount = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Grd.SlotCount;
                 var grdCfm = UnitConversions.M3PerSToCfm(node.AirflowM3PerS);
                 if (string.Equals(node.GrdType, "Grille", StringComparison.OrdinalIgnoreCase))
                 {
@@ -4082,7 +4089,7 @@ public sealed partial class MainForm
                     ApplyGrdPerformance(node, selection);
                 }
                 else
-                    node.PressureDropPa = DuctSystemScreen._ductSystem.AutomaticSizing.Grd.PressureDropPa;
+                    node.PressureDropPa = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Grd.PressureDropPa;
                 break;
         }
         node.IsDefined = true;
@@ -4105,7 +4112,7 @@ public sealed partial class MainForm
         var group = string.Equals(node.FittingGroup, "Terminals", StringComparison.OrdinalIgnoreCase)
             ? FittingCatalog.TerminalSelectionGroup
             : node.FittingGroup;
-        var defaults = DuctSystemScreen._ductSystem.AutomaticSizing.Fitting(group);
+        var defaults = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Fitting(group);
         var definition = FittingCatalog.All.FirstOrDefault(x =>
                              string.Equals(x.Code, defaults.FittingCode, StringComparison.OrdinalIgnoreCase)
                              && string.Equals(FittingCatalog.SelectionGroup(x), group, StringComparison.OrdinalIgnoreCase))
@@ -4146,15 +4153,15 @@ public sealed partial class MainForm
             var junction = new JunctionFlowData(defaults.JunctionPath, common, geometry,
                 straight, geometry, branch, geometry);
             result = FittingCalculator.Calculate(definition, inputs, junction, state.TemperatureC,
-                FixedRelativeHumidity, FixedAtmosphericPressurePa);
+                MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa);
         }
         else
             result = FittingCalculator.Calculate(definition, inputs, state.AirflowM3PerS, geometry,
-                state.TemperatureC, FixedRelativeHumidity, FixedAtmosphericPressurePa);
+                state.TemperatureC, MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa);
 
-        var fitting = SavedFitting.FromResult(DuctSystemScreen._ductSystem.ReserveFittingSequence(),
+        var fitting = SavedFitting.FromResult(_host.DuctSystemScreen._ductSystem.ReserveFittingSequence(),
             $"{definition.Code} — {definition.Description}", result, node.AirSystemType, node.BranchId);
-        DuctSystemScreen._ductSystem.Fittings.Add(fitting);
+        _host.DuctSystemScreen._ductSystem.Fittings.Add(fitting);
         node.LinkedFittingSequence = fitting.Sequence;
         node.FittingGroup = group;
         node.AirflowM3PerS = result.AirflowM3PerS ?? state.AirflowM3PerS;
@@ -4170,7 +4177,7 @@ public sealed partial class MainForm
     {
         var downstream = connection.Downstream;
         var parentId = connection.Secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
-        var upstream = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
+        var upstream = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
                            string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase))
                        ?? throw new InvalidOperationException("The upstream component was not found.");
         var state = AutomaticConnectionFlowState(upstream, downstream);
@@ -4183,11 +4190,11 @@ public sealed partial class MainForm
         if (!double.IsFinite(length) || length <= 0)
             throw new InvalidOperationException("The graph connection has no measurable length.");
 
-        var defaults = DuctSystemScreen._ductSystem.AutomaticSizing.Duct;
+        var defaults = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Duct;
         var material = DuctMaterialCatalog.All.FirstOrDefault(x =>
                            string.Equals(x.Name, defaults.MaterialName, StringComparison.OrdinalIgnoreCase))
                        ?? DuctMaterialCatalog.All.First(x => x.Name == "Galvanized Spiral Duct");
-        var shape = RequiredShapeForMaterial(material) ?? defaults.Shape;
+        var shape = MainForm.RequiredShapeForMaterial(material) ?? defaults.Shape;
         DuctCalculationResult calculation;
         if (defaults.Mode == CalculationMode.CheckEnteredSize)
         {
@@ -4195,23 +4202,23 @@ public sealed partial class MainForm
                 ? GeometryCalculator.Round(defaults.DiameterM)
                 : GeometryCalculator.Rectangular(defaults.WidthM, defaults.HeightM);
             calculation = DuctCalculator.Calculate(new DuctCalculationInput(state.AirflowM3PerS,
-                state.TemperatureC, FixedRelativeHumidity, FixedAtmosphericPressurePa, geometry, material,
-                DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod, DuctSystemScreen._ductSystem.DefaultPressureLossBasis, length));
+                state.TemperatureC, MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa, geometry, material,
+                _host.DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod, _host.DuctSystemScreen._ductSystem.DefaultPressureLossBasis, length));
         }
         else
         {
             var sizing = DuctSizingSolver.Size(new DuctSizingInput(state.AirflowM3PerS, state.TemperatureC,
-                FixedRelativeHumidity, FixedAtmosphericPressurePa, shape, 1.0, material,
-                DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod, DuctSystemScreen._ductSystem.DefaultPressureLossBasis, length,
+                MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa, shape, 1.0, material,
+                _host.DuctSystemScreen._ductSystem.DefaultEquivalentDiameterMethod, _host.DuctSystemScreen._ductSystem.DefaultPressureLossBasis, length,
                 defaults.Mode, defaults.TargetFrictionPaPerM, defaults.MaximumVelocityMPerS,
-                DuctSystemScreen._ductSystem.DefaultSizingIncrementM, DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection,
+                _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM, _host.DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection,
                 shape == DuctShape.Rectangular ? RectangularFixedDimension.Height : RectangularFixedDimension.None,
                 shape == DuctShape.Rectangular ? defaults.HeightM : 0.0));
             calculation = sizing.Calculation;
         }
 
         var existingDuct = DuctForConnection(downstream, connection.Secondary);
-        var duct = SavedDuct.FromResult(existingDuct?.Sequence ?? DuctSystemScreen._ductSystem.ReserveSequence(),
+        var duct = SavedDuct.FromResult(existingDuct?.Sequence ?? _host.DuctSystemScreen._ductSystem.ReserveSequence(),
             $"Designer duct {upstream.Id} to {downstream.Id}", calculation,
             downstream.AirSystemType, downstream.BranchId);
         duct.DeltaXM = connectionDelta.XM;
@@ -4220,7 +4227,7 @@ public sealed partial class MainForm
         duct.RequiresResizing = false;
         if (existingDuct is null)
         {
-            DuctSystemScreen._ductSystem.Ducts.Add(duct);
+            _host.DuctSystemScreen._ductSystem.Ducts.Add(duct);
             if (connection.Secondary)
                 downstream.SecondaryConnectionDuctSequence = duct.Sequence;
             else
@@ -4249,7 +4256,7 @@ public sealed partial class MainForm
         if (node.AirflowM3PerS > 0)
             return (node.AirflowM3PerS, node.TemperatureC);
         var connected = ParentNodes(node)
-            .Concat(DuctSystemScreen._ductSystem.LayoutNodes.Where(x =>
+            .Concat(_host.DuctSystemScreen._ductSystem.LayoutNodes.Where(x =>
                 string.Equals(x.ParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(x.SecondaryParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)))
             .DistinctBy(x => x.Id)
@@ -4278,7 +4285,7 @@ public sealed partial class MainForm
         {
             if (string.IsNullOrWhiteSpace(parentId))
                 continue;
-            var parent = DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
+            var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
                 string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
             if (parent is not null)
                 yield return parent;
@@ -4288,12 +4295,12 @@ public sealed partial class MainForm
     internal SavedLayoutNode? PendingLayoutNode(LayoutNodeType type) =>
         _pendingLayoutNodeId is null
             ? null
-            : DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == _pendingLayoutNodeId && x.Type == type);
+            : _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == _pendingLayoutNodeId && x.Type == type);
 
     internal SavedLayoutNode? PendingConnectionNode() =>
         _pendingConnectionNodeId is null
             ? null
-            : DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == _pendingConnectionNodeId
+            : _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == _pendingConnectionNodeId
                                                           && !string.IsNullOrWhiteSpace(_pendingConnectionSecondary
                                                               ? x.SecondaryParentNodeId : x.ParentNodeId));
 
@@ -4301,8 +4308,8 @@ public sealed partial class MainForm
     {
         var connectionNode = PendingConnectionNode();
         var node = connectionNode ?? PendingLayoutNode(LayoutNodeType.Duct);
-        duct.AirSystemType = node?.AirSystemType ?? DuctSystemScreen._ductSystem.DefaultAirSystemType;
-        duct.BranchId = node?.BranchId ?? DuctSystemScreen._ductSystem.DefaultBranchId;
+        duct.AirSystemType = node?.AirSystemType ?? _host.DuctSystemScreen._ductSystem.DefaultAirSystemType;
+        duct.BranchId = node?.BranchId ?? _host.DuctSystemScreen._ductSystem.DefaultBranchId;
         if (node is not null)
         {
             var delta = ConnectionDelta(node, connectionNode is not null && _pendingConnectionSecondary);
@@ -4331,12 +4338,12 @@ public sealed partial class MainForm
         bool allowBranchReservation = true)
     {
         var node = PendingLayoutNode(LayoutNodeType.Fitting);
-        var airSystem = node?.AirSystemType ?? DuctSystemScreen._ductSystem.DefaultAirSystemType;
-        var branch = node?.BranchId ?? DuctSystemScreen._ductSystem.DefaultBranchId;
+        var airSystem = node?.AirSystemType ?? _host.DuctSystemScreen._ductSystem.DefaultAirSystemType;
+        var branch = node?.BranchId ?? _host.DuctSystemScreen._ductSystem.DefaultBranchId;
         if (allowBranchReservation && node is not null && result.Definition.IsJunction
             && result.Junction?.Path == JunctionPath.Branch)
         {
-            branch = DuctSystemScreen._ductSystem.ReserveBranchId();
+            branch = _host.DuctSystemScreen._ductSystem.ReserveBranchId();
             node.BranchId = branch;
         }
         fitting.AirSystemType = airSystem;
@@ -4361,7 +4368,7 @@ public sealed partial class MainForm
     {
         if (string.Equals(previousId, currentId, StringComparison.OrdinalIgnoreCase))
             return;
-        foreach (var layoutNode in DuctSystemScreen._ductSystem.LayoutNodes)
+        foreach (var layoutNode in _host.DuctSystemScreen._ductSystem.LayoutNodes)
         {
             if (string.Equals(layoutNode.ParentNodeId, previousId, StringComparison.OrdinalIgnoreCase))
                 layoutNode.ParentNodeId = currentId;
@@ -4374,8 +4381,8 @@ public sealed partial class MainForm
             _pendingLayoutNodeId = currentId;
         if (string.Equals(_pendingConnectionNodeId, previousId, StringComparison.OrdinalIgnoreCase))
             _pendingConnectionNodeId = currentId;
-        if (string.Equals(DuctSystemScreen._ductSystem.CoordinateOriginNodeId, previousId, StringComparison.OrdinalIgnoreCase))
-            DuctSystemScreen._ductSystem.CoordinateOriginNodeId = currentId;
+        if (string.Equals(_host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId, previousId, StringComparison.OrdinalIgnoreCase))
+            _host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId = currentId;
     }
 
     internal void SyncLinkedItemMetadata(SavedLayoutNode node)
@@ -4397,25 +4404,25 @@ public sealed partial class MainForm
 
         if (node.LinkedDuctSequence is int ductSequence)
         {
-            var duct = DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
+            var duct = _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
             if (duct is not null)
                 ApplyToDuct(duct);
         }
         if (node.ConnectionDuctSequence is int connectionDuctSequence)
         {
-            var connectionDuct = DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == connectionDuctSequence);
+            var connectionDuct = _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == connectionDuctSequence);
             if (connectionDuct is not null)
                 ApplyToDuct(connectionDuct);
         }
         if (node.SecondaryConnectionDuctSequence is int secondaryDuctSequence)
         {
-            var secondaryDuct = DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == secondaryDuctSequence);
+            var secondaryDuct = _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == secondaryDuctSequence);
             if (secondaryDuct is not null)
                 ApplyToDuct(secondaryDuct, secondary: true);
         }
         if (node.LinkedFittingSequence is int fittingSequence)
         {
-            var fitting = DuctSystemScreen._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == fittingSequence);
+            var fitting = _host.DuctSystemScreen._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == fittingSequence);
             if (fitting is not null)
             {
                 fitting.AirSystemType = node.AirSystemType;
@@ -4443,9 +4450,10 @@ public sealed partial class MainForm
         }
     }
 
-    protected override bool ProcessCmdKey(ref Message message, Keys keyData)
+    /// <summary>Designer keyboard shortcuts (Ctrl+Z, Ctrl+Y, Esc); called from the window's ProcessCmdKey.</summary>
+    internal bool TryHandleCommandKey(Keys keyData)
     {
-        if (DuctSystemScreen._mainTabs.SelectedTab == DuctSystemScreen._layoutTab && !LayoutTextEditorHasFocus())
+        if (_host.DuctSystemScreen._mainTabs.SelectedTab == _host.DuctSystemScreen._layoutTab && !LayoutTextEditorHasFocus())
         {
             if (keyData == (Keys.Control | Keys.Z))
             {
@@ -4460,7 +4468,7 @@ public sealed partial class MainForm
             if (keyData == Keys.Escape && CancelSelectedLayoutTool())
                 return true;
         }
-        return base.ProcessCmdKey(ref message, keyData);
+        return false;
     }
 
     private bool CancelSelectedLayoutTool()
@@ -4477,7 +4485,7 @@ public sealed partial class MainForm
 
     private bool LayoutTextEditorHasFocus()
     {
-        Control? active = ActiveControl;
+        Control? active = _host.ActiveControl;
         while (active is ContainerControl container && container.ActiveControl is not null)
             active = container.ActiveControl;
         return active is TextBoxBase or ComboBox or NumericUpDown;

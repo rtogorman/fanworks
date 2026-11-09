@@ -2015,8 +2015,8 @@ internal sealed partial class FittingCalculatorScreen
 
     private void AddCurrentFittingToSystem()
     {
-        var returnToDesigner = _host.PendingLayoutNode(LayoutNodeType.Fitting) is not null;
-        var historyState = returnToDesigner ? _host.CaptureLayoutHistoryState() : null;
+        var returnToDesigner = _host.LayoutScreen.PendingLayoutNode(LayoutNodeType.Fitting) is not null;
+        var historyState = returnToDesigner ? _host.LayoutScreen.CaptureLayoutHistoryState() : null;
         CalculateFittingAndDisplay();
         if (_lastFittingCalculation is null)
             return;
@@ -2039,7 +2039,7 @@ internal sealed partial class FittingCalculatorScreen
         fitting.DeltaXM = existing?.DeltaXM ?? 0;
         fitting.DeltaYM = existing?.DeltaYM ?? 0;
         fitting.DeltaZM = existing?.DeltaZM ?? 0;
-        _host.ApplyLayoutMetadata(fitting, _lastFittingCalculation, allowBranchReservation: existing is null);
+        _host.LayoutScreen.ApplyLayoutMetadata(fitting, _lastFittingCalculation, allowBranchReservation: existing is null);
         if (existing is null)
             _host.DuctSystemScreen._ductSystem.Fittings.Add(fitting);
         else
@@ -2049,12 +2049,12 @@ internal sealed partial class FittingCalculatorScreen
         _addFittingButton.Visible = false;
         _fittingEditingLabel.Visible = false;
         if (historyState is not null)
-            _host.CommitLayoutHistoryState(historyState);
+            _host.LayoutScreen.CommitLayoutHistoryState(historyState);
         _host.DuctSystemScreen.SaveDuctSystem();
         _host.DuctSystemScreen.RefreshDuctSystemGrid();
         _host.DuctSystemScreen._mainTabs.SelectedTab = returnToDesigner ? _host.DuctSystemScreen._layoutTab : _host.DuctSystemScreen._systemTab;
         if (returnToDesigner)
-            _host._layoutStatusLabel.Text = existing is null
+            _host.LayoutScreen._layoutStatusLabel.Text = existing is null
                 ? "Fitting configured and linked. Continue placing components on the grid."
                 : $"Updated {fitting.Id} and refreshed its designer component.";
         _host.DuctSystemScreen._systemStorageStatusLabel.Text = existing is null

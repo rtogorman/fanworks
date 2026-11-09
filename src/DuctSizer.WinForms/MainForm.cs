@@ -7,6 +7,12 @@ namespace DuctSizer.WinForms;
 
 public sealed partial class MainForm : Form
 {
+    private LayoutDesignerScreen? _layoutScreen;
+    internal LayoutDesignerScreen LayoutScreen => _layoutScreen ??= new LayoutDesignerScreen(this);
+
+    protected override bool ProcessCmdKey(ref Message message, Keys keyData) =>
+        LayoutScreen.TryHandleCommandKey(keyData) || base.ProcessCmdKey(ref message, keyData);
+
     private DuctSystemScreen? _ductSystemScreen;
     internal DuctSystemScreen DuctSystemScreen => _ductSystemScreen ??= new DuctSystemScreen(this);
 
@@ -766,7 +772,7 @@ public sealed partial class MainForm : Form
         }
     }
 
-    private static DuctShape? RequiredShapeForMaterial(DuctMaterial material)
+    internal static DuctShape? RequiredShapeForMaterial(DuctMaterial material)
     {
         if (material.Name.Equals("Galvanized Spiral Duct", StringComparison.OrdinalIgnoreCase))
             return DuctShape.Round;
