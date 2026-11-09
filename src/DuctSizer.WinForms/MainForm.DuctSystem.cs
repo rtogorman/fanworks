@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using DuctSizer.Core;
@@ -54,9 +54,8 @@ public sealed partial class MainForm
     private HashSet<string> _criticalPathItemKeys = new(StringComparer.OrdinalIgnoreCase);
     private double _criticalPathPressureLossPa;
     private string _criticalPathRoute = string.Empty;
+    private IReadOnlyList<SystemCalculationIssue> _criticalPathIssues = Array.Empty<SystemCalculationIssue>();
     private sealed record SystemRowTag(bool IsFitting, int Sequence);
-    private sealed record CriticalRouteResult(double PressureLossPa, HashSet<string> ItemKeys,
-        string StartId, string EndId);
 
     private string DuctSystemStoragePath
     {
@@ -1074,28 +1073,31 @@ public sealed partial class MainForm
         }
 
         UpdateCalculatedLayoutValues();
-        var requiredAirflow = _ductSystem.Ducts.Select(x => Math.Max(0.0, x.AirflowM3PerS))
-            .Concat(_ductSystem.Fittings.Select(x => Math.Max(0.0, x.AirflowM3PerS)))
-            .Concat(_ductSystem.LayoutNodes.Where(x => x.Type != LayoutNodeType.Fan)
-                .Select(x => Math.Max(0.0, x.AirflowM3PerS)))
-            .DefaultIfEmpty(0.0)
-            .Max();
+        var fan = fans[0];
+        var requiredAirflow = FanSizing.RequiredAirflowM3PerS(_ductSystem, fan);
         if (requiredAirflow <= 0.0)
         {
-            message = "A required system airflow could not be determined. Define an airflow in the connected system first.";
+            message = "A required system airflow could not be determined. Define an airflow in the fan's connected system first.";
             return false;
         }
 
-        var fan = fans[0];
+        var priorAirflow = (fan.AirflowM3PerS, fan.AirflowUserSpecified, fan.AirflowOverride);
         fan.AirflowM3PerS = requiredAirflow;
         fan.AirflowUserSpecified = true;
         fan.AirflowOverride = false;
         UpdateCalculatedLayoutValues();
 
         var route = ComputeLongestRoute();
-        if (route.ItemKeys.Count == 0)
+        if (!route.IsComplete)
         {
-            message = "A critical route could not be determined. Define the connected ducts and components first.";
+            (fan.AirflowM3PerS, fan.AirflowUserSpecified, fan.AirflowOverride) = priorAirflow;
+            UpdateCalculatedLayoutValues();
+            var reasons = route.Issues.Take(6).Select(issue => $"• {issue.ItemId}: {issue.Message}");
+            message = route.ItemKeys.Count == 0 && route.Issues.Count == 0
+                ? "A critical route could not be determined. Define the connected ducts and components first."
+                : "The fan was not sized because the critical path is incomplete. Define or size these items first:\r\n"
+                  + string.Join("\r\n", reasons)
+                  + (route.Issues.Count > 6 ? $"\r\n• and {route.Issues.Count - 6} more" : string.Empty);
             return false;
         }
 
@@ -1105,11 +1107,27 @@ public sealed partial class MainForm
         _criticalPathCalculated = true;
         _criticalPathFilterEnabled = false;
         ApplyCriticalRoute(ComputeLongestRoute());
-        var horsepower = FanPerformance.BrakeHorsepower(requiredAirflow, fan.FanStaticPressurePa,
-            fan.FanEfficiencyPercent);
-        message = $"{fan.Id} was sized to {FormatSystemAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} static pressure, and {horsepower:0.###} hp at {fan.FanEfficiencyPercent:0.#}% efficiency.";
+        var horsepower = TryBrakeHorsepower(requiredAirflow, fan.FanStaticPressurePa, fan.FanEfficiencyPercent);
+        message = $"{fan.Id} was sized to {FormatSystemAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} static pressure, and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency.";
         return true;
     }
+
+    /// <summary>Brake horsepower, or NaN when the fan inputs are invalid (shown as "not available").</summary>
+    private static double TryBrakeHorsepower(double airflowM3PerS, double staticPressurePa, double efficiencyPercent)
+    {
+        try
+        {
+            return FanPerformance.BrakeHorsepower(airflowM3PerS, staticPressurePa, efficiencyPercent);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return double.NaN;
+        }
+    }
+
+    private static string FormatHorsepower(double horsepower) => double.IsFinite(horsepower)
+        ? $"{horsepower:0.###} hp"
+        : "not available (check fan airflow, static pressure and efficiency)";
 
     private void ViewFanInformation()
     {
@@ -1139,12 +1157,12 @@ public sealed partial class MainForm
 
         UpdateCalculatedLayoutValues();
         var fan = fans[0];
-        var horsepower = FanPerformance.BrakeHorsepower(fan.AirflowM3PerS, fan.FanStaticPressurePa,
+        var horsepower = TryBrakeHorsepower(fan.AirflowM3PerS, fan.FanStaticPressurePa,
             fan.FanEfficiencyPercent);
         information = $"{fan.Id} — System Fan\r\n\r\nAirflow: {FormatSystemAirflow(fan.AirflowM3PerS)}\r\n" +
                       $"Static pressure: {FormatSystemTotal(fan.FanStaticPressurePa)}\r\n" +
                       $"Fan efficiency: {fan.FanEfficiencyPercent:0.#}%\r\n" +
-                      $"Required motor power: {horsepower:0.###} hp";
+                      $"Required motor power: {FormatHorsepower(horsepower)}";
         return true;
     }
 
@@ -1163,132 +1181,66 @@ public sealed partial class MainForm
         _criticalPathPressureLossPa = 0.0;
         _criticalPathRoute = string.Empty;
         _criticalPathItemKeys.Clear();
+        _criticalPathIssues = Array.Empty<SystemCalculationIssue>();
     }
 
-    private void ApplyCriticalRoute(CriticalRouteResult route)
+    private void ApplyCriticalRoute(CriticalPathResult route)
     {
         _criticalPathPressureLossPa = route.PressureLossPa;
-        _criticalPathItemKeys = route.ItemKeys;
+        _criticalPathItemKeys = new HashSet<string>(route.ItemKeys, StringComparer.OrdinalIgnoreCase);
+        _criticalPathIssues = route.Issues;
         _criticalPathRoute = route.StartId == route.EndId ? route.StartId : $"{route.StartId} → {route.EndId}";
     }
 
-    private CriticalRouteResult ComputeLongestRoute()
+    /// <summary>
+    /// The critical route through the drawn system. The analysis lives in DuctSizer.Core
+    /// (<see cref="CriticalPathAnalyzer"/>) so it is covered by the engineering verification suite.
+    /// </summary>
+    private CriticalPathResult ComputeLongestRoute() => CriticalPathAnalyzer.Analyze(_ductSystem);
+
+    /// <summary>
+    /// Pressure loss charged at <paramref name="node"/> for a route that arrives through
+    /// <paramref name="arrivedSecondary"/> and leaves toward <paramref name="nextChild"/>.
+    /// Junction fittings use the ASHRAE path for that route. Returns NaN when the item cannot be calculated.
+    /// </summary>
+    private double NodePressureLoss(SavedLayoutNode node, bool arrivedSecondary = false, SavedLayoutNode? nextChild = null)
     {
-        var nodes = _ductSystem.LayoutNodes.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-        var roots = nodes.Values.Where(node =>
-                node.Type != LayoutNodeType.CalculationPoint
-                &&
-                (string.IsNullOrWhiteSpace(node.ParentNodeId) || !nodes.ContainsKey(node.ParentNodeId))
-                && (string.IsNullOrWhiteSpace(node.SecondaryParentNodeId) || !nodes.ContainsKey(node.SecondaryParentNodeId)))
-            .OrderBy(x => x.Sequence).ToArray();
-        CriticalRouteResult? best = null;
-
-        foreach (var root in roots)
-            Walk(root, 0.0, new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-                new HashSet<string>(StringComparer.OrdinalIgnoreCase), root.Id);
-
-        if (best is not null && best.ItemKeys.Count > 0)
-            return best;
-
-        var fallbackKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var fallbackLoss = 0.0;
-        foreach (var duct in _ductSystem.Ducts)
+        if (LayoutTopology.LinkedFitting(_ductSystem, node) is { } fitting)
         {
-            fallbackKeys.Add(DuctKey(duct.Sequence));
-            try { fallbackLoss += duct.Calculate().TotalPressureLossUpperPa; } catch { }
-        }
-        foreach (var fitting in _ductSystem.Fittings)
-        {
-            fallbackKeys.Add(FittingKey(fitting.Sequence));
-            try { fallbackLoss += fitting.Calculate().PressureLossPa; } catch { }
-        }
-        foreach (var equipment in _ductSystem.LayoutNodes.Where(x =>
-                     x.Type is LayoutNodeType.Reservoir or LayoutNodeType.Fan or LayoutNodeType.Coil
-                         or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CalculationPoint
-                         or LayoutNodeType.CustomComponent))
-        {
-            fallbackKeys.Add(LayoutKey(equipment.Sequence));
-            if (equipment.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CustomComponent)
-                fallbackLoss += equipment.PressureDropPa;
-        }
-        return new CriticalRouteResult(fallbackLoss, fallbackKeys, "System start", "System end");
-
-        void Walk(SavedLayoutNode node, double pressureLossPa, HashSet<string> itemKeys,
-            HashSet<string> visited, string startId)
-        {
-            if (!visited.Add(node.Id))
-                return;
-            var routeKeys = new HashSet<string>(itemKeys, StringComparer.OrdinalIgnoreCase);
-            var routeLoss = pressureLossPa + NodePressureLoss(node, routeKeys);
-            var children = nodes.Values
-                .Where(child => string.Equals(child.ParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)
-                                || string.Equals(child.SecondaryParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(x => x.Sequence).ToArray();
-            if (children.Length == 0)
+            var path = CriticalPathAnalyzer.JunctionPathForRoute(node, arrivedSecondary, nextChild);
+            try
             {
-                if (best is null || routeLoss > best.PressureLossPa)
-                    best = new CriticalRouteResult(routeLoss, routeKeys, startId, node.Id);
-                return;
+                return path is JunctionPath value
+                    ? fitting.CalculateForPath(value).PressureLossPa
+                    : fitting.Calculate().PressureLossPa;
             }
-
-            foreach (var child in children)
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+                                           or KeyNotFoundException or OverflowException)
             {
-                var secondary = string.Equals(child.SecondaryParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase);
-                var childKeys = new HashSet<string>(routeKeys, StringComparer.OrdinalIgnoreCase);
-                var edgeLoss = ConnectionPressureLoss(child, secondary, childKeys);
-                foreach (var point in CalculationPointsForConnection(child, secondary))
-                    childKeys.Add(LayoutKey(point.Sequence));
-                Walk(child, routeLoss + edgeLoss, childKeys,
-                    new HashSet<string>(visited, StringComparer.OrdinalIgnoreCase), startId);
-            }
-        }
-    }
-
-    private double NodePressureLoss(SavedLayoutNode node, HashSet<string> itemKeys)
-    {
-        if (node.LinkedFittingSequence is int fittingSequence)
-        {
-            var fitting = _ductSystem.Fittings.FirstOrDefault(x => x.Sequence == fittingSequence);
-            if (fitting is not null)
-            {
-                itemKeys.Add(FittingKey(fittingSequence));
-                try { return fitting.Calculate().PressureLossPa; } catch { return 0.0; }
+                return double.NaN;
             }
         }
         if (node.LinkedDuctSequence is int ductSequence)
-        {
-            var duct = _ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
-            if (duct is not null)
-            {
-                itemKeys.Add(DuctKey(ductSequence));
-                try { return duct.Calculate().TotalPressureLossUpperPa; } catch { return 0.0; }
-            }
-        }
-        if (node.Type is LayoutNodeType.Reservoir or LayoutNodeType.Fan or LayoutNodeType.Coil
-            or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CalculationPoint or LayoutNodeType.CustomComponent)
-        {
-            itemKeys.Add(LayoutKey(node.Sequence));
-            return node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CustomComponent
-                ? node.PressureDropPa : 0.0;
-        }
-        return 0.0;
+            return SafeDuctPressureLoss(ductSequence);
+        return node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd
+            or LayoutNodeType.CustomComponent
+            ? node.PressureDropPa
+            : 0.0;
     }
 
-    private double ConnectionPressureLoss(SavedLayoutNode downstream, bool secondary, HashSet<string> itemKeys)
+    private static string DuctKey(int sequence) => CriticalPathAnalyzer.DuctKey(sequence);
+    private static string FittingKey(int sequence) => CriticalPathAnalyzer.FittingKey(sequence);
+    private static string LayoutKey(int sequence) => CriticalPathAnalyzer.LayoutKey(sequence);
+
+    /// <summary>One line naming the items that kept the critical path from being calculated.</summary>
+    private string CriticalPathIssueSummary()
     {
-        var sequence = secondary ? downstream.SecondaryConnectionDuctSequence : downstream.ConnectionDuctSequence;
-        if (sequence is not int ductSequence)
-            return 0.0;
-        var duct = _ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence);
-        if (duct is null)
-            return 0.0;
-        itemKeys.Add(DuctKey(ductSequence));
-        try { return duct.Calculate().TotalPressureLossUpperPa; } catch { return 0.0; }
+        if (_criticalPathIssues.Count == 0)
+            return string.Empty;
+        var names = _criticalPathIssues.Select(x => x.ItemId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var listed = string.Join(", ", names.Take(6)) + (names.Length > 6 ? $" and {names.Length - 6} more" : string.Empty);
+        return $"Incomplete: {listed} could not be calculated";
     }
-
-    private static string DuctKey(int sequence) => $"D:{sequence}";
-    private static string FittingKey(int sequence) => $"F:{sequence}";
-    private static string LayoutKey(int sequence) => $"L:{sequence}";
 
     private bool ShowCriticalItem(string key) => !_criticalPathFilterEnabled || _criticalPathItemKeys.Contains(key);
 
@@ -1525,7 +1477,10 @@ public sealed partial class MainForm
         }
         _systemTotalLabel.Text = itemCount == 0
             ? "Critical-path net pressure loss: —"
-            : $"Critical-path net pressure loss: {FormatSystemTotal(_criticalPathPressureLossPa)}";
+            : _criticalPathIssues.Count > 0
+                ? $"Critical-path net pressure loss: not available ({CriticalPathIssueSummary()})"
+                : $"Critical-path net pressure loss: {FormatSystemTotal(_criticalPathPressureLossPa)}";
+        _systemTotalLabel.ForeColor = _criticalPathIssues.Count > 0 ? Color.Firebrick : Color.FromArgb(22, 65, 102);
         _systemCountLabel.Text = itemCount == 1 ? "1 item" : $"{itemCount} items";
         _systemCriticalLabel.Text = !_criticalPathCalculated
             ? "Critical route: not available"
@@ -1807,9 +1762,8 @@ public sealed partial class MainForm
         if (parent is null)
             return (double.NaN, double.NaN);
         var loss = SafeDuctPressureLoss(ductSequence);
-        var inlet = parent.PressurePa;
-        var outlet = inlet - (double.IsFinite(loss) ? loss : 0.0);
-        return (inlet, outlet);
+        var inlet = OutletPressureToward(parent, downstream);
+        return (inlet, inlet - loss);
     }
 
     private (double Inlet, double Outlet) SystemPressureForFittingPair(int fittingSequence)
@@ -1840,8 +1794,8 @@ public sealed partial class MainForm
                 string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
             if (parent is null)
                 return;
-            var ductLoss = ductSequence is int sequence ? SafeDuctPressureLoss(sequence) : 0.0;
-            incomingPressures.Add(parent.PressurePa - (double.IsFinite(ductLoss) ? ductLoss : 0.0));
+            var ductLoss = ductSequence is int sequence ? SafeDuctPressureLoss(sequence) : double.NaN;
+            incomingPressures.Add(OutletPressureToward(parent, node) - ductLoss);
         }
     }
 
@@ -2609,7 +2563,9 @@ public sealed partial class MainForm
                         : equipment.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CustomComponent
                             ? FormatSystemFittingDrop(equipment.PressureDropPa) : "0"));
         }
-        builder.AppendLine($"Critical-path total pressure loss\t{FormatSystemTotal(_criticalPathPressureLossPa)}");
+        builder.AppendLine(_criticalPathIssues.Count > 0
+            ? $"Critical-path total pressure loss\tnot available ({CriticalPathIssueSummary()})"
+            : $"Critical-path total pressure loss\t{FormatSystemTotal(_criticalPathPressureLossPa)}");
         try
         {
             Clipboard.SetText(builder.ToString());
@@ -2692,7 +2648,7 @@ public sealed partial class MainForm
                     : _ductSystem.ProjectDate;
             var logo = BuildReportLogo();
             var fan = _ductSystem.LayoutNodes.SingleOrDefault(x => x.Type == LayoutNodeType.Fan);
-            var fanHorsepower = fan is null ? 0.0 : FanPerformance.BrakeHorsepower(fan.AirflowM3PerS,
+            var fanHorsepower = fan is null ? 0.0 : TryBrakeHorsepower(fan.AirflowM3PerS,
                 fan.FanStaticPressurePa, fan.FanEfficiencyPercent);
             var metadata = new DuctSystemPdfMetadata(_ductSystem.UserName, _ductSystem.ProjectName,
                 _ductSystem.ProjectNumber, projectDate, logo.Base64, logo.Width, logo.Height,
@@ -2700,10 +2656,12 @@ public sealed partial class MainForm
                 fan?.Id ?? "No fan added", fan is null ? "Not available" : FormatSystemAirflow(fan.AirflowM3PerS),
                 fan is null ? "Not available" : FormatSystemTotal(fan.FanStaticPressurePa),
                 fan is null ? "Not available" : $"{fan.FanEfficiencyPercent:0.#}%",
-                fan is null ? "Not available" : $"{fanHorsepower:0.###} hp",
-                _criticalPathCalculated
-                    ? $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss)"
-                    : "Not calculated");
+                fan is null ? "Not available" : FormatHorsepower(fanHorsepower),
+                !_criticalPathCalculated
+                    ? "Not calculated"
+                    : _criticalPathIssues.Count > 0
+                        ? $"Not available. {CriticalPathIssueSummary()}."
+                        : $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss)");
             DuctSystemPdf.Export(temporaryPdfPath, "Duct System Schedule",
                 $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_currentUnits} units", headers, rows,
                 _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)
@@ -3449,6 +3407,12 @@ public sealed partial class MainForm
             L("Steady airflow; ASHRAE reference-velocity convention; interpolation is restricted to digitized published limits."),
             L("Duct material and roughness are not used in the ASHRAE fitting-loss coefficient calculation.")
         }));
+        if (result.TableRangeWarnings.Count > 0)
+        {
+            // Reviewer flag: at least one lookup was held at a table edge instead of interpolated.
+            sections.Add(new DuctSystemPdfCalculationSection("REVIEW REQUIRED - OUTSIDE PUBLISHED TABLE",
+                result.TableRangeWarnings.Select(warning => L(warning)).ToArray()));
+        }
         return sections;
     }
 
@@ -3628,13 +3592,13 @@ public sealed partial class MainForm
         {
             var airflowCfm = UnitConversions.M3PerSToCfm(node.AirflowM3PerS);
             var staticPressure = UnitConversions.PaToInchesWater(node.FanStaticPressurePa);
-            var horsepower = FanPerformance.BrakeHorsepower(node.AirflowM3PerS,
+            var horsepower = TryBrakeHorsepower(node.AirflowM3PerS,
                 node.FanStaticPressurePa, node.FanEfficiencyPercent);
             return new[] { new DuctSystemPdfCalculationSection("FAN STATIC PRESSURE", new[]
             {
                 L("Entered fan system static pressure rise =", $"{UnitConversions.PaToInchesWater(node.FanStaticPressurePa):0.####} in. w.c."),
                 L($"SPout = SPin + SPfan = {inlet:0.####} + {UnitConversions.PaToInchesWater(node.FanStaticPressurePa):0.####} =", $"{outlet:0.####} in. w.c."),
-                L($"BHP = CFM x SP / (6356 x efficiency) = {airflowCfm:0.##} x {staticPressure:0.####} / (6356 x {node.FanEfficiencyPercent / 100.0:0.####}) =", $"{horsepower:0.####} hp"),
+                L($"BHP = CFM x SP / (6356 x efficiency) = {airflowCfm:0.##} x {staticPressure:0.####} / (6356 x {node.FanEfficiencyPercent / 100.0:0.####}) =", double.IsFinite(horsepower) ? $"{horsepower:0.####} hp" : FormatHorsepower(horsepower)),
                 L("Positive fan pressure is a source term and is excluded from the reported critical-path total pressure loss.")
             }) };
         }

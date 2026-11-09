@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using DuctSizer.Core;
 
@@ -1276,6 +1276,12 @@ public sealed partial class MainForm
                     : $"Calculated ASHRAE {definition.Code} from its built-in table. Area: {FormatFittingArea(geometry.ActualAreaM2)}."
                 : $"Calculated pressure loss for {definition.Code} using the entered reference coefficient C.";
             _fittingStatusLabel.ForeColor = definition.IsAutomated ? Color.FromArgb(30, 100, 55) : Color.FromArgb(130, 82, 12);
+            if (result.TableRangeWarnings.Count > 0)
+            {
+                // An input beyond the published table: the coefficient is the table-edge value, not interpolated.
+                _fittingStatusLabel.Text = "Outside published table: " + string.Join(" ", result.TableRangeWarnings);
+                _fittingStatusLabel.ForeColor = Color.FromArgb(160, 82, 0);
+            }
             _addFittingButton.Enabled = true;
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or FormatException or OverflowException)
