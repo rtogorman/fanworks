@@ -1550,13 +1550,9 @@ public sealed partial class MainForm
         return bestDistance <= 0.35 ? best : null;
     }
 
-    private static bool IsSpaceSourceRole(string? role) =>
-        string.Equals(role, "Space Source", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(role, "Return Pickup", StringComparison.OrdinalIgnoreCase);
+    private static bool IsSpaceSourceRole(string? role) => SpaceRoles.IsSource(role);
 
-    private static bool IsSpaceSinkRole(string? role) =>
-        string.Equals(role, "Space Sink", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(role, "Supply Discharge", StringComparison.OrdinalIgnoreCase);
+    private static bool IsSpaceSinkRole(string? role) => SpaceRoles.IsSink(role);
 
     private static int ConnectedLayoutInputCount(SavedLayoutNode node) =>
         (string.IsNullOrWhiteSpace(node.ParentNodeId) ? 0 : 1)
@@ -3480,177 +3476,21 @@ public sealed partial class MainForm
         ? connection.Downstream.SecondaryConnectionFlowReversed
         : connection.Downstream.ConnectionFlowReversed;
 
-    /// <summary>Inlet static pressure of each node from the last system calculation, by node ID.</summary>
-    private readonly Dictionary<string, double> _layoutInletPressures = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Result of the last system calculation (inlet static pressure of each node).</summary>
+    private SystemSolution _systemSolution = SystemSolution.Empty;
 
     /// <summary>
-    /// Static pressure leaving <paramref name="parent"/> toward <paramref name="child"/>. A diverging fitting has a
-    /// different ASHRAE loss on each outlet, so the pressure feeding the branch differs from the main outlet.
+    /// Static pressure leaving <paramref name="parent"/> toward <paramref name="child"/>
+    /// (see <see cref="SystemSolver.OutletPressureToward"/>).
     /// </summary>
-    private double OutletPressureToward(SavedLayoutNode parent, SavedLayoutNode child)
-    {
-        if (LayoutTopology.IsDiverging(parent) && _layoutInletPressures.TryGetValue(parent.Id, out var inlet))
-            return inlet - NodePressureLoss(parent, false, child);
-        return parent.PressurePa;
-    }
+    private double OutletPressureToward(SavedLayoutNode parent, SavedLayoutNode child) =>
+        SystemSolver.OutletPressureToward(_ductSystem, _systemSolution, parent, child);
 
-    private void UpdateCalculatedLayoutValues()
-    {
-        _layoutInletPressures.Clear();
-        var nodes = _ductSystem.LayoutNodes.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-        var completed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var active = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var node in _ductSystem.LayoutNodes
-                     .Where(x => x.Type != LayoutNodeType.CalculationPoint)
-                     .OrderBy(x => x.Sequence))
-            CalculateNodeState(node);
-
-        foreach (var splitter in _ductSystem.LayoutNodes.Where(IsDivergingLayoutNode))
-            BalanceDivergingOutletFlows(splitter);
-
-        // Outlet balancing can change connection airflow after the first topology pass.
-        // Re-run the state walk so duct and linked-fitting losses are propagated from
-        // those final conserved flows, not from the provisional values.
-        completed.Clear();
-        active.Clear();
-        foreach (var node in _ductSystem.LayoutNodes
-                     .Where(x => x.Type != LayoutNodeType.CalculationPoint)
-                     .OrderBy(x => x.Sequence))
-            CalculateNodeState(node);
-
-        foreach (var point in _ductSystem.LayoutNodes
-                     .Where(x => x.Type == LayoutNodeType.CalculationPoint)
-                     .OrderBy(x => x.Sequence))
-        {
-            if (!nodes.TryGetValue(point.CalculationConnectionNodeId, out var downstream))
-                continue;
-            var secondary = point.CalculationConnectionSecondary;
-            var parentId = secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
-            if (!nodes.TryGetValue(parentId, out var upstream))
-                continue;
-            var incomingSequence = secondary
-                ? downstream.SecondaryConnectionDuctSequence
-                : downstream.ConnectionDuctSequence;
-            var incomingDuct = incomingSequence is int sequence
-                ? _ductSystem.Ducts.FirstOrDefault(x => x.Sequence == sequence)
-                : null;
-            point.ObservedDuctSequence = incomingSequence;
-            point.AirSystemType = downstream.AirSystemType;
-            point.BranchId = downstream.BranchId;
-            point.AirflowM3PerS = incomingDuct?.AirflowM3PerS > 0
-                ? incomingDuct.AirflowM3PerS
-                : upstream.AirflowM3PerS;
-            point.TemperatureC = incomingDuct?.TemperatureC ?? upstream.TemperatureC;
-            if (incomingDuct is not null)
-            {
-                try { point.VelocityMPerS = incomingDuct.Calculate().ActualVelocityMPerS; }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
-                {
-                    point.VelocityMPerS = 0;
-                }
-            }
-            // An unsized connection is close-coupled (no loss, reported as an assumption on the critical path).
-            // NaN (shown as "—") when an assigned duct cannot be calculated; never a silent zero loss.
-            var ductLoss = incomingSequence is int ductSequence ? SafeDuctPressureLoss(ductSequence) : 0.0;
-            point.PressurePa = OutletPressureToward(upstream, downstream)
-                               - ductLoss * Math.Clamp(point.CalculationConnectionFraction, 0.0, 1.0);
-        }
-
-        return;
-
-        void CalculateNodeState(SavedLayoutNode node)
-        {
-            if (completed.Contains(node.Id) || !active.Add(node.Id))
-                return;
-
-            var parents = new List<(SavedLayoutNode Node, bool Secondary)>();
-            if (nodes.TryGetValue(node.ParentNodeId, out var primaryParent))
-                parents.Add((primaryParent, false));
-            if (nodes.TryGetValue(node.SecondaryParentNodeId, out var secondaryParent))
-                parents.Add((secondaryParent, true));
-            foreach (var parent in parents)
-                CalculateNodeState(parent.Node);
-
-            if (parents.Count == 0)
-            {
-                SyncLinkedFittingInput(node);
-                if (node.Type == LayoutNodeType.Fan)
-                    node.PressurePa = Math.Max(0.0, node.FanStaticPressurePa);
-                else if (!(node.Type == LayoutNodeType.Reservoir && IsSpaceSourceRole(node.SpaceRole)))
-                    node.PressurePa = 0.0;
-            }
-            else
-            {
-                var incoming = parents.Select(parent =>
-                {
-                    var sequence = parent.Secondary ? node.SecondaryConnectionDuctSequence : node.ConnectionDuctSequence;
-                    var duct = sequence is int ductSequence
-                        ? _ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence)
-                        : null;
-                    var airflow = ResolveConnectionAirflow(parent.Node, node, parent.Secondary, duct);
-                    if (duct is not null)
-                        duct.TemperatureC = parent.Node.TemperatureC;
-                    // An assigned duct that cannot be calculated makes downstream pressures "not available" (NaN)
-                    // instead of silently treating it as having no loss. An unsized connection (no duct assigned)
-                    // is close-coupled; the critical path reports it as an assumption.
-                    var loss = sequence is int lossSequence ? SafeDuctPressureLoss(lossSequence) : 0.0;
-                    return new
-                    {
-                        Parent = parent.Node,
-                        Secondary = parent.Secondary,
-                        Duct = duct,
-                        Pressure = OutletPressureToward(parent.Node, node) - loss,
-                        Airflow = airflow,
-                        Temperature = duct?.TemperatureC ?? parent.Node.TemperatureC
-                    };
-                }).ToArray();
-
-                var calculatedAirflow = incoming.Sum(x => x.Airflow);
-                if (!node.AirflowUserSpecified || IsConvergingLayoutNode(node))
-                    node.AirflowM3PerS = calculatedAirflow;
-                if (node.Type != LayoutNodeType.Coil)
-                    node.TemperatureC = incoming[0].Temperature;
-                if (IsConvergingLayoutNode(node))
-                    UpdateConvergingJunction(node, incoming.Select(x => x.Airflow).ToArray());
-                // Fitting loss depends on airflow and temperature. Synchronize the linked
-                // fitting before pressure propagation so the route total and the displayed
-                // inlet/outlet gauge pressures always use the same current calculation.
-                SyncLinkedFittingInput(node);
-                var inletPressure = incoming.Min(x => x.Pressure);
-                _layoutInletPressures[node.Id] = inletPressure;
-                if (node.Type == LayoutNodeType.Fan)
-                    node.PressurePa = inletPressure + Math.Max(0.0, node.FanStaticPressurePa);
-                else if (LayoutTopology.IsDiverging(node))
-                {
-                    // Each outlet has its own ASHRAE path loss (see OutletPressureToward). The node shows the
-                    // main (straight-through) outlet pressure.
-                    var mainOutlet = LayoutTopology.ConnectionsFrom(_ductSystem, node)
-                        .FirstOrDefault(x => LayoutTopology.IsMainOutlet(node, x.Downstream));
-                    node.PressurePa = inletPressure - NodePressureLoss(node, false, mainOutlet.Downstream);
-                }
-                else
-                {
-                    // A converging fitting charges each inlet its own path; the outlet takes the lowest result.
-                    node.PressurePa = incoming.Min(x => x.Pressure - NodePressureLoss(node, x.Secondary));
-                }
-            }
-
-            active.Remove(node.Id);
-            completed.Add(node.Id);
-        }
-
-        void SyncLinkedFittingInput(SavedLayoutNode node)
-        {
-            if (node.LinkedFittingSequence is not int fittingSequence)
-                return;
-            var fitting = _ductSystem.Fittings.FirstOrDefault(x => x.Sequence == fittingSequence);
-            if (fitting is null || node.AirflowOverride)
-                return;
-            fitting.AirflowM3PerS = node.AirflowM3PerS;
-            fitting.TemperatureC = node.TemperatureC;
-        }
-    }
+    /// <summary>
+    /// Recalculates airflow, temperature and static pressure through the drawn system. The solver lives in
+    /// DuctSizer.Core (<see cref="SystemSolver"/>) so it is covered by the engineering verification suite.
+    /// </summary>
+    private void UpdateCalculatedLayoutValues() => _systemSolution = SystemSolver.Solve(_ductSystem);
 
     private SavedLayoutNode[] LayoutBoundaryNodes() => _ductSystem.LayoutNodes
         .Where(node => node.Type == LayoutNodeType.Reservoir)
@@ -3852,11 +3692,9 @@ public sealed partial class MainForm
         }
     }
 
-    private static bool IsDivergingLayoutNode(SavedLayoutNode node) =>
-        node.Type == LayoutNodeType.Fitting && FittingCatalog.OutletPortCount(node.FittingGroup) > 1;
+    private static bool IsDivergingLayoutNode(SavedLayoutNode node) => LayoutTopology.IsDiverging(node);
 
-    private static bool IsConvergingLayoutNode(SavedLayoutNode node) =>
-        node.Type == LayoutNodeType.Fitting && FittingCatalog.InletPortCount(node.FittingGroup) > 1;
+    private static bool IsConvergingLayoutNode(SavedLayoutNode node) => LayoutTopology.IsConverging(node);
 
     private IEnumerable<LayoutConnectionRef> LayoutConnectionsFrom(SavedLayoutNode upstream)
     {
@@ -3875,9 +3713,8 @@ public sealed partial class MainForm
         return sequence is int value ? _ductSystem.Ducts.FirstOrDefault(x => x.Sequence == value) : null;
     }
 
-    private static bool ConnectionAirflowUserSpecified(SavedLayoutNode downstream, bool secondary) => secondary
-        ? downstream.SecondaryConnectionAirflowUserSpecified
-        : downstream.ConnectionAirflowUserSpecified;
+    private static bool ConnectionAirflowUserSpecified(SavedLayoutNode downstream, bool secondary) =>
+        SystemSolver.ConnectionAirflowUserSpecified(downstream, secondary);
 
     private static void SetConnectionAirflowUserSpecified(SavedLayoutNode downstream, bool secondary, bool value)
     {
@@ -3899,144 +3736,9 @@ public sealed partial class MainForm
             downstream.ConnectionAirflowOverride = value;
     }
 
-    private double ResolveConnectionAirflow(SavedLayoutNode upstream, SavedLayoutNode downstream, bool secondary,
-        SavedDuct? duct)
-    {
-        if (IsDivergingLayoutNode(upstream))
-        {
-            BalanceDivergingOutletFlows(upstream);
-            return duct is not null
-                ? Math.Max(0.0, duct.AirflowM3PerS)
-                : Math.Max(0.0, downstream.AirflowM3PerS);
-        }
+    private double SafeDuctPressureLoss(int sequence) => SystemSolver.DuctLoss(_ductSystem, sequence);
 
-        if (ConnectionAirflowUserSpecified(downstream, secondary))
-            return duct?.AirflowM3PerS > 0 ? duct.AirflowM3PerS : Math.Max(0.0, downstream.AirflowM3PerS);
-
-        var calculated = Math.Max(0.0, upstream.AirflowM3PerS);
-        if (duct is not null)
-            duct.AirflowM3PerS = calculated;
-        return calculated;
-    }
-
-    private void BalanceDivergingOutletFlows(SavedLayoutNode splitter)
-    {
-        var connections = LayoutConnectionsFrom(splitter).OrderBy(x => x.Downstream.Sequence).ToArray();
-        if (connections.Length == 0)
-            return;
-
-        var inlet = Math.Max(0.0, splitter.AirflowM3PerS);
-        var locked = connections.Where(x => ConnectionAirflowUserSpecified(x.Downstream, x.Secondary)).ToArray();
-        var unlocked = connections.Except(locked).ToArray();
-        var lockedTotal = locked.Sum(ConnectionFlow);
-        var remaining = Math.Max(0.0, inlet - lockedTotal);
-        var tolerance = Math.Max(UnitConversions.CfmToM3PerS(1), inlet * 0.01);
-
-        if (unlocked.Length > 0)
-        {
-            var weights = unlocked.Select(PreferredOutletWeight).ToArray();
-            var weightTotal = weights.Sum();
-            if (weightTotal <= 0)
-            {
-                for (var index = 0; index < weights.Length; index++)
-                    weights[index] = 1.0;
-                weightTotal = weights.Length;
-            }
-            for (var index = 0; index < unlocked.Length; index++)
-                SetConnectionFlow(unlocked[index], remaining * weights[index] / weightTotal);
-        }
-
-        var actualTotal = connections.Sum(ConnectionFlow);
-        var hasAllOutlets = connections.Length >= FittingCatalog.OutletPortCount(splitter.FittingGroup);
-        var unbalanced = actualTotal > inlet + tolerance
-                         || hasAllOutlets && Math.Abs(actualTotal - inlet) > tolerance;
-        foreach (var connection in connections)
-            SetConnectionAirflowOverride(connection.Downstream, connection.Secondary,
-                ConnectionAirflowUserSpecified(connection.Downstream, connection.Secondary) && unbalanced);
-
-        UpdateDivergingJunction(splitter, connections);
-        return;
-
-        double ConnectionFlow(LayoutConnectionRef connection)
-        {
-            var duct = DuctForConnection(connection.Downstream, connection.Secondary);
-            return duct?.AirflowM3PerS > 0 ? duct.AirflowM3PerS : Math.Max(0.0, connection.Downstream.AirflowM3PerS);
-        }
-
-        void SetConnectionFlow(LayoutConnectionRef connection, double flow)
-        {
-            var duct = DuctForConnection(connection.Downstream, connection.Secondary);
-            if (duct is not null)
-                duct.AirflowM3PerS = flow;
-            if (!connection.Downstream.AirflowUserSpecified)
-                connection.Downstream.AirflowM3PerS = flow;
-        }
-
-        double PreferredOutletWeight(LayoutConnectionRef connection)
-        {
-            var fitting = splitter.LinkedFittingSequence is int sequence
-                ? _ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence)
-                : null;
-            if (fitting?.Junction is not JunctionFlowData junction || junction.CommonAirflowM3PerS <= 0)
-                return 1.0;
-            var mainPath = string.Equals(connection.Downstream.BranchId, splitter.BranchId,
-                StringComparison.OrdinalIgnoreCase);
-            return Math.Max(0.0, mainPath ? junction.StraightAirflowM3PerS : junction.BranchAirflowM3PerS);
-        }
-    }
-
-    private void UpdateDivergingJunction(SavedLayoutNode splitter, IReadOnlyList<LayoutConnectionRef> connections)
-    {
-        if (splitter.LinkedFittingSequence is not int sequence)
-            return;
-        var fitting = _ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence);
-        var geometry = fitting?.CreateGeometry();
-        if (fitting is null || geometry is null)
-            return;
-        var main = connections.FirstOrDefault(x => LayoutTopology.IsMainOutlet(splitter, x.Downstream));
-        var branch = connections.FirstOrDefault(x => !LayoutTopology.IsMainOutlet(splitter, x.Downstream));
-        var mainFlow = main.Downstream is null ? 0.0 : DuctForConnection(main.Downstream, main.Secondary)?.AirflowM3PerS
-            ?? main.Downstream.AirflowM3PerS;
-        var branchFlow = branch.Downstream is null ? 0.0 : DuctForConnection(branch.Downstream, branch.Secondary)?.AirflowM3PerS
-            ?? branch.Downstream.AirflowM3PerS;
-        fitting.AirflowM3PerS = splitter.AirflowM3PerS;
-        fitting.TemperatureC = splitter.TemperatureC;
-        // Each leg takes the size of the duct drawn on it, so the ASHRAE area and velocity ratios are real.
-        fitting.Junction = JunctionLegBuilder.ForDiverging(_ductSystem, splitter, geometry,
-            fitting.Junction?.Path ?? JunctionPath.Straight,
-            splitter.AirflowM3PerS, Math.Max(0.0, mainFlow), Math.Max(0.0, branchFlow)).Junction;
-    }
-
-    private void UpdateConvergingJunction(SavedLayoutNode merger, IReadOnlyList<double> incomingFlows)
-    {
-        if (merger.LinkedFittingSequence is not int sequence)
-            return;
-        var fitting = _ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence);
-        var geometry = fitting?.CreateGeometry();
-        if (fitting is null || geometry is null)
-            return;
-        var first = incomingFlows.Count > 0 ? Math.Max(0.0, incomingFlows[0]) : 0.0;
-        var second = incomingFlows.Count > 1 ? Math.Max(0.0, incomingFlows[1]) : 0.0;
-        var common = first + second;
-        merger.AirflowM3PerS = common;
-        fitting.AirflowM3PerS = common;
-        fitting.TemperatureC = merger.TemperatureC;
-        fitting.Junction = JunctionLegBuilder.ForConverging(_ductSystem, merger, geometry,
-            fitting.Junction?.Path ?? JunctionPath.Straight, first, second).Junction;
-    }
-
-    private double SafeDuctPressureLoss(int sequence)
-    {
-        try { return _ductSystem.Ducts.FirstOrDefault(x => x.Sequence == sequence)?.Calculate().TotalPressureLossUpperPa ?? double.NaN; }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException) { return double.NaN; }
-    }
-
-    private double SafeFittingPressureLoss(int sequence)
-    {
-        try { return _ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence)?.Calculate().PressureLossPa ?? double.NaN; }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
-                                       or KeyNotFoundException or OverflowException) { return double.NaN; }
-    }
+    private double SafeFittingPressureLoss(int sequence) => SystemSolver.FittingLoss(_ductSystem, sequence);
 
     private string FormatLayoutPressure(double pascals)
     {

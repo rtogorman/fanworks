@@ -7,13 +7,13 @@ using DuctSizer.Core;
 /// </summary>
 internal static class SystemTests
 {
-    private static readonly double Temperature = UnitConversions.FahrenheitToCelsius(70);
+    internal static readonly double Temperature = UnitConversions.FahrenheitToCelsius(70);
 
     /// <summary>
     /// Source -> 16 in duct -> diverging tee (ASHRAE 5-10) -> 14 in main duct -> sink A (1,400 cfm)
     ///                                                   \-> 8 in branch duct -> sink B (600 cfm)
     /// </summary>
-    private sealed record DivergingSystem(
+    internal sealed record DivergingSystem(
         DuctSystemDocument Document,
         SavedLayoutNode Source,
         SavedLayoutNode Splitter,
@@ -24,7 +24,7 @@ internal static class SystemTests
         SavedDuct BranchDuct,
         SavedFitting Fitting);
 
-    private static DivergingSystem BuildDivergingSystem()
+    internal static DivergingSystem BuildDivergingSystem()
     {
         var document = new DuctSystemDocument();
         var commonDuct = AddDuct(document, 16, 2_000, 20);
@@ -62,7 +62,7 @@ internal static class SystemTests
             commonDuct, mainDuct, branchDuct, fitting);
     }
 
-    private static SavedDuct AddDuct(DuctSystemDocument document, double diameterInches, double cfm, double lengthFeet)
+    internal static SavedDuct AddDuct(DuctSystemDocument document, double diameterInches, double cfm, double lengthFeet)
     {
         var duct = new SavedDuct
         {
@@ -82,7 +82,7 @@ internal static class SystemTests
         return duct;
     }
 
-    private static SavedLayoutNode AddNode(DuctSystemDocument document, LayoutNodeType type,
+    internal static SavedLayoutNode AddNode(DuctSystemDocument document, LayoutNodeType type,
         SavedLayoutNode? parent, SavedDuct? duct, string branchId = "Main")
     {
         var node = new SavedLayoutNode

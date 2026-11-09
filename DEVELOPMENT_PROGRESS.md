@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-08 (step 7 starting)
+Last updated: 2026-11-08 (step 7 done; step 8 starting)
 
 ## Where things live
 
@@ -32,7 +32,7 @@ name the repo).
 | 4. Failures visible (findings 3, 8, 10) | Done | no silent zeros; transitional upper bound; fan hp validation; fan airflow from own system |
 | 5. Project file (finding 4) | Done | `.fanworks` via `ProjectFile`; Save writes it first; Settings > Open Project |
 | 6. Logging + v0.93 release (findings 9, 11) | Done | `DiagnosticLog`, crash reports, `AutomationOptions` replaces env vars; v0.93.0 built on owner's laptop: 41/41 engineering, 16/16 interface checks |
-| 7. System solver into Core (finding 6) | In progress | |
+| 7. System solver into Core (finding 6) | Done | `SystemSolver` (Core) replaces the window's solver; bit-identical on reference project + 3 variants; 8 new solver checks (49/49); UI 16/16 (Wine) |
 | 8. One coordinate model (finding 7) | Not started | |
 | 9. Break up main window (findings 12-14) | Not started | |
 | 10. Docs, independent verification, CI (findings 15-16) | Not started | table re-check and IP clearance need the owner / a second person |
@@ -50,6 +50,24 @@ name the repo).
 - Unreadable working file is moved aside instead of overwritten.
 - `DiagnosticLog`: `%LOCALAPPDATA%\FanWorks\logs`, daily log + crash reports, 30-day retention.
 - `AutomationOptions` (internal, test-only via `InternalsVisibleTo`) replaces all `DUCTSIZER_*` environment variables.
+
+## Step 7 record
+
+- New `src/DuctSizer.Core/SystemSolver.cs`: `SystemSolver.Solve` (airflow balancing, temperature, junction
+  legs, static pressure, calculation points), `OutletPressureToward`, `NodeLoss`, `DuctLoss`, `FittingLoss`,
+  `BalanceDivergingOutletFlows`; `SpaceRoles`; `SystemSolution` (inlet pressures).
+- Window methods `UpdateCalculatedLayoutValues`, `OutletPressureToward`, `NodePressureLoss`, `Safe*PressureLoss`,
+  role/topology helpers now delegate; `ResolveConnectionAirflow`, `BalanceDivergingOutletFlows`,
+  `Update*Junction` removed from the window (about 300 lines).
+- Equivalence evidence: a harness loaded the reference project and 3 variants (locked unbalanced outlet,
+  failing duct, unsized connection) into the real window under Wine before and after the move, and the Core
+  solver on Linux; all solved states (every node pressure/airflow/temperature, duct and fitting flows, junction
+  legs) were bit-identical. Harness lives outside the repo (`/home/claude/harness`, `/home/claude/equiv`).
+- Observation (pre-existing behavior, kept): the diverging split uses the previous solve's stored straight/branch
+  flows as weights, so re-solving an unchanged system can move the last floating-point digit. Same inputs give
+  bit-identical results.
+- Not moved (UI workflows, not calculations): source/sink editor reconciliation (`ReconcileBoundaryAirflowAfterDirectEdit`,
+  `ApplyBalancedBoundaryAirflows`), automatic sizing dialogs.
 
 ## Commits (Claude working repo)
 
@@ -95,8 +113,7 @@ See the step currently "In progress" above; its detailed plan is in the section 
 
 ## Current task detail
 
-Step 7: move airflow balancing and pressure propagation (`UpdateCalculatedLayoutValues`,
-junction updates, `OutletPressureToward`, connection airflow resolution) from
-`MainForm.LayoutDesigner.cs` into a Core solver with unit tests; the window then only calls it
-and displays results. Validate: engineering + interface checks pass and the golden results above
-are unchanged.
+Step 8: one coordinate model (finding 7). Survey how positions are stored (grid cells, parent-relative deltas,
+absolute anchors, duct deltas) and resolved (`LayoutCoordinateResolver`), then make absolute coordinates the
+stored source of truth with a schema migration, a deterministic resolver, and a closure check that flags loops
+whose deltas disagree. Validate with coordinate tests, the reference project, and the interface suite.

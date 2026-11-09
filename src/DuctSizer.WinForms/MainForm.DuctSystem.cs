@@ -1237,30 +1237,8 @@ public sealed partial class MainForm
     /// <paramref name="arrivedSecondary"/> and leaves toward <paramref name="nextChild"/>.
     /// Junction fittings use the ASHRAE path for that route. Returns NaN when the item cannot be calculated.
     /// </summary>
-    private double NodePressureLoss(SavedLayoutNode node, bool arrivedSecondary = false, SavedLayoutNode? nextChild = null)
-    {
-        if (LayoutTopology.LinkedFitting(_ductSystem, node) is { } fitting)
-        {
-            var path = CriticalPathAnalyzer.JunctionPathForRoute(node, arrivedSecondary, nextChild);
-            try
-            {
-                return path is JunctionPath value
-                    ? fitting.CalculateForPath(value).PressureLossPa
-                    : fitting.Calculate().PressureLossPa;
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
-                                           or KeyNotFoundException or OverflowException)
-            {
-                return double.NaN;
-            }
-        }
-        if (node.LinkedDuctSequence is int ductSequence)
-            return SafeDuctPressureLoss(ductSequence);
-        return node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd
-            or LayoutNodeType.CustomComponent
-            ? node.PressureDropPa
-            : 0.0;
-    }
+    private double NodePressureLoss(SavedLayoutNode node, bool arrivedSecondary = false, SavedLayoutNode? nextChild = null) =>
+        SystemSolver.NodeLoss(_ductSystem, node, arrivedSecondary, nextChild);
 
     private static string DuctKey(int sequence) => CriticalPathAnalyzer.DuctKey(sequence);
     private static string FittingKey(int sequence) => CriticalPathAnalyzer.FittingKey(sequence);

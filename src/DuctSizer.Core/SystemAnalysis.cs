@@ -24,14 +24,19 @@ public static class LayoutTopology
     public static bool IsConverging(SavedLayoutNode node) =>
         node.Type == LayoutNodeType.Fitting && FittingCatalog.InletPortCount(node.FittingGroup) > 1;
 
+    /// <summary>Every connection leaving <paramref name="upstream"/>, primary and secondary (calculation points excluded).</summary>
+    public static IEnumerable<LayoutConnection> ConnectionsFrom(DuctSystemDocument document, SavedLayoutNode upstream) =>
+        ConnectionsFrom(document, upstream, includeCalculationPoints: false);
+
     /// <summary>Every connection leaving <paramref name="upstream"/>, primary and secondary.</summary>
-    public static IEnumerable<LayoutConnection> ConnectionsFrom(DuctSystemDocument document, SavedLayoutNode upstream)
+    public static IEnumerable<LayoutConnection> ConnectionsFrom(DuctSystemDocument document, SavedLayoutNode upstream,
+        bool includeCalculationPoints)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(upstream);
         foreach (var node in document.LayoutNodes)
         {
-            if (node.Type == LayoutNodeType.CalculationPoint)
+            if (!includeCalculationPoints && node.Type == LayoutNodeType.CalculationPoint)
                 continue;
             if (string.Equals(node.ParentNodeId, upstream.Id, StringComparison.OrdinalIgnoreCase))
                 yield return new LayoutConnection(upstream, node, false);

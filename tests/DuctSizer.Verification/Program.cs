@@ -43,7 +43,15 @@ var tests = new (string Name, Action Run)[]
     ("Out-of-range table lookups are flagged", SystemTests.OutOfRangeTableLookupsAreFlagged),
     ("Transitional flow uses the upper bound everywhere", SystemTests.TransitionalFlowUsesTheUpperBoundEverywhere),
     ("Fan power rejects invalid inputs", SystemTests.FanPowerRejectsInvalidInputs),
-    ("Fan airflow comes from its own system", SystemTests.FanAirflowComesFromItsOwnSystem)
+    ("Fan airflow comes from its own system", SystemTests.FanAirflowComesFromItsOwnSystem),
+    ("System solver conserves airflow at a diverging junction", SolverTests.DivergingJunctionConservesAirflow),
+    ("System solver follows each junction path's pressure loss", SolverTests.PressureFollowsEachJunctionPath),
+    ("System solver: fan static closes the loop to zero", SolverTests.FanAddsStaticPressureAndLossesCloseToZero),
+    ("System solver flags an overflowing locked outlet", SolverTests.LockedOutletOverflowIsFlagged),
+    ("System solver: failed duct makes downstream pressure not available", SolverTests.FailedDuctMakesDownstreamPressureNotAvailable),
+    ("System solver: unsized connection is close-coupled", SolverTests.UnsizedConnectionIsCloseCoupled),
+    ("System solver sums converging inlets", SolverTests.ConvergingJunctionSumsItsInlets),
+    ("System solver is repeatable", SolverTests.SolvingTwiceGivesTheSameResult)
 };
 
 var failures = new List<string>();
