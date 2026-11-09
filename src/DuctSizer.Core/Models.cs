@@ -57,8 +57,16 @@ public sealed record DuctMaterial(string Name, double RoughnessFeet, string Note
     public override string ToString() => Name;
 }
 
+/// <summary>Duct materials and their absolute roughness, as offered in the calculator and schedule.</summary>
+/// <remarks>
+/// The first entry, "Legacy Reference" (0.0007 ft), is the program default so results match the McQuay DesignTools
+/// reference the project was validated against. It is rougher than the value ASHRAE Handbook - Fundamentals lists for
+/// typical galvanized steel duct (0.0003 ft, "Galvanized Spiral Duct" here), so friction losses with the default are
+/// somewhat conservative. The material is shown with every duct result and in the report.
+/// </remarks>
 public static class DuctMaterialCatalog
 {
+    /// <summary>All materials; the first is the default.</summary>
     public static IReadOnlyList<DuctMaterial> All { get; } = new[]
     {
         new DuctMaterial("Legacy Reference", 0.00070, "Uses the classic McQuay DesignTools reference roughness of 0.0007 ft."),
@@ -177,6 +185,12 @@ public sealed record DuctSizingResult(
     DuctGeometry RecommendedGeometry,
     DuctCalculationResult Calculation);
 
+/// <summary>Unit conversions used at the UI and report boundaries (all calculations are SI internally).</summary>
+/// <remarks>
+/// Length, area and flow factors are exact definitions. 1 in. w.c. = 249.08891 Pa is the conventional inch of water
+/// at 4 C (39.2 F). ASHRAE practice sometimes uses 248.84 Pa (water at 60 F); the two differ by about 0.1%, which is
+/// below the precision of duct design inputs, and the factor is stated in the calculation report.
+/// </remarks>
 public static class UnitConversions
 {
     public const double FeetToMeters = 0.3048;

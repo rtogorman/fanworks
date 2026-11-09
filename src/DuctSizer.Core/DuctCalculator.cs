@@ -1,7 +1,27 @@
 namespace DuctSizer.Core;
 
+/// <summary>
+/// Friction pressure loss of a straight duct (Darcy-Weisbach).
+/// </summary>
+/// <remarks>
+/// <para>dp/L = f / D x rho V^2 / 2, total loss = dp/L x L. Air properties come from <see cref="AirProperties"/> and f
+/// from <see cref="FrictionModel"/>.</para>
+/// <para>Velocity and diameter basis:</para>
+/// <list type="bullet">
+/// <item>Round duct: actual area, actual velocity, actual diameter.</item>
+/// <item>Rectangular duct, <see cref="PressureLossBasis.EquivalentRoundArea"/> (default): the equivalent-round diameter
+/// (Huebscher by default, see <see cref="GeometryCalculator"/>), its area and the corresponding velocity; round-duct
+/// friction. This is the ASHRAE Duct Design chapter practice.</item>
+/// <item>Rectangular duct, <see cref="PressureLossBasis.ActualDuctArea"/>: actual area and velocity with the hydraulic
+/// diameter 4A/P and the rectangular laminar correlation.</item>
+/// </list>
+/// <para>Transitional flow returns lower and upper bounds; the headline rate and total are the upper bound.</para>
+/// </remarks>
 public static class DuctCalculator
 {
+    /// <summary>Calculates the friction loss of one duct run (see class remarks).</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Airflow or length is not positive, or the geometry has no area.</exception>
+    /// <exception cref="InvalidOperationException">A result is outside the supported numerical range.</exception>
     public static DuctCalculationResult Calculate(DuctCalculationInput input)
     {
         ValidateInput(input);

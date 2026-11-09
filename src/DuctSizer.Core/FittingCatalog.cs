@@ -247,6 +247,17 @@ public static class FittingCatalog
         new("c", "ASHRAE coefficient C", "", 0.50, -10_000.0, 10_000.0,
             "Enter the signed branch or straight coefficient from the indicated ASHRAE junction table.");
 
+    /// <summary>
+    /// Every fitting, terminal and VAV definition, in display order.
+    /// </summary>
+    /// <remarks>
+    /// Each definition's <see cref="FittingDefinition.Code"/> is the ASHRAE fitting number (ASHRAE Duct Fitting
+    /// Database / Handbook - Fundamentals, Duct Design chapter) or a manufacturer catalog code, and its
+    /// <see cref="FittingDefinition.SourceNote"/> names the source. Digitized tables are interpolated, never
+    /// extrapolated: an input outside a table uses the edge value and the result carries a
+    /// <see cref="FittingCalculationResult.TableRangeWarnings"/> entry. The transcriptions have not yet had an
+    /// independent second check; docs/TABLE_VERIFICATION.md is the register for that check, with a row per entry.
+    /// </remarks>
     public static IReadOnlyList<FittingDefinition> All { get; } = Build();
 
     private static readonly IReadOnlyDictionary<string, string> LegacyCodeMap =

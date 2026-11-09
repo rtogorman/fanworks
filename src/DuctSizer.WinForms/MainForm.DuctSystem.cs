@@ -3351,7 +3351,8 @@ public sealed partial class MainForm
                 Input("Atmospheric pressure p_atm", $"{result.Input.AtmosphericPressurePa * 0.000145037738:0.###} psia"),
                 Input("Duct length L", $"{lengthFt:0.###} ft"),
                 Input("Final duct geometry", finalSize),
-                Input("Absolute roughness epsilon", $"{roughnessFt:0.######} ft")
+                Input("Absolute roughness epsilon", $"{roughnessFt:0.######} ft"),
+                Input("Pressure unit", $"1 in. w.c. = {UnitConversions.InchesWaterToPascals:0.#####} Pa (water at 39.2 deg F)")
             }),
             new DuctSystemPdfCalculationSection("1. FINAL DUCT GEOMETRY", new[]
             {

@@ -59,7 +59,8 @@ var tests = new (string Name, Action Run)[]
     ("Undo history is bounded", HistoryTests.UndoHistoryIsBounded),
     ("Layout model check: valid system is clean", ModelCheckTests.ValidSystemHasNoModelIssues),
     ("Layout model check: invalid combinations reported", ModelCheckTests.InvalidCombinationsAreReported),
-    ("Layout model check: closed upstream loop reported", ModelCheckTests.ClosedUpstreamLoopIsReported)
+    ("Layout model check: closed upstream loop reported", ModelCheckTests.ClosedUpstreamLoopIsReported),
+    ("Exports do not depend on regional settings", ExportCultureTests.ExportsDoNotDependOnRegionalSettings)
 };
 
 var failures = new List<string>();

@@ -1,0 +1,41 @@
+# Windows build: engineering checks, interface checks, and an x64 single-file release artifact.
+# Runs on every push and pull request once the repository is on GitHub.
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Engineering verification
+        run: dotnet run --project tests/DuctSizer.Verification/DuctSizer.Verification.csproj -c Release
+
+      - name: Interface verification
+        shell: pwsh
+        run: |
+          dotnet build tests/DuctSizer.UiVerification/DuctSizer.UiVerification.csproj -c Release -p:UseAppHost=false -m:1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet tests/DuctSizer.UiVerification/bin/Release/net8.0-windows/DuctSizer.UiVerification.dll
+          exit $LASTEXITCODE
+
+      - name: Publish win-x64
+        run: >
+          dotnet publish src/DuctSizer.WinForms/DuctSizer.WinForms.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+          -p:DebugType=None -p:DebugSymbols=false -o publish
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FanWorks-win-x64
+          path: publish/

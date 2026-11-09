@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-08 (step 9 done; step 10 starting)
+Last updated: 2026-11-09 (steps 1-10 done in code; v0.94.0 Windows build pending)
 
 ## Where things live
 
@@ -35,7 +35,7 @@ name the repo).
 | 7. System solver into Core (finding 6) | Done | `SystemSolver` (Core) replaces the window's solver; bit-identical on reference project + 3 variants; 8 new solver checks (49/49); UI 16/16 (Wine) |
 | 8. One coordinate model (finding 7) | Done, reduced scope (see Step 8 record) | `LayoutGeometryCheck` detects non-closing loops, duct offset/length mismatches, unplaced components; shown on the Duct System summary, tooltip and PDF; resolver documented. Storage still relative (decision recorded) |
 | 9. Break up main window (findings 12-14) | Done, reduced scope (see Step 9 record) | undo capped; 14 classes moved to own files; `LayoutModelCheck` per-type rules. Per-tab screen classes deferred (decision recorded) |
-| 10. Docs, independent verification, CI (findings 15-16) | Not started | table re-check and IP clearance need the owner / a second person |
+| 10. Docs, independent verification, CI (findings 15-16) | Done in code; human items open | XML docs with equations/sources; `docs/TABLE_VERIFICATION.md` (108 entries, all "Not verified"); ARCHITECTURE/DEVELOPER_GUIDE; culture test; warnings as errors; `global.json`; CI workflow. Open: independent table re-check, IP clearance, GitHub |
 
 ## Completed changes (v0.93.0)
 
@@ -105,6 +105,28 @@ name the repo).
   (2) extract the Fitting Loss tab (least shared state), then Duct System, then Layout Designer, (3) per-type
   saved models with a schema 13 migration.
 
+## Step 10 record
+
+- XML documentation with equations, constants, sources and limits: `FrictionModel`, `AirProperties`,
+  `DuctCalculator`, `GeometryCalculator`, `DuctSizingSolver` (incl. exact rounding/tie rules), `DuctMaterialCatalog`
+  (finding 16: Legacy Reference 0.0007 ft default vs ASHRAE galvanized 0.0003 ft), `UnitConversions` (finding 16:
+  249.08891 Pa per in. w.c. at 39.2 F), `FittingCatalog.All`, plus all new Core types from steps 7-9.
+- Duct calculation report now states the pressure unit factor.
+- `docs/TABLE_VERIFICATION.md`: generated register of all 108 catalog entries (code, inputs, source note) with blank
+  columns for source page, verifier, date and result.
+- `ARCHITECTURE.md`, `DEVELOPER_GUIDE.md`.
+- New check: CSV and PDF exports are byte-identical under invariant, de-DE, fr-FR and en-US regional settings (58/58).
+- `TreatWarningsAsErrors` in Core, app and engineering tests (default analyzers are clean; the stricter
+  `latest-recommended` set reports ~270 style/perf items, mostly false-positive CA1305 on string holes and CA1861
+  constant arrays, left for later).
+- `global.json` (SDK 8.0.x, latest feature band); `.github/workflows/build.yml` (Windows: engineering checks,
+  interface checks, publish, artifact). Not yet run: needs the GitHub repository.
+- Version 0.94.0; README "What changed in 0.94.0".
+- Reference project after all steps: solved state and per-item/critical-path results identical to v0.93.
+- Not done (need people/documents): independent re-check of the transcriptions, ASHRAE page citations per table
+  (needs the owner's ASHRAE source), image/icon and catalog-data rights, a LICENSE decision for commercial sale,
+  code signing.
+
 ## Commits (Claude working repo)
 
 - `b5f8096` Baseline v0.92.0
@@ -133,6 +155,9 @@ the three sinks it feeds total 1,200 cfm.
 - Independent re-check of ASHRAE / Titus / Price table transcriptions needs the source documents and a second person.
 - IP / licensing clearance for embedded ASHRAE tables and images, Titus catalog data and toolbox icons (owner / legal).
 - Interface tests write to the real user log folder while running (harmless; could be redirected).
+- Deferred restructuring (owner to confirm): absolute-coordinate storage (step 8 record); per-tab screen classes and
+  per-type saved models (step 9 record).
+- Stricter analyzer set (`latest-recommended`) not yet adopted (~270 findings, mostly style).
 
 ## Architecture notes and decisions
 
@@ -149,8 +174,5 @@ See the step currently "In progress" above; its detailed plan is in the section 
 
 ## Current task detail
 
-Step 10: documentation and verification (findings 15-16). Plan: XML documentation with equations and sources on
-the public Core calculation API (only sources visible in the code or well established; nothing invented);
-`docs/TABLE_VERIFICATION.md` register of every digitized table for the independent re-check; `ARCHITECTURE.md`
-and `DEVELOPER_GUIDE.md`; stated defaults (finding 16); `global.json` SDK pin; CI workflow for GitHub; analyzer
-settings where the code is already clean. Validate with both suites and a Windows build.
+Build v0.94.0 on the owner's laptop (`RunBuild.cmd`), confirm 58/58 and 16/16 on Windows, then report. After that,
+the remaining items are owner decisions or larger dedicated tasks (see "Outstanding" and the step 8/9 records).

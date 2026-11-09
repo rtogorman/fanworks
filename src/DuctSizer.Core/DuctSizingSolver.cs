@@ -1,7 +1,30 @@
 namespace DuctSizer.Core;
 
+/// <summary>
+/// Sizes a duct for a maximum velocity or a target friction rate, then rounds it to a size increment.
+/// </summary>
+/// <remarks>
+/// <list type="bullet">
+/// <item>Maximum velocity: round D = sqrt(4 Q / (pi Vmax)); rectangular with a fixed side s, other side = Q / (Vmax s);
+/// rectangular with width = r x height, height = sqrt(Q / (Vmax r)). Velocity is on the actual area.</item>
+/// <item>Target friction: the size whose friction rate (upper bound in transitional flow, same basis as
+/// <see cref="DuctCalculator"/>) equals the target, found by bisection on the free dimension. The bracket starts at
+/// [1e-5 m, 0.10 m] and is widened by halving/doubling (up to 80 times each); trial sizes too small for the friction
+/// model count as infinite loss. Stops at a relative tolerance of 1e-10 (at most 256 iterations).</item>
+/// <item>Rounding (when the increment is above 0): <see cref="SizeRoundingDirection.Down"/> takes the largest
+/// multiple of the increment not above the continuous size; <see cref="SizeRoundingDirection.Automatic"/> takes the
+/// nearest multiple, with exact halves going up. A dimension smaller than one increment is kept unrounded, and a fixed
+/// rectangular side is never rounded. Rounding can therefore give a size slightly below the continuous size; the
+/// returned calculation is always for the rounded size, so its velocity and friction show the effect.</item>
+/// </list>
+/// Results are deterministic for the same input.
+/// </remarks>
 public static class DuctSizingSolver
 {
+    /// <summary>Sizes and rounds a duct (see class remarks). Returns the continuous size, the rounded size, and the
+    /// full calculation for the rounded size.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">An input is missing or out of range.</exception>
+    /// <exception cref="InvalidOperationException">No size could be bracketed for the requested friction rate.</exception>
     public static DuctSizingResult Size(DuctSizingInput input)
     {
         ValidateInput(input);

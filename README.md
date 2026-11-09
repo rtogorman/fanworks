@@ -197,6 +197,16 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.94.0
+
+Version 0.94.0 restructures the code for maintainability; calculated results are unchanged from 0.93.0.
+
+- **The system solver is part of the engineering library.** Airflow balancing and pressure propagation moved out of the window into `DuctSizer.Core` (`SystemSolver`) with their own checks. Results were confirmed bit-identical before and after on a real project.
+- **Layout review.** The Duct System tab now flags layout items to review (orange text with a list on hover; also in the PDF): connections whose X/Y/Z offsets do not close around a loop, ducts whose offset or length disagrees with the drawing (a duct shorter than the straight run understates its loss), components with no defined position, and invalid component data such as missing linked items or a fan efficiency above 100%.
+- **Undo** keeps the last 100 Designer changes.
+- **Reports** state the pressure unit used (1 in. w.c. = 249.08891 Pa).
+- **For developers:** `ARCHITECTURE.md`, `DEVELOPER_GUIDE.md`, `DEVELOPMENT_PROGRESS.md`, a register of every digitized table for independent checking (`docs/TABLE_VERIFICATION.md`), equation and source documentation in the engineering library, an exports-independent-of-regional-settings check, warnings treated as errors, an SDK pin and a CI workflow.
+
 ## What changed in 0.93.0
 
 Version 0.93.0 is a correctness and stability release that follows the v0.92.0 code review.
