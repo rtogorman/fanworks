@@ -204,6 +204,7 @@ For target-pressure-rate and target-velocity sizing, the project-wide increment 
 - **Positions are stored as absolute coordinates.** Project files (format 14) store each component's absolute X/Y/Z; when a file is opened, the connection offsets are rebuilt from those positions. Older projects convert automatically without moving anything. Converging loops can no longer have offsets that disagree.
 - **Positions are entered relative to a neighbour.** The component and fitting position fields show and accept the offset from the upstream component, or from the downstream component when there is no upstream one (labelled DOWNSTREAM). Only an unconnected component uses absolute X/Y/Z.
 - **Each component type saves only its own data** (fan, terminal, space, calculation point, fitting blocks).
+- **The window fits smaller screens.** FanWorks opens at 1200 x 1200, or at the size of the desktop (minus the taskbar) when that is smaller, centred.
 - **For developers:** each tab is its own class (`DuctCalculatorScreen`, `FittingCalculatorScreen`, `DuctSystemScreen`, `LayoutDesignerScreen`); `MainForm` keeps the window frame, units and shared control builders.
 
 ## What changed in 0.94.0

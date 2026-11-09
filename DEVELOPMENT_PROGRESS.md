@@ -143,6 +143,7 @@ laptop folder is a plain copy (no `.git`); it is kept in step by copying changed
 - `9f86bbb` / `589371d` / `70265c9` / `1949647` Step 9: one screen class per tab
 - `a3b08c6` v0.95.0: docs, unsized display fix
 - `bebe54e` Test warnings fixed; v0.95.0 Windows verification recorded
+- `b19b520` Window fits small screens; CI display size; CI green
 
 ## Reference project golden results (v0.93.0 Core)
 
@@ -267,6 +268,14 @@ step 10 refresh, release v0.95.0.
   reflected method). Fixed afterwards by guarding those lookups; tests re-run 63/63 and 16/16 (Linux/Wine). No
   application code changed.
 - History pushed to GitHub (`origin/main`); the CI workflow `.github/workflows/build.yml` runs on each push.
+- First CI runs failed at the interface checks' opening-size check: the hosted runner's display is 1024 x 768,
+  so Windows clipped the 1200 x 1200 window. Fixes (`b19b520`): (1) the app now opens fitted to the screen's
+  working area when it is smaller than 1200 x 1200, centred (`MainForm.OpeningSize`, tested); (2) the workflow sets
+  the runner display to 1920 x 1080 first, because other interface checks exercise real window sizes (under Wine at
+  1024 x 768 a fitting-image layout check fails; at 1920 x 1080 all 16 pass). CI run 42716963071: 63/63, 16/16,
+  FanWorks-win-x64 artifact uploaded.
+- CI annotation (not an error): actions/checkout, setup-dotnet and upload-artifact v4 target Node 20, which GitHub
+  is retiring; bump them to their next major versions when convenient.
 - Owner's folder: `MainForm.FittingLoss.cs`, `MainForm.DuctSystem.cs`, `MainForm.LayoutDesigner.cs` are one-line
   stubs left because the remote-file tool cannot delete; the owner can delete them (the build is fine either way).
 
