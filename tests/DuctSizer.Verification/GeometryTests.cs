@@ -84,3 +84,71 @@ internal static class GeometryTests
         duct.LengthM = Math.Max(duct.LengthM, Math.Sqrt(x * x + y * y + z * z));
     }
 }
+
+/// <summary>Checks for <see cref="BoundedHistory{T}"/> (undo/redo capacity, finding 14).</summary>
+internal static class HistoryTests
+{
+    public static void UndoHistoryIsBounded()
+    {
+        var history = new BoundedHistory<int>(3);
+        for (var value = 1; value <= 5; value++)
+            history.Push(value);
+        if (history.Count != 3 || history.Pop() != 5 || history.Pop() != 4 || history.Pop() != 3 || history.Count != 0)
+            throw new Exception("A full history must keep the newest entries and discard the oldest.");
+        var empty = false;
+        try { history.Pop(); }
+        catch (InvalidOperationException) { empty = true; }
+        if (!empty)
+            throw new Exception("Popping an empty history must fail, not return a default value.");
+    }
+}
+
+/// <summary>Checks for <see cref="LayoutModelCheck"/> (per-type model rules, finding 13).</summary>
+internal static class ModelCheckTests
+{
+    public static void ValidSystemHasNoModelIssues()
+    {
+        var system = SystemTests.BuildDivergingSystem();
+        var issues = LayoutModelCheck.Check(system.Document);
+        if (issues.Count != 0)
+            throw new Exception("A valid system must not report model issues: " + string.Join("; ", issues.Select(x => x.Message)));
+    }
+
+    public static void InvalidCombinationsAreReported()
+    {
+        var system = SystemTests.BuildDivergingSystem();
+        var document = system.Document;
+        system.MainSink.SecondaryParentNodeId = system.Source.Id;      // only converging fittings have two inlets
+        system.BranchSink.ConnectionDuctSequence = 999;               // dangling duct reference
+        system.Source.SpaceRole = "Lobby";                            // neither source nor sink
+        var fan = SystemTests.AddNode(document, LayoutNodeType.Fan, parent: null, duct: null);
+        fan.FanEfficiencyPercent = 120;
+        var coil = SystemTests.AddNode(document, LayoutNodeType.Coil, parent: null, duct: null);
+        coil.PressureDropPa = -10;
+        var issues = LayoutModelCheck.Check(document);
+        Expect(system.MainSink.Id, "second inlet");
+        Expect(system.BranchSink.Id, "D-999");
+        Expect(system.Source.Id, "space role");
+        Expect(fan.Id, "efficiency");
+        Expect(coil.Id, "pressure drop");
+        return;
+
+        void Expect(string itemId, string text)
+        {
+            if (!issues.Any(x => x.ItemId == itemId && x.Message.Contains(text, StringComparison.OrdinalIgnoreCase)))
+                throw new Exception($"Expected a model issue on {itemId} mentioning \"{text}\".");
+        }
+    }
+
+    public static void ClosedUpstreamLoopIsReported()
+    {
+        var document = new DuctSystemDocument();
+        var a = SystemTests.AddNode(document, LayoutNodeType.Coil, parent: null, duct: null);
+        var b = SystemTests.AddNode(document, LayoutNodeType.Filter, a, duct: null);
+        a.ParentNodeId = b.Id;
+        var issues = LayoutModelCheck.Check(document);
+        if (!issues.Any(x => x.ItemId == a.Id && x.Message.Contains("loop", StringComparison.Ordinal)))
+            throw new Exception("Components whose upstream connections lead back to themselves must be reported.");
+        SystemSolver.Solve(document);                                  // and the solver must still terminate
+    }
+}

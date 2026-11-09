@@ -1257,10 +1257,23 @@ public sealed partial class MainForm
     /// <summary>Layout geometry problems found at the last schedule refresh (see <see cref="LayoutGeometryCheck"/>).</summary>
     private IReadOnlyList<LayoutGeometryIssue> _layoutGeometryIssues = Array.Empty<LayoutGeometryIssue>();
 
-    /// <summary>"Layout geometry: N issue(s)" preceded by <paramref name="separator"/>, or empty when the layout is consistent.</summary>
-    private string LayoutGeometryNote(string separator) => _layoutGeometryIssues.Count == 0
-        ? string.Empty
-        : $"{separator}Layout geometry: {_layoutGeometryIssues.Count} issue{(_layoutGeometryIssues.Count == 1 ? string.Empty : "s")} to review";
+    private string _lastLoggedLayoutReview = string.Empty;
+
+    /// <summary>Layout model problems found at the last schedule refresh (see <see cref="LayoutModelCheck"/>).</summary>
+    private IReadOnlyList<SystemCalculationIssue> _layoutModelIssues = Array.Empty<SystemCalculationIssue>();
+
+    /// <summary>Model problems first (they can affect results), then geometry problems.</summary>
+    private IReadOnlyList<string> LayoutReviewMessages() =>
+        _layoutModelIssues.Select(issue => issue.Message)
+            .Concat(_layoutGeometryIssues.Select(issue => issue.Message)).ToArray();
+
+    /// <summary>"Layout: N items to review" preceded by <paramref name="separator"/>, or empty when the layout checks are clean.</summary>
+    private string LayoutGeometryNote(string separator)
+    {
+        var count = _layoutModelIssues.Count + _layoutGeometryIssues.Count;
+        return count == 0 ? string.Empty
+            : $"{separator}Layout: {count} item{(count == 1 ? string.Empty : "s")} to review";
+    }
 
     /// <summary>Short note on assumptions made on the critical route, or empty when there are none.</summary>
     private string CriticalPathAssumptionNote()
@@ -1515,16 +1528,21 @@ public sealed partial class MainForm
             : _criticalPathAssumptions.Count > 0 ? Color.FromArgb(150, 85, 0) : Color.FromArgb(22, 65, 102);
         _systemCountLabel.Text = itemCount == 1 ? "1 item" : $"{itemCount} items";
         _layoutGeometryIssues = LayoutGeometryCheck.Check(_ductSystem);
+        _layoutModelIssues = LayoutModelCheck.Check(_ductSystem);
         _systemCriticalLabel.Text = (!_criticalPathCalculated
             ? "Critical route: not available"
             : $"Route: {_criticalPathRoute}") + LayoutGeometryNote(" · ");
-        _systemCriticalLabel.ForeColor = _layoutGeometryIssues.Count > 0
+        var layoutReview = LayoutReviewMessages();
+        _systemCriticalLabel.ForeColor = layoutReview.Count > 0
             ? Color.FromArgb(150, 85, 0) : Color.FromArgb(31, 120, 180);
-        _layoutToolTips.SetToolTip(_systemCriticalLabel, _layoutGeometryIssues.Count == 0
+        _layoutToolTips.SetToolTip(_systemCriticalLabel, layoutReview.Count == 0
             ? string.Empty
-            : "Layout geometry to review:\r\n" + string.Join("\r\n",
-                _layoutGeometryIssues.Take(12).Select(issue => "• " + issue.Message))
-              + (_layoutGeometryIssues.Count > 12 ? $"\r\n• and {_layoutGeometryIssues.Count - 12} more" : string.Empty));
+            : "Layout items to review:\r\n" + string.Join("\r\n", layoutReview.Take(12).Select(message => "• " + message))
+              + (layoutReview.Count > 12 ? $"\r\n• and {layoutReview.Count - 12} more" : string.Empty));
+        var reviewSignature = string.Join("|", layoutReview);
+        if (layoutReview.Count > 0 && !string.Equals(reviewSignature, _lastLoggedLayoutReview, StringComparison.Ordinal))
+            DiagnosticLog.Info($"Layout review: {layoutReview.Count} item(s). " + string.Join(" | ", layoutReview.Take(20)));
+        _lastLoggedLayoutReview = reviewSignature;
         _criticalPathFilterButton.Enabled = _criticalPathCalculated;
         _criticalPathFilterButton.Text = _criticalPathFilterEnabled ? "Show All Items" : "Isolate Critical Path";
         _systemTab.Text = "Duct System";
@@ -2728,8 +2746,8 @@ public sealed partial class MainForm
                         : $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss"
                           + (_criticalPathAssumptions.Count > 0 ? $"; {CriticalPathAssumptionNote()})" : ")")
                           + LayoutGeometryNote(". ")
-                          + (_layoutGeometryIssues.Count > 0
-                              ? ": " + string.Join(" ", _layoutGeometryIssues.Take(6).Select(issue => issue.Message))
+                          + (LayoutReviewMessages() is { Count: > 0 } review
+                              ? ": " + string.Join(" ", review.Take(6))
                               : string.Empty));
             DuctSystemPdf.Export(temporaryPdfPath, "Duct System Schedule",
                 $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_currentUnits} units", headers, rows,
@@ -3998,74 +4016,4 @@ public sealed partial class MainForm
 
     private static string Cell(DataGridViewRow row, string columnName) =>
         Convert.ToString(row.Cells[columnName].Value, CultureInfo.CurrentCulture) ?? string.Empty;
-}
-
-internal sealed class FanInformationDialog : Form
-{
-    internal FanInformationDialog(string information)
-    {
-        Text = "Fan Information";
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        ShowInTaskbar = false;
-        ClientSize = new Size(570, 304);
-        BackColor = Color.FromArgb(245, 247, 250);
-        Font = new Font("Segoe UI", 9.5F);
-        Shown += (_, _) => UiPolish.ApplyDialogSurface(this);
-
-        var icon = new PictureBox
-        {
-            Name = "FanInformationIcon",
-            Size = new Size(132, 132),
-            Anchor = AnchorStyles.None,
-            Margin = new Padding(14),
-            BackColor = Color.White
-        };
-        icon.Paint += (_, args) =>
-        {
-            var side = Math.Max(1, Math.Min(icon.ClientSize.Width, icon.ClientSize.Height) - 28);
-            var square = new Rectangle((icon.ClientSize.Width - side) / 2, (icon.ClientSize.Height - side) / 2,
-                side, side);
-            LayoutIconPainter.Draw(args.Graphics, LayoutNodeType.Fan, square, Color.FromArgb(31, 120, 180));
-        };
-
-        var details = new Label
-        {
-            Name = "FanInformationDetails",
-            Text = information,
-            Dock = DockStyle.Fill,
-            Padding = new Padding(12, 28, 18, 12),
-            ForeColor = Color.FromArgb(34, 62, 88),
-            Font = new Font("Segoe UI", 10.5F),
-            TextAlign = ContentAlignment.TopLeft
-        };
-        var close = new Button
-        {
-            Text = "Close",
-            DialogResult = DialogResult.OK,
-            Dock = DockStyle.Right,
-            Width = 92,
-            BackColor = Color.FromArgb(31, 120, 180),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat
-        };
-        UiPolish.RoundButton(close, 7);
-        var buttons = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 6, 18, 12) };
-        buttons.Controls.Add(close);
-
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 164));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        layout.Controls.Add(icon, 0, 0);
-        layout.Controls.Add(details, 1, 0);
-        layout.Controls.Add(buttons, 0, 1);
-        layout.SetColumnSpan(buttons, 2);
-        Controls.Add(layout);
-        AcceptButton = close;
-        CancelButton = close;
-    }
 }
