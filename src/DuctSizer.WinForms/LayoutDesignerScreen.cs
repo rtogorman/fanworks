@@ -1023,7 +1023,7 @@ internal sealed partial class LayoutDesignerScreen
         _host.FittingScreen._addFittingButton.Text = DuctSystemScreen.DefaultFittingActionText;
         _host.DuctSystemScreen._addDuctButton.Visible = false;
         _host.FittingScreen._addFittingButton.Visible = false;
-        _host._ductEditingLabel.Visible = false;
+        _host.CalculatorScreen._ductEditingLabel.Visible = false;
         _host.FittingScreen._fittingEditingLabel.Visible = false;
         _host.DuctSystemScreen.ResetCriticalPath();
         _host.DuctSystemScreen.ApplyProjectCalculationSettings();
@@ -2697,10 +2697,10 @@ internal sealed partial class LayoutDesignerScreen
         try
         {
             if (airflow > 0)
-                _host._airflowText.Text = (_host._currentUnits == UnitSystem.Imperial
+                _host.CalculatorScreen._airflowText.Text = (_host._currentUnits == UnitSystem.Imperial
                     ? UnitConversions.M3PerSToCfm(airflow)
                     : UnitConversions.M3PerSToLps(airflow)).ToString("0.##", CultureInfo.CurrentCulture);
-            _host._temperatureText.Text = (_host._currentUnits == UnitSystem.Imperial
+            _host.CalculatorScreen._temperatureText.Text = (_host._currentUnits == UnitSystem.Imperial
                 ? UnitConversions.CelsiusToFahrenheit(temperature)
                 : temperature).ToString("0.##", CultureInfo.CurrentCulture);
         }
@@ -2708,8 +2708,8 @@ internal sealed partial class LayoutDesignerScreen
         {
             _host._updatingControls = false;
         }
-        _host.UpdateControlState();
-        _host.CalculateAndDisplay();
+        _host.CalculatorScreen.UpdateControlState();
+        _host.CalculatorScreen.CalculateAndDisplay();
     }
 
     private void RemoveLayoutNode(SavedLayoutNode node)
@@ -3381,7 +3381,7 @@ internal sealed partial class LayoutDesignerScreen
             _host.DuctSystemScreen._editingDuctSequence = null;
             _host.DuctSystemScreen._addDuctButton.Text = DuctSystemScreen.DefaultDuctActionText;
             _host.DuctSystemScreen._addDuctButton.Visible = false;
-            _host._ductEditingLabel.Visible = false;
+            _host.CalculatorScreen._ductEditingLabel.Visible = false;
         }
         if (secondary)
             downstream.SecondaryConnectionDuctSequence = null;

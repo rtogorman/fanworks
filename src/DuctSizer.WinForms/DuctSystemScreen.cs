@@ -431,7 +431,7 @@ internal sealed partial class DuctSystemScreen
         _ductSystem.DefaultPressureLossBasis = dialog.PressureLossBasis;
         ApplyProjectCalculationSettings();
         SaveDuctSystem();
-        _host.CalculateAndDisplay();
+        _host.CalculatorScreen.CalculateAndDisplay();
     }
 
     private void EditAutomaticSizingInputs()
@@ -450,12 +450,12 @@ internal sealed partial class DuctSystemScreen
         _host._updatingControls = true;
         try
         {
-            _host._sizeIncrementText.Text = (_host._currentUnits == UnitSystem.Imperial
+            _host.CalculatorScreen._sizeIncrementText.Text = (_host._currentUnits == UnitSystem.Imperial
                 ? UnitConversions.MToInches(_ductSystem.DefaultSizingIncrementM)
                 : UnitConversions.MToMillimeters(_ductSystem.DefaultSizingIncrementM))
                 .ToString("0.####", CultureInfo.CurrentCulture);
-            SelectChoice(_host._equivalentMethodCombo, _ductSystem.DefaultEquivalentDiameterMethod);
-            SelectChoice(_host._pressureBasisCombo, _ductSystem.DefaultPressureLossBasis);
+            SelectChoice(_host.CalculatorScreen._equivalentMethodCombo, _ductSystem.DefaultEquivalentDiameterMethod);
+            SelectChoice(_host.CalculatorScreen._pressureBasisCombo, _ductSystem.DefaultPressureLossBasis);
         }
         finally
         {
@@ -1012,7 +1012,7 @@ internal sealed partial class DuctSystemScreen
     {
         var returnToDesigner = _host.LayoutScreen.PendingConnectionNode() is not null || _host.LayoutScreen.PendingLayoutNode(LayoutNodeType.Duct) is not null;
         var historyState = returnToDesigner ? _host.LayoutScreen.CaptureLayoutHistoryState() : null;
-        _host.CalculateAndDisplay();
+        _host.CalculatorScreen.CalculateAndDisplay();
         if (_lastCalculation is null)
             return;
 
@@ -1050,7 +1050,7 @@ internal sealed partial class DuctSystemScreen
         _editingDuctSequence = null;
         _addDuctButton.Text = DefaultDuctActionText;
         _addDuctButton.Visible = false;
-        _host._ductEditingLabel.Visible = false;
+        _host.CalculatorScreen._ductEditingLabel.Visible = false;
         if (historyState is not null)
             _host.LayoutScreen.CommitLayoutHistoryState(historyState);
         SaveDuctSystem();
@@ -1076,7 +1076,7 @@ internal sealed partial class DuctSystemScreen
         var airflow = _host._currentUnits == UnitSystem.Imperial
             ? $"{UnitConversions.M3PerSToCfm(result.Input.AirflowM3PerS):N0} cfm"
             : $"{UnitConversions.M3PerSToLps(result.Input.AirflowM3PerS):N0} L/s";
-        return $"{shape} {_host.FormatGeometry(result.Input.Geometry)} – {airflow}";
+        return $"{shape} {_host.CalculatorScreen.FormatGeometry(result.Input.Geometry)} – {airflow}";
     }
 
     private void AutoSizeFan()
@@ -2335,8 +2335,8 @@ internal sealed partial class DuctSystemScreen
         _editingFittingSequence = null;
         _editingDuctSequence = duct!.Sequence;
         LoadDuctIntoCalculator(duct);
-        _host._ductEditingLabel.Text = $"Editing {duct.Id} — {duct.Description}";
-        _host._ductEditingLabel.Visible = true;
+        _host.CalculatorScreen._ductEditingLabel.Text = $"Editing {duct.Id} — {duct.Description}";
+        _host.CalculatorScreen._ductEditingLabel.Visible = true;
         _addDuctButton.Text = DefaultDuctActionText;
         _addDuctButton.Visible = true;
         _mainTabs.SelectedTab = _calculatorTab;
@@ -2347,7 +2347,7 @@ internal sealed partial class DuctSystemScreen
     private void ClearDuctEditingContext()
     {
         _editingDuctSequence = null;
-        _host._ductEditingLabel.Visible = false;
+        _host.CalculatorScreen._ductEditingLabel.Visible = false;
         _addDuctButton.Text = DefaultDuctActionText;
         _addDuctButton.Visible = false;
     }
@@ -2365,32 +2365,32 @@ internal sealed partial class DuctSystemScreen
         _host._updatingControls = true;
         try
         {
-            SelectChoice(_host._modeCombo, CalculationMode.SizeByTargetFriction);
-            SelectChoice(_host._shapeCombo, duct.Shape);
-            SelectChoice(_host._equivalentMethodCombo, duct.EquivalentDiameterMethod);
-            SelectChoice(_host._pressureBasisCombo, duct.PressureLossBasis);
+            SelectChoice(_host.CalculatorScreen._modeCombo, CalculationMode.SizeByTargetFriction);
+            SelectChoice(_host.CalculatorScreen._shapeCombo, duct.Shape);
+            SelectChoice(_host.CalculatorScreen._equivalentMethodCombo, duct.EquivalentDiameterMethod);
+            SelectChoice(_host.CalculatorScreen._pressureBasisCombo, duct.PressureLossBasis);
             SelectMaterial(duct.MaterialName, duct.RoughnessFeet);
 
             if (_host._currentUnits == UnitSystem.Imperial)
             {
-                _host._airflowText.Text = UnitConversions.M3PerSToCfm(duct.AirflowM3PerS).ToString("0.####", CultureInfo.CurrentCulture);
-                _host._temperatureText.Text = UnitConversions.CelsiusToFahrenheit(duct.TemperatureC).ToString("0.####", CultureInfo.CurrentCulture);
-                _host._lengthText.Text = UnitConversions.MToFeet(duct.LengthM).ToString("0.####", CultureInfo.CurrentCulture);
-                _host._diameterText.Text = UnitConversions.MToInches(duct.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
-                _host._widthText.Text = UnitConversions.MToInches(duct.WidthM).ToString("0.####", CultureInfo.CurrentCulture);
-                _host._heightText.Text = UnitConversions.MToInches(duct.HeightM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._airflowText.Text = UnitConversions.M3PerSToCfm(duct.AirflowM3PerS).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._temperatureText.Text = UnitConversions.CelsiusToFahrenheit(duct.TemperatureC).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._lengthText.Text = UnitConversions.MToFeet(duct.LengthM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._diameterText.Text = UnitConversions.MToInches(duct.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._widthText.Text = UnitConversions.MToInches(duct.WidthM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._heightText.Text = UnitConversions.MToInches(duct.HeightM).ToString("0.####", CultureInfo.CurrentCulture);
             }
             else
             {
-                _host._airflowText.Text = UnitConversions.M3PerSToLps(duct.AirflowM3PerS).ToString("0.####", CultureInfo.CurrentCulture);
-                _host._temperatureText.Text = duct.TemperatureC.ToString("0.####", CultureInfo.CurrentCulture);
-                _host._lengthText.Text = duct.LengthM.ToString("0.####", CultureInfo.CurrentCulture);
-                _host._diameterText.Text = UnitConversions.MToMillimeters(duct.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
-                _host._widthText.Text = UnitConversions.MToMillimeters(duct.WidthM).ToString("0.####", CultureInfo.CurrentCulture);
-                _host._heightText.Text = UnitConversions.MToMillimeters(duct.HeightM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._airflowText.Text = UnitConversions.M3PerSToLps(duct.AirflowM3PerS).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._temperatureText.Text = duct.TemperatureC.ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._lengthText.Text = duct.LengthM.ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._diameterText.Text = UnitConversions.MToMillimeters(duct.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._widthText.Text = UnitConversions.MToMillimeters(duct.WidthM).ToString("0.####", CultureInfo.CurrentCulture);
+                _host.CalculatorScreen._heightText.Text = UnitConversions.MToMillimeters(duct.HeightM).ToString("0.####", CultureInfo.CurrentCulture);
             }
-            SelectChoice(_host._rectangularFixedDimensionCombo, RectangularFixedDimension.Width);
-            _host._rectangularFixedDimensionText.Text = duct.Shape == DuctShape.Rectangular
+            SelectChoice(_host.CalculatorScreen._rectangularFixedDimensionCombo, RectangularFixedDimension.Width);
+            _host.CalculatorScreen._rectangularFixedDimensionText.Text = duct.Shape == DuctShape.Rectangular
                 ? (_host._currentUnits == UnitSystem.Imperial
                     ? UnitConversions.MToInches(duct.WidthM)
                     : UnitConversions.MToMillimeters(duct.WidthM)).ToString("0.####", CultureInfo.CurrentCulture)
@@ -2400,8 +2400,8 @@ internal sealed partial class DuctSystemScreen
         {
             _host._updatingControls = false;
         }
-        _host.UpdateControlState();
-        _host.CalculateAndDisplay();
+        _host.CalculatorScreen.UpdateControlState();
+        _host.CalculatorScreen.CalculateAndDisplay();
     }
 
     internal static void SelectChoice<T>(ComboBox combo, T value) where T : struct
@@ -2418,13 +2418,13 @@ internal sealed partial class DuctSystemScreen
 
     private void SelectMaterial(string name, double roughnessFeet)
     {
-        for (var index = 0; index < _host._materialCombo.Items.Count; index++)
+        for (var index = 0; index < _host.CalculatorScreen._materialCombo.Items.Count; index++)
         {
-            if (_host._materialCombo.Items[index] is DuctMaterial material
+            if (_host.CalculatorScreen._materialCombo.Items[index] is DuctMaterial material
                 && (string.Equals(material.Name, name, StringComparison.OrdinalIgnoreCase)
                     || Math.Abs(material.RoughnessFeet - roughnessFeet) <= 1e-12))
             {
-                _host._materialCombo.SelectedIndex = index;
+                _host.CalculatorScreen._materialCombo.SelectedIndex = index;
                 return;
             }
         }
@@ -2470,7 +2470,7 @@ internal sealed partial class DuctSystemScreen
                 _editingDuctSequence = null;
                 _addDuctButton.Text = DefaultDuctActionText;
                 _addDuctButton.Visible = false;
-                _host._ductEditingLabel.Visible = false;
+                _host.CalculatorScreen._ductEditingLabel.Visible = false;
             }
         }
         else
@@ -2531,7 +2531,7 @@ internal sealed partial class DuctSystemScreen
         _host.FittingScreen._addFittingButton.Text = DefaultFittingActionText;
         _addDuctButton.Visible = false;
         _host.FittingScreen._addFittingButton.Visible = false;
-        _host._ductEditingLabel.Visible = false;
+        _host.CalculatorScreen._ductEditingLabel.Visible = false;
         _host.FittingScreen._fittingEditingLabel.Visible = false;
         SaveDuctSystem();
         RefreshDuctSystemGrid();
@@ -3956,7 +3956,7 @@ internal sealed partial class DuctSystemScreen
         _host.FittingScreen._addFittingButton.Text = DefaultFittingActionText;
         _addDuctButton.Visible = false;
         _host.FittingScreen._addFittingButton.Visible = false;
-        _host._ductEditingLabel.Visible = false;
+        _host.CalculatorScreen._ductEditingLabel.Visible = false;
         _host.FittingScreen._fittingEditingLabel.Visible = false;
         SaveDuctSystem();
         RefreshDuctSystemGrid();
