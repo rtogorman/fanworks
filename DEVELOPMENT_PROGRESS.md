@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-09 (steps 1-10 done in code; v0.94.0 Windows build pending)
+Last updated: 2026-11-09 (steps 1-10 done; v0.94.0 built and verified on the owner's laptop)
 
 ## Where things live
 
@@ -133,6 +133,10 @@ name the repo).
 - `f738f56` Core: junction legs, per-path critical path, table-range warnings, project file
 - `ce7d9a6` App: use Core critical path, real junction legs, honest pressures
 - `2c0047f` v0.93.0: project files, visible failures, diagnostics, no hidden switches
+- `8496ef2` Step 7: system solver into Core
+- `448ba62` Step 8: layout geometry check
+- `bc773c9` / `7905688` Step 9: bounded undo, file split, model check
+- `ef46add` Step 10: documentation, register, CI; v0.94.0
 
 ## Reference project golden results (v0.93.0 Core)
 
@@ -174,5 +178,9 @@ See the step currently "In progress" above; its detailed plan is in the section 
 
 ## Current task detail
 
-Build v0.94.0 on the owner's laptop (`RunBuild.cmd`), confirm 58/58 and 16/16 on Windows, then report. After that,
-the remaining items are owner decisions or larger dedicated tasks (see "Outstanding" and the step 8/9 records).
+None in progress. v0.94.0 built on the owner's laptop on 2026-11-09: 58/58 engineering, 16/16 interface checks,
+`outputs\FanWorks-win-x64-v0.94.0\FanWorks.exe`. Next work is owner-directed: the open decisions and deferred
+restructuring below, GitHub setup (then push history and the CI workflow), and the human verification items.
+
+Note: `.github\workflows\build.yml` could not be written into the owner's folder (protected path for the
+remote-file tool); it is in the Claude working repo and goes up with the first GitHub push.
