@@ -7,7 +7,7 @@ namespace DuctSizer.WinForms;
 
 public sealed partial class MainForm
 {
-    private readonly PolishedTabControl _mainTabs = new();
+    internal readonly PolishedTabControl _mainTabs = new();
     private readonly Button _calculatorNavigationButton = new();
     private readonly Button _fittingNavigationButton = new();
     private readonly Button _systemNavigationButton = new();
@@ -24,8 +24,8 @@ public sealed partial class MainForm
     private ToolStripMenuItem? _metricUnitsMenuItem;
     private readonly TabPage _calculatorTab = new("Duct Calculator");
     private readonly TabPage _fittingTab = new("Fitting Calculator");
-    private readonly TabPage _systemTab = new("Duct System");
-    private readonly TabPage _layoutTab = new("Layout Designer");
+    internal readonly TabPage _systemTab = new("Duct System");
+    internal readonly TabPage _layoutTab = new("Layout Designer");
     private readonly DataGridView _ductGrid = new();
     private readonly ContextMenuStrip _ductGridContextMenu = new();
     private readonly ToolStripMenuItem _editSystemItemMenuItem = new("Edit item")
@@ -35,7 +35,7 @@ public sealed partial class MainForm
     private readonly Label _systemTotalLabel = new();
     private readonly Label _systemCriticalLabel = new();
     private readonly Label _systemCountLabel = new();
-    private readonly Label _systemStorageStatusLabel = new();
+    internal readonly Label _systemStorageStatusLabel = new();
     private readonly Button _addDuctButton = new();
     private readonly Button _deleteAllSystemButton = new();
     private readonly Button _exportSystemButton = new();
@@ -43,12 +43,12 @@ public sealed partial class MainForm
     private readonly Button _autoSizeFanButton = new();
     private readonly Button _viewFanInformationButton = new();
     private readonly Button _criticalPathFilterButton = new();
-    private DuctSystemDocument _ductSystem = new();
+    internal DuctSystemDocument _ductSystem = new();
     private DuctCalculationResult? _lastCalculation;
     private int? _editingDuctSequence;
-    private int? _editingFittingSequence;
+    internal int? _editingFittingSequence;
     private const string DefaultDuctActionText = "Save Duct Changes";
-    private const string DefaultFittingActionText = "Save Fitting Changes";
+    internal const string DefaultFittingActionText = "Save Fitting Changes";
     private bool _criticalPathCalculated;
     private bool _criticalPathFilterEnabled;
     private HashSet<string> _criticalPathItemKeys = new(StringComparer.OrdinalIgnoreCase);
@@ -91,7 +91,7 @@ public sealed partial class MainForm
         _fittingTab.Name = "FittingLossTab";
         _fittingTab.Padding = new Padding(0);
         _fittingTab.BackColor = BackColor;
-        _fittingTab.Controls.Add(BuildFittingLossPage());
+        _fittingTab.Controls.Add(FittingScreen.BuildFittingLossPage());
 
         _layoutTab.Name = "LayoutDesignerTab";
         _layoutTab.Padding = new Padding(0);
@@ -165,7 +165,7 @@ public sealed partial class MainForm
             UpdateNavigationButtonState();
             SynchronizeSelectedSystemView();
             if (_mainTabs.SelectedTab == _fittingTab)
-                ResetFittingInputScroll();
+                FittingScreen.ResetFittingInputScroll();
         };
         Controls.Add(shell);
         UpdateNavigationButtonState();
@@ -983,7 +983,7 @@ public sealed partial class MainForm
         }
     }
 
-    private void SaveDuctSystem()
+    internal void SaveDuctSystem()
     {
         try
         {
@@ -1280,7 +1280,7 @@ public sealed partial class MainForm
         row.DefaultCellStyle.ForeColor = Color.FromArgb(22, 65, 102);
     }
 
-    private void RefreshDuctSystemGrid()
+    internal void RefreshDuctSystemGrid()
     {
         if (_ductGrid.Columns.Count == 0)
             return;
@@ -1996,7 +1996,7 @@ public sealed partial class MainForm
         RefreshLayoutDesigner();
     }
 
-    private bool ConfirmAirflowOverride(DataGridViewRow row, double proposedAirflow)
+    internal bool ConfirmAirflowOverride(DataGridViewRow row, double proposedAirflow)
     {
         if (row.Tag is SystemRowTag { IsFitting: false } connectionDuctTag)
         {
@@ -2023,7 +2023,7 @@ public sealed partial class MainForm
             Convert.ToString(row.Cells["Id"].Value, CultureInfo.CurrentCulture) ?? "this item");
     }
 
-    private bool ConfirmAirflowOverride(SavedLayoutNode? node, double proposedAirflow, string itemId)
+    internal bool ConfirmAirflowOverride(SavedLayoutNode? node, double proposedAirflow, string itemId)
     {
         if (node is null)
             return true;
@@ -2313,15 +2313,15 @@ public sealed partial class MainForm
         {
             _editingDuctSequence = null;
             _editingFittingSequence = fitting.Sequence;
-            LoadFittingIntoCalculator(fitting);
-            _fittingDescription = fitting.Description;
-            _fittingEditingLabel.Text = $"Editing {fitting.Id} — {fitting.Description}";
-            _fittingEditingLabel.Visible = true;
-            _addFittingButton.Text = DefaultFittingActionText;
-            _addFittingButton.Visible = true;
+            FittingScreen.LoadFittingIntoCalculator(fitting);
+            FittingScreen._fittingDescription = fitting.Description;
+            FittingScreen._fittingEditingLabel.Text = $"Editing {fitting.Id} — {fitting.Description}";
+            FittingScreen._fittingEditingLabel.Visible = true;
+            FittingScreen._addFittingButton.Text = DefaultFittingActionText;
+            FittingScreen._addFittingButton.Visible = true;
             _mainTabs.SelectedTab = _fittingTab;
-            _fittingStatusLabel.Text = $"Editing {fitting.Id}. Change the inputs, then click {DefaultFittingActionText}.";
-            _fittingStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+            FittingScreen._fittingStatusLabel.Text = $"Editing {fitting.Id}. Change the inputs, then click {DefaultFittingActionText}.";
+            FittingScreen._fittingStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
             return;
         }
 
@@ -2348,9 +2348,9 @@ public sealed partial class MainForm
     private void ClearFittingEditingContext()
     {
         _editingFittingSequence = null;
-        _fittingEditingLabel.Visible = false;
-        _addFittingButton.Text = DefaultFittingActionText;
-        _addFittingButton.Visible = false;
+        FittingScreen._fittingEditingLabel.Visible = false;
+        FittingScreen._addFittingButton.Text = DefaultFittingActionText;
+        FittingScreen._addFittingButton.Visible = false;
     }
 
     private void LoadDuctIntoCalculator(SavedDuct duct)
@@ -2397,7 +2397,7 @@ public sealed partial class MainForm
         CalculateAndDisplay();
     }
 
-    private static void SelectChoice<T>(ComboBox combo, T value) where T : struct
+    internal static void SelectChoice<T>(ComboBox combo, T value) where T : struct
     {
         for (var index = 0; index < combo.Items.Count; index++)
         {
@@ -2475,9 +2475,9 @@ public sealed partial class MainForm
             if (_editingFittingSequence == removedFitting.Sequence)
             {
                 _editingFittingSequence = null;
-                _addFittingButton.Text = DefaultFittingActionText;
-                _addFittingButton.Visible = false;
-                _fittingEditingLabel.Visible = false;
+                FittingScreen._addFittingButton.Text = DefaultFittingActionText;
+                FittingScreen._addFittingButton.Visible = false;
+                FittingScreen._fittingEditingLabel.Visible = false;
             }
         }
         SaveDuctSystem();
@@ -2521,11 +2521,11 @@ public sealed partial class MainForm
         _pendingConnectionNodeId = null;
         _pendingConnectionSecondary = false;
         _addDuctButton.Text = DefaultDuctActionText;
-        _addFittingButton.Text = DefaultFittingActionText;
+        FittingScreen._addFittingButton.Text = DefaultFittingActionText;
         _addDuctButton.Visible = false;
-        _addFittingButton.Visible = false;
+        FittingScreen._addFittingButton.Visible = false;
         _ductEditingLabel.Visible = false;
-        _fittingEditingLabel.Visible = false;
+        FittingScreen._fittingEditingLabel.Visible = false;
         SaveDuctSystem();
         RefreshDuctSystemGrid();
         RefreshLayoutDesigner();
@@ -3457,7 +3457,7 @@ public sealed partial class MainForm
         }
         var publishedKeys = result.Definition.Inputs.Select(spec => spec.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         intermediates.AddRange(result.Inputs.Where(pair => !publishedKeys.Contains(pair.Key)).OrderBy(pair => pair.Key)
-            .Select(pair => L($"{FittingIntermediateLabel(pair.Key)} =", $"{pair.Value:0.####}")));
+            .Select(pair => L($"{FittingCalculatorScreen.FittingIntermediateLabel(pair.Key)} =", $"{pair.Value:0.####}")));
         sections.Add(new DuctSystemPdfCalculationSection("INTERMEDIATE CALCULATIONS", intermediates.Count > 0 ? intermediates : new[] { L("No additional derived ratio is required for this fitting.") }));
 
         var velocityPressure = UnitConversions.PaToInchesWater(result.VelocityPressurePa);
@@ -3946,11 +3946,11 @@ public sealed partial class MainForm
         _editingDuctSequence = null;
         _editingFittingSequence = null;
         _addDuctButton.Text = DefaultDuctActionText;
-        _addFittingButton.Text = DefaultFittingActionText;
+        FittingScreen._addFittingButton.Text = DefaultFittingActionText;
         _addDuctButton.Visible = false;
-        _addFittingButton.Visible = false;
+        FittingScreen._addFittingButton.Visible = false;
         _ductEditingLabel.Visible = false;
-        _fittingEditingLabel.Visible = false;
+        FittingScreen._fittingEditingLabel.Visible = false;
         SaveDuctSystem();
         RefreshDuctSystemGrid();
         RefreshLayoutDesigner();

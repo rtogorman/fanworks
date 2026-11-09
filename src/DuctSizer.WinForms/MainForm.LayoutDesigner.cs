@@ -10,7 +10,7 @@ namespace DuctSizer.WinForms;
 public sealed partial class MainForm
 {
     private LayoutDesignerCanvas? _layoutCanvas;
-    private readonly Label _layoutStatusLabel = new();
+    internal readonly Label _layoutStatusLabel = new();
     private LayoutNodeType? _selectedLayoutTool;
     private string? _selectedLayoutFittingGroup;
     private string? _pendingLayoutNodeId;
@@ -944,7 +944,7 @@ public sealed partial class MainForm
         }
     }
 
-    private string CaptureLayoutHistoryState()
+    internal string CaptureLayoutHistoryState()
     {
         // The rendered construction sheet can be several megabytes and the company logo is project
         // identity, not a Designer edit. Keep both persistent in the project file, but do not duplicate
@@ -964,7 +964,7 @@ public sealed partial class MainForm
         }
     }
 
-    private void CommitLayoutHistoryState(string beforeState)
+    internal void CommitLayoutHistoryState(string beforeState)
     {
         var afterState = CaptureLayoutHistoryState();
         if (string.Equals(beforeState, afterState, StringComparison.Ordinal))
@@ -1013,11 +1013,11 @@ public sealed partial class MainForm
         _pendingConnectionNodeId = null;
         _pendingConnectionSecondary = false;
         _addDuctButton.Text = DefaultDuctActionText;
-        _addFittingButton.Text = DefaultFittingActionText;
+        FittingScreen._addFittingButton.Text = DefaultFittingActionText;
         _addDuctButton.Visible = false;
-        _addFittingButton.Visible = false;
+        FittingScreen._addFittingButton.Visible = false;
         _ductEditingLabel.Visible = false;
-        _fittingEditingLabel.Visible = false;
+        FittingScreen._fittingEditingLabel.Visible = false;
         ResetCriticalPath();
         ApplyProjectCalculationSettings();
         SaveDuctSystem();
@@ -4285,7 +4285,7 @@ public sealed partial class MainForm
         }
     }
 
-    private SavedLayoutNode? PendingLayoutNode(LayoutNodeType type) =>
+    internal SavedLayoutNode? PendingLayoutNode(LayoutNodeType type) =>
         _pendingLayoutNodeId is null
             ? null
             : _ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == _pendingLayoutNodeId && x.Type == type);
@@ -4297,7 +4297,7 @@ public sealed partial class MainForm
                                                           && !string.IsNullOrWhiteSpace(_pendingConnectionSecondary
                                                               ? x.SecondaryParentNodeId : x.ParentNodeId));
 
-    private void ApplyLayoutMetadata(SavedDuct duct)
+    internal void ApplyLayoutMetadata(SavedDuct duct)
     {
         var connectionNode = PendingConnectionNode();
         var node = connectionNode ?? PendingLayoutNode(LayoutNodeType.Duct);
@@ -4327,7 +4327,7 @@ public sealed partial class MainForm
         RefreshLayoutDesigner();
     }
 
-    private void ApplyLayoutMetadata(SavedFitting fitting, FittingCalculationResult result,
+    internal void ApplyLayoutMetadata(SavedFitting fitting, FittingCalculationResult result,
         bool allowBranchReservation = true)
     {
         var node = PendingLayoutNode(LayoutNodeType.Fitting);

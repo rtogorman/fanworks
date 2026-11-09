@@ -4,16 +4,23 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-public sealed partial class MainForm
+internal sealed partial class FittingCalculatorScreen
 {
-    private readonly ComboBox _fittingGroupCombo = CreateDropDown();
-    private readonly ComboBox _fittingTypeCombo = CreateDropDown();
-    private readonly ComboBox _fittingShapeCombo = CreateDropDown();
-    private readonly TextBox _fittingAirflowText = CreateInput("1000");
-    private readonly TextBox _fittingDiameterText = CreateInput("12");
-    private readonly TextBox _fittingWidthText = CreateInput("24");
-    private readonly TextBox _fittingHeightText = CreateInput("12");
-    private readonly TextBox _fittingTemperatureText = CreateInput("70");
+    private readonly MainForm _host;
+
+    internal FittingCalculatorScreen(MainForm host)
+    {
+        _host = host;
+    }
+
+    private readonly ComboBox _fittingGroupCombo = MainForm.CreateDropDown();
+    private readonly ComboBox _fittingTypeCombo = MainForm.CreateDropDown();
+    private readonly ComboBox _fittingShapeCombo = MainForm.CreateDropDown();
+    private readonly TextBox _fittingAirflowText = MainForm.CreateInput("1000");
+    private readonly TextBox _fittingDiameterText = MainForm.CreateInput("12");
+    private readonly TextBox _fittingWidthText = MainForm.CreateInput("24");
+    private readonly TextBox _fittingHeightText = MainForm.CreateInput("12");
+    private readonly TextBox _fittingTemperatureText = MainForm.CreateInput("70");
     private readonly PictureBox _fittingPreviewPictureBox = new();
     private readonly PictureBox _fittingCalculationImage = new();
     private readonly Label _fittingPreviewCaption = new();
@@ -32,10 +39,10 @@ public sealed partial class MainForm
     private readonly Label _fittingWidthLabel = new();
     private readonly Label _fittingHeightLabel = new();
     private readonly Label _fittingTemperatureLabel = new();
-    private readonly Label _fittingCoefficientValue = CreateSummaryValue();
-    private readonly Label _fittingVelocityValue = CreateSummaryValue();
-    private readonly Label _fittingVelocityPressureValue = CreateSummaryValue();
-    private readonly Label _fittingPressureLossValue = CreateSummaryValue();
+    private readonly Label _fittingCoefficientValue = MainForm.CreateSummaryValue();
+    private readonly Label _fittingVelocityValue = MainForm.CreateSummaryValue();
+    private readonly Label _fittingVelocityPressureValue = MainForm.CreateSummaryValue();
+    private readonly Label _fittingPressureLossValue = MainForm.CreateSummaryValue();
     private Label? _fittingCoefficientCaption;
     private Label? _fittingVelocityCaption;
     private Label? _fittingVelocityPressureCaption;
@@ -43,20 +50,20 @@ public sealed partial class MainForm
     private GrdPerformanceSelection? _lastGrdPerformanceSelection;
     private VavPerformanceSelection? _lastVavPerformanceSelection;
     private readonly RichTextBox _fittingCalculationDetails = new();
-    private readonly Label _fittingStatusLabel = new();
-    private readonly Button _addFittingButton = new();
-    private readonly Label _fittingEditingLabel = new();
-    private readonly ComboBox _junctionPathCombo = CreateDropDown();
-    private readonly TextBox _junctionStraightAirflowText = CreateInput("600");
-    private readonly ComboBox _junctionStraightShapeCombo = CreateDropDown();
-    private readonly TextBox _junctionStraightDiameterText = CreateInput("12");
-    private readonly TextBox _junctionStraightWidthText = CreateInput("24");
-    private readonly TextBox _junctionStraightHeightText = CreateInput("12");
-    private readonly TextBox _junctionBranchAirflowText = CreateInput("400");
-    private readonly ComboBox _junctionBranchShapeCombo = CreateDropDown();
-    private readonly TextBox _junctionBranchDiameterText = CreateInput("10");
-    private readonly TextBox _junctionBranchWidthText = CreateInput("12");
-    private readonly TextBox _junctionBranchHeightText = CreateInput("10");
+    internal readonly Label _fittingStatusLabel = new();
+    internal readonly Button _addFittingButton = new();
+    internal readonly Label _fittingEditingLabel = new();
+    private readonly ComboBox _junctionPathCombo = MainForm.CreateDropDown();
+    private readonly TextBox _junctionStraightAirflowText = MainForm.CreateInput("600");
+    private readonly ComboBox _junctionStraightShapeCombo = MainForm.CreateDropDown();
+    private readonly TextBox _junctionStraightDiameterText = MainForm.CreateInput("12");
+    private readonly TextBox _junctionStraightWidthText = MainForm.CreateInput("24");
+    private readonly TextBox _junctionStraightHeightText = MainForm.CreateInput("12");
+    private readonly TextBox _junctionBranchAirflowText = MainForm.CreateInput("400");
+    private readonly ComboBox _junctionBranchShapeCombo = MainForm.CreateDropDown();
+    private readonly TextBox _junctionBranchDiameterText = MainForm.CreateInput("10");
+    private readonly TextBox _junctionBranchWidthText = MainForm.CreateInput("12");
+    private readonly TextBox _junctionBranchHeightText = MainForm.CreateInput("10");
     private readonly Label _junctionStraightAirflowLabel = new();
     private readonly Label _junctionStraightDiameterLabel = new();
     private readonly Label _junctionStraightWidthLabel = new();
@@ -65,7 +72,7 @@ public sealed partial class MainForm
     private readonly Label _junctionBranchDiameterLabel = new();
     private readonly Label _junctionBranchWidthLabel = new();
     private readonly Label _junctionBranchHeightLabel = new();
-    private string _fittingDescription = string.Empty;
+    internal string _fittingDescription = string.Empty;
     private bool _resizingFittingParameterRows;
     private FittingCalculationResult? _lastFittingCalculation;
     private TableLayoutPanel? _fittingContentLayout;
@@ -77,13 +84,13 @@ public sealed partial class MainForm
     private bool _updatingFittingCalculatorSplitter;
     private double _fittingCalculatorSplitRatio = 0.50;
     private double _fittingCalculatorRestoreRatio = 0.50;
-    private readonly Button _fittingCalculationsShowButton = CreatePaneButton("Show Calculations", 172);
-    private readonly Button _fittingCalculationsHideButton = CreatePaneButton("Hide", 58);
-    private readonly Button _fittingCalculationsExpandButton = CreatePaneButton("Expand", 88);
+    private readonly Button _fittingCalculationsShowButton = MainForm.CreatePaneButton("Show Calculations", 172);
+    private readonly Button _fittingCalculationsHideButton = MainForm.CreatePaneButton("Hide", 58);
+    private readonly Button _fittingCalculationsExpandButton = MainForm.CreatePaneButton("Expand", 88);
 
-    private Control BuildFittingLossPage()
+    internal Control BuildFittingLossPage()
     {
-        ConfigureCalculatorSplitter(_fittingCalculatorSplitter, "FittingCalculatorSplitter");
+        MainForm.ConfigureCalculatorSplitter(_fittingCalculatorSplitter, "FittingCalculatorSplitter");
         _fittingCalculatorSplitter.SplitterMoved += (_, _) =>
         {
             if (_updatingFittingCalculatorSplitter
@@ -125,22 +132,22 @@ public sealed partial class MainForm
         RefreshFittingTypeChoices();
         _fittingShapeCombo.Items.AddRange(new object[]
         {
-            new Choice<DuctShape>("Round", DuctShape.Round),
-            new Choice<DuctShape>("Rectangular", DuctShape.Rectangular)
+            new MainForm.Choice<DuctShape>("Round", DuctShape.Round),
+            new MainForm.Choice<DuctShape>("Rectangular", DuctShape.Rectangular)
         });
         _fittingShapeCombo.SelectedIndex = 0;
         _junctionPathCombo.Items.AddRange(new object[]
         {
-            new Choice<JunctionPath>("Common To Branch", JunctionPath.Branch),
-            new Choice<JunctionPath>("Common To Straight/Main", JunctionPath.Straight)
+            new MainForm.Choice<JunctionPath>("Common To Branch", JunctionPath.Branch),
+            new MainForm.Choice<JunctionPath>("Common To Straight/Main", JunctionPath.Straight)
         });
         _junctionPathCombo.SelectedIndex = 0;
         foreach (var combo in new[] { _junctionStraightShapeCombo, _junctionBranchShapeCombo })
         {
             combo.Items.AddRange(new object[]
             {
-                new Choice<DuctShape>("Round", DuctShape.Round),
-                new Choice<DuctShape>("Rectangular", DuctShape.Rectangular)
+                new MainForm.Choice<DuctShape>("Round", DuctShape.Round),
+                new MainForm.Choice<DuctShape>("Rectangular", DuctShape.Rectangular)
             });
             combo.SelectedIndex = 0;
         }
@@ -149,14 +156,14 @@ public sealed partial class MainForm
                      _fittingGroupCombo, _fittingTypeCombo, _fittingShapeCombo, _junctionPathCombo,
                      _junctionStraightShapeCombo, _junctionBranchShapeCombo
                  })
-            ConfigureComboDropDown(combo);
+            MainForm.ConfigureComboDropDown(combo);
 
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
@@ -197,7 +204,7 @@ public sealed partial class MainForm
             ColumnCount = 2,
             RowCount = 1,
             Padding = new Padding(14),
-            BackColor = BackColor
+            BackColor = _host.BackColor
         };
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -213,7 +220,7 @@ public sealed partial class MainForm
             Margin = new Padding(0, 0, 7, 0)
         };
         _fittingInputCard = inputCard;
-        var inputHeader = CreateCardHeader("FITTING INPUTS", string.Empty);
+        var inputHeader = MainForm.CreateCardHeader("FITTING INPUTS", string.Empty);
         _fittingInputScroll.Name = "FittingInputScroll";
         _fittingInputScroll.Dock = DockStyle.Fill;
         _fittingInputScroll.AutoScroll = true;
@@ -316,7 +323,7 @@ public sealed partial class MainForm
         calculate.Margin = Padding.Empty;
         UiPolish.RoundButton(calculate);
         calculate.Click += (_, _) => CalculateFittingAndDisplay();
-        _addFittingButton.Text = DefaultFittingActionText;
+        _addFittingButton.Text = MainForm.DefaultFittingActionText;
         _addFittingButton.Size = new Size(176, 30);
         _addFittingButton.Margin = Padding.Empty;
         _addFittingButton.BackColor = Color.FromArgb(42, 135, 91);
@@ -340,8 +347,8 @@ public sealed partial class MainForm
             Margin = new Padding(7, 0, 0, 0)
         };
         _fittingOutputCard = outputCard;
-        var outputHeader = CreateCardHeader("CALCULATIONS", "Geometry, flow, air, loss method, and assumptions.");
-        AddCalculationPaneControls(inputHeader, outputHeader,
+        var outputHeader = MainForm.CreateCardHeader("CALCULATIONS", "Geometry, flow, air, loss method, and assumptions.");
+        MainForm.AddCalculationPaneControls(inputHeader, outputHeader,
             _fittingCalculationsShowButton, _fittingCalculationsHideButton, _fittingCalculationsExpandButton,
             () =>
             {
@@ -403,7 +410,7 @@ public sealed partial class MainForm
             BackColor = Color.White,
             Margin = Padding.Empty
         };
-        outputHeading.Controls.Add(CreateOutputSectionLabel("FittingOutputsHeader"));
+        outputHeading.Controls.Add(MainForm.CreateOutputSectionLabel("FittingOutputsHeader"));
         var actionRow = new Panel
         {
             Name = "FittingActionRow",
@@ -425,7 +432,7 @@ public sealed partial class MainForm
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
-        ConfigureCalculatorInputBody(inputBody, _fittingInputScroll, inputTable,
+        MainForm.ConfigureCalculatorInputBody(inputBody, _fittingInputScroll, inputTable,
             outputHeading, summary, actionRow, 108, 40);
         inputCard.Controls.Add(inputBody);
         inputCard.Controls.Add(inputHeader);
@@ -575,7 +582,7 @@ public sealed partial class MainForm
 
     private static Panel CreateFittingSummaryCard(string caption, Label value, out Label captionLabel)
     {
-        var card = CreateSummaryCard(caption, value);
+        var card = MainForm.CreateSummaryCard(caption, value);
         captionLabel = card.Controls.OfType<TableLayoutPanel>().Single().Controls.OfType<Label>()
             .First(label => !ReferenceEquals(label, value));
         return card;
@@ -637,7 +644,7 @@ public sealed partial class MainForm
         _fittingContentLayout.ColumnStyles[1].Width = (float)((1.0 - _fittingCalculatorSplitRatio) * 100.0);
     }
 
-    private void ResetFittingInputScroll()
+    internal void ResetFittingInputScroll()
     {
         if (_fittingInputScroll.IsDisposed || !_fittingInputScroll.IsHandleCreated)
             return;
@@ -657,7 +664,7 @@ public sealed partial class MainForm
         }
 
         ResetPosition();
-        BeginInvoke(ResetPosition);
+        _host.BeginInvoke(ResetPosition);
     }
 
     private Control BuildFittingSelectorPanel()
@@ -865,14 +872,14 @@ public sealed partial class MainForm
         if (_fittingTypeCombo.SelectedItem is not FittingDefinition definition)
             return;
         using var viewer = new FittingImageViewer(definition);
-        viewer.ShowDialog(this);
+        viewer.ShowDialog(_host);
     }
 
     private void ShowFittingGallery()
     {
         var selectedCode = (_fittingTypeCombo.SelectedItem as FittingDefinition)?.Code;
         using var gallery = new FittingGalleryDialog(FittingCatalog.All, selectedCode);
-        if (gallery.ShowDialog(this) != DialogResult.OK || gallery.SelectedDefinition is null)
+        if (gallery.ShowDialog(_host) != DialogResult.OK || gallery.SelectedDefinition is null)
             return;
         SelectFittingGroup(FittingCatalog.SelectionGroup(gallery.SelectedDefinition), gallery.SelectedDefinition.Code);
     }
@@ -891,7 +898,7 @@ public sealed partial class MainForm
             .Select((definition, index) => (definition, index))
             .FirstOrDefault(x => string.Equals(x.definition.Code, preferredCode, StringComparison.OrdinalIgnoreCase)).index;
         _fittingTypeCombo.SelectedIndex = _fittingTypeCombo.Items.Count == 0 ? -1 : preferredIndex;
-        ResizeComboDropDown(_fittingTypeCombo);
+        MainForm.ResizeComboDropDown(_fittingTypeCombo);
     }
 
     private void SelectFittingGroup(string group, string? preferredCode = null)
@@ -1070,7 +1077,7 @@ public sealed partial class MainForm
     {
         if (_junctionInputTable.RowStyles.Count < 12)
             return;
-        var straightRound = Selected(_junctionStraightShapeCombo, DuctShape.Round) == DuctShape.Round;
+        var straightRound = MainForm.Selected(_junctionStraightShapeCombo, DuctShape.Round) == DuctShape.Round;
         _junctionStraightDiameterLabel.Visible = _junctionStraightDiameterText.Visible = straightRound;
         _junctionStraightWidthLabel.Visible = _junctionStraightWidthText.Visible = !straightRound;
         _junctionStraightHeightLabel.Visible = _junctionStraightHeightText.Visible = !straightRound;
@@ -1078,7 +1085,7 @@ public sealed partial class MainForm
         _junctionInputTable.RowStyles[5].Height = straightRound ? 0 : 40;
         _junctionInputTable.RowStyles[6].Height = straightRound ? 0 : 40;
 
-        var branchRound = Selected(_junctionBranchShapeCombo, DuctShape.Round) == DuctShape.Round;
+        var branchRound = MainForm.Selected(_junctionBranchShapeCombo, DuctShape.Round) == DuctShape.Round;
         _junctionBranchDiameterLabel.Visible = _junctionBranchDiameterText.Visible = branchRound;
         _junctionBranchWidthLabel.Visible = _junctionBranchWidthText.Visible = !branchRound;
         _junctionBranchHeightLabel.Visible = _junctionBranchHeightText.Visible = !branchRound;
@@ -1091,19 +1098,19 @@ public sealed partial class MainForm
     {
         if (toMetric)
         {
-            ConvertText(_junctionStraightAirflowText, UnitConversions.CfmToM3PerS, UnitConversions.M3PerSToLps);
-            ConvertText(_junctionBranchAirflowText, UnitConversions.CfmToM3PerS, UnitConversions.M3PerSToLps);
+            MainForm.ConvertText(_junctionStraightAirflowText, UnitConversions.CfmToM3PerS, UnitConversions.M3PerSToLps);
+            MainForm.ConvertText(_junctionBranchAirflowText, UnitConversions.CfmToM3PerS, UnitConversions.M3PerSToLps);
             foreach (var input in new[] { _junctionStraightDiameterText, _junctionStraightWidthText, _junctionStraightHeightText,
                          _junctionBranchDiameterText, _junctionBranchWidthText, _junctionBranchHeightText })
-                ConvertText(input, value => UnitConversions.MToMillimeters(UnitConversions.InchesToM(value)));
+                MainForm.ConvertText(input, value => UnitConversions.MToMillimeters(UnitConversions.InchesToM(value)));
         }
         else
         {
-            ConvertText(_junctionStraightAirflowText, UnitConversions.LpsToM3PerS, UnitConversions.M3PerSToCfm);
-            ConvertText(_junctionBranchAirflowText, UnitConversions.LpsToM3PerS, UnitConversions.M3PerSToCfm);
+            MainForm.ConvertText(_junctionStraightAirflowText, UnitConversions.LpsToM3PerS, UnitConversions.M3PerSToCfm);
+            MainForm.ConvertText(_junctionBranchAirflowText, UnitConversions.LpsToM3PerS, UnitConversions.M3PerSToCfm);
             foreach (var input in new[] { _junctionStraightDiameterText, _junctionStraightWidthText, _junctionStraightHeightText,
                          _junctionBranchDiameterText, _junctionBranchWidthText, _junctionBranchHeightText })
-                ConvertText(input, value => UnitConversions.MToInches(UnitConversions.MillimetersToM(value)));
+                MainForm.ConvertText(input, value => UnitConversions.MToInches(UnitConversions.MillimetersToM(value)));
         }
     }
 
@@ -1133,15 +1140,15 @@ public sealed partial class MainForm
             Control input;
             if (spec.Choices is { Count: > 0 })
             {
-                var combo = CreateDropDown();
+                var combo = MainForm.CreateDropDown();
                 foreach (var choice in spec.Choices)
-                    combo.Items.Add(new Choice<double>(choice.Label, choice.Value));
+                    combo.Items.Add(new MainForm.Choice<double>(choice.Label, choice.Value));
                 var selectedIndex = spec.Choices
                     .Select((choice, index) => (choice, index))
                     .OrderBy(item => Math.Abs(item.choice.Value - spec.DefaultValue))
                     .First().index;
                 combo.SelectedIndex = selectedIndex;
-                ConfigureComboDropDown(combo);
+                MainForm.ConfigureComboDropDown(combo);
                 combo.SelectedIndexChanged += (_, _) =>
                 {
                     if (string.Equals(spec.Key, "face", StringComparison.OrdinalIgnoreCase))
@@ -1154,7 +1161,7 @@ public sealed partial class MainForm
             }
             else
             {
-                var text = CreateInput(spec.DefaultValue.ToString("0.####", CultureInfo.CurrentCulture));
+                var text = MainForm.CreateInput(spec.DefaultValue.ToString("0.####", CultureInfo.CurrentCulture));
                 if (string.Equals(spec.Key, "re", StringComparison.OrdinalIgnoreCase))
                 {
                     text.ReadOnly = true;
@@ -1208,7 +1215,7 @@ public sealed partial class MainForm
         }
     }
 
-    private void CalculateFittingAndDisplay()
+    internal void CalculateFittingAndDisplay()
     {
         try
         {
@@ -1220,7 +1227,7 @@ public sealed partial class MainForm
             foreach (var (key, input) in _fittingParameterInputs)
             {
                 double value;
-                if (input is ComboBox combo && combo.SelectedItem is Choice<double> choice)
+                if (input is ComboBox combo && combo.SelectedItem is MainForm.Choice<double> choice)
                     value = choice.Value;
                 else if (input is TextBox text && double.TryParse(text.Text,
                              NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out var parsed))
@@ -1249,7 +1256,7 @@ public sealed partial class MainForm
 
             if (values.ContainsKey("re"))
             {
-                var air = AirProperties.Calculate(temperature, FixedRelativeHumidity, FixedAtmosphericPressurePa);
+                var air = AirProperties.Calculate(temperature, MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa);
                 var referenceVelocity = airflow / geometry.ActualAreaM2;
                 var calculatedReynolds = air.DensityKgPerM3 * referenceVelocity * geometry.HydraulicDiameterM
                                          / air.DynamicViscosityPaS;
@@ -1261,9 +1268,9 @@ public sealed partial class MainForm
 
             var result = definition.IsJunction
                 ? FittingCalculator.Calculate(definition, values, ReadJunctionFlowData(airflow, geometry), temperature,
-                    FixedRelativeHumidity, FixedAtmosphericPressurePa)
+                    MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa)
                 : FittingCalculator.Calculate(definition, values, airflow, geometry, temperature,
-                    FixedRelativeHumidity, FixedAtmosphericPressurePa);
+                    MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa);
             _lastFittingCalculation = result;
             _fittingCoefficientValue.Text = result.Coefficient.ToString("0.####", CultureInfo.CurrentCulture);
             _fittingVelocityValue.Text = FormatFittingVelocity(result.ReferenceVelocityMPerS);
@@ -1272,7 +1279,7 @@ public sealed partial class MainForm
             UpdateFittingCalculationDetails(result);
             _fittingStatusLabel.Text = definition.IsAutomated
                 ? definition.IsJunction
-                    ? $"Calculated ASHRAE {definition.Code} for {Selected(_junctionPathCombo, JunctionPath.Branch).ToString().ToLowerInvariant()} path using common-duct VP."
+                    ? $"Calculated ASHRAE {definition.Code} for {MainForm.Selected(_junctionPathCombo, JunctionPath.Branch).ToString().ToLowerInvariant()} path using common-duct VP."
                     : $"Calculated ASHRAE {definition.Code} from its built-in table. Area: {FormatFittingArea(geometry.ActualAreaM2)}."
                 : $"Calculated pressure loss for {definition.Code} using the entered reference coefficient C.";
             _fittingStatusLabel.ForeColor = definition.IsAutomated ? Color.FromArgb(30, 100, 55) : Color.FromArgb(130, 82, 12);
@@ -1326,7 +1333,7 @@ public sealed partial class MainForm
             : VavPerformanceCatalog.SelectWithoutReheat(requestedCfm, size);
         _lastGrdPerformanceSelection = null;
         _lastFittingCalculation = VavPerformanceCatalog.CalculateFittingResult(definition, values, airflowM3PerS,
-            temperatureC, FixedRelativeHumidity, FixedAtmosphericPressurePa);
+            temperatureC, MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa);
 
         SetVavSummaryCaptions();
         _fittingCoefficientValue.Text = size == "24x16" ? "24 × 16 in" : $"Size {size}";
@@ -1410,17 +1417,17 @@ public sealed partial class MainForm
             || !string.Equals(definition.Code, GrdPerformanceCatalog.PriceScdCode, StringComparison.OrdinalIgnoreCase)
             || !_fittingParameterInputs.TryGetValue("face", out var faceInput)
             || faceInput is not ComboBox faceCombo
-            || faceCombo.SelectedItem is not Choice<double> faceChoice
+            || faceCombo.SelectedItem is not MainForm.Choice<double> faceChoice
             || !_fittingParameterInputs.TryGetValue("neck", out var neckInput)
             || neckInput is not ComboBox neckCombo)
             return;
 
-        var previous = neckCombo.SelectedItem is Choice<double> selected ? selected.Value : 8;
+        var previous = neckCombo.SelectedItem is MainForm.Choice<double> selected ? selected.Value : 8;
         var valid = GrdPerformanceCatalog.PriceNeckDiameters(Convert.ToInt32(faceChoice.Value));
         neckCombo.BeginUpdate();
         neckCombo.Items.Clear();
         foreach (var neck in valid)
-            neckCombo.Items.Add(new Choice<double>($"{neck} in", neck));
+            neckCombo.Items.Add(new MainForm.Choice<double>($"{neck} in", neck));
         neckCombo.EndUpdate();
         var nearest = valid.Select((value, index) => (value, index))
             .OrderBy(item => Math.Abs(item.value - previous)).First().index;
@@ -1433,21 +1440,21 @@ public sealed partial class MainForm
             || !string.Equals(definition.Code, VavPerformanceCatalog.WithReheatCode, StringComparison.OrdinalIgnoreCase)
             || !_fittingParameterInputs.TryGetValue("sizeIndex", out var sizeInput)
             || sizeInput is not ComboBox sizeCombo
-            || sizeCombo.SelectedItem is not Choice<double> sizeChoice
+            || sizeCombo.SelectedItem is not MainForm.Choice<double> sizeChoice
             || !_fittingParameterInputs.TryGetValue("rows", out var rowInput)
             || rowInput is not ComboBox rowCombo)
             return;
         var sizeIndex = Convert.ToInt32(sizeChoice.Value);
         if (sizeIndex < 0 || sizeIndex >= VavPerformanceCatalog.WithReheatSizes.Count)
             return;
-        var previous = rowCombo.SelectedItem is Choice<double> selected ? Convert.ToInt32(selected.Value) : 3;
+        var previous = rowCombo.SelectedItem is MainForm.Choice<double> selected ? Convert.ToInt32(selected.Value) : 3;
         var available = VavPerformanceCatalog.AvailableRows(VavPerformanceCatalog.WithReheatSizes[sizeIndex]);
         if (available.Count == 0)
             return;
         rowCombo.BeginUpdate();
         rowCombo.Items.Clear();
         foreach (var rows in available)
-            rowCombo.Items.Add(new Choice<double>($"{rows} row{(rows == 1 ? "" : "s")}", rows));
+            rowCombo.Items.Add(new MainForm.Choice<double>($"{rows} row{(rows == 1 ? "" : "s")}", rows));
         rowCombo.EndUpdate();
         rowCombo.SelectedIndex = available.Select((value, index) => (value, index))
             .OrderBy(item => Math.Abs(item.value - previous)).First().index;
@@ -1466,7 +1473,7 @@ public sealed partial class MainForm
                 : GrdPerformanceCatalog.SelectTitusTbd80(requestedCfm, Convert.ToInt32(values["length"]),
                     values["slotWidth"], Convert.ToInt32(values["slotCount"]));
         _lastFittingCalculation = GrdPerformanceCatalog.CalculateFittingResult(definition, values, airflowM3PerS,
-            temperatureC, FixedRelativeHumidity, FixedAtmosphericPressurePa);
+            temperatureC, MainForm.FixedRelativeHumidity, MainForm.FixedAtmosphericPressurePa);
 
         var selected = _lastGrdPerformanceSelection.Selected;
         var grille = string.Equals(definition.Code, GrdPerformanceCatalog.Titus350RCode,
@@ -1571,29 +1578,29 @@ public sealed partial class MainForm
 
     private double ReadFittingAirflowM3PerS()
     {
-        var value = ReadPositive(_fittingAirflowText, "airflow");
-        return _currentUnits == UnitSystem.Imperial ? UnitConversions.CfmToM3PerS(value) : UnitConversions.LpsToM3PerS(value);
+        var value = MainForm.ReadPositive(_fittingAirflowText, "airflow");
+        return _host._currentUnits == UnitSystem.Imperial ? UnitConversions.CfmToM3PerS(value) : UnitConversions.LpsToM3PerS(value);
     }
 
     private DuctGeometry ReadFittingGeometry()
     {
-        var shape = Selected(_fittingShapeCombo, DuctShape.Round);
+        var shape = MainForm.Selected(_fittingShapeCombo, DuctShape.Round);
         if (shape == DuctShape.Round)
         {
-            var diameter = ReadPositive(_fittingDiameterText, "reference duct diameter");
-            return GeometryCalculator.Round(_currentUnits == UnitSystem.Imperial
+            var diameter = MainForm.ReadPositive(_fittingDiameterText, "reference duct diameter");
+            return GeometryCalculator.Round(_host._currentUnits == UnitSystem.Imperial
                 ? UnitConversions.InchesToM(diameter)
                 : UnitConversions.MillimetersToM(diameter));
         }
-        var width = ReadPositive(_fittingWidthText, "reference duct width");
-        var height = ReadPositive(_fittingHeightText, "reference duct height");
+        var width = MainForm.ReadPositive(_fittingWidthText, "reference duct width");
+        var height = MainForm.ReadPositive(_fittingHeightText, "reference duct height");
         return GeometryCalculator.Rectangular(
-            _currentUnits == UnitSystem.Imperial ? UnitConversions.InchesToM(width) : UnitConversions.MillimetersToM(width),
-            _currentUnits == UnitSystem.Imperial ? UnitConversions.InchesToM(height) : UnitConversions.MillimetersToM(height));
+            _host._currentUnits == UnitSystem.Imperial ? UnitConversions.InchesToM(width) : UnitConversions.MillimetersToM(width),
+            _host._currentUnits == UnitSystem.Imperial ? UnitConversions.InchesToM(height) : UnitConversions.MillimetersToM(height));
     }
 
     private JunctionFlowData ReadJunctionFlowData(double commonAirflow, DuctGeometry commonGeometry) => new(
-        Selected(_junctionPathCombo, JunctionPath.Branch),
+        MainForm.Selected(_junctionPathCombo, JunctionPath.Branch),
         commonAirflow,
         commonGeometry,
         ReadJunctionAirflow(_junctionStraightAirflowText, "straight/main airflow"),
@@ -1605,25 +1612,25 @@ public sealed partial class MainForm
 
     private double ReadJunctionAirflow(TextBox input, string name)
     {
-        var value = ReadPositive(input, name);
-        return _currentUnits == UnitSystem.Imperial ? UnitConversions.CfmToM3PerS(value) : UnitConversions.LpsToM3PerS(value);
+        var value = MainForm.ReadPositive(input, name);
+        return _host._currentUnits == UnitSystem.Imperial ? UnitConversions.CfmToM3PerS(value) : UnitConversions.LpsToM3PerS(value);
     }
 
     private DuctGeometry ReadJunctionGeometry(ComboBox shapeInput, TextBox diameterInput, TextBox widthInput,
         TextBox heightInput, string name)
     {
-        if (Selected(shapeInput, DuctShape.Round) == DuctShape.Round)
+        if (MainForm.Selected(shapeInput, DuctShape.Round) == DuctShape.Round)
         {
-            var diameter = ReadPositive(diameterInput, $"{name} duct diameter");
-            return GeometryCalculator.Round(_currentUnits == UnitSystem.Imperial
+            var diameter = MainForm.ReadPositive(diameterInput, $"{name} duct diameter");
+            return GeometryCalculator.Round(_host._currentUnits == UnitSystem.Imperial
                 ? UnitConversions.InchesToM(diameter)
                 : UnitConversions.MillimetersToM(diameter));
         }
-        var width = ReadPositive(widthInput, $"{name} duct width");
-        var height = ReadPositive(heightInput, $"{name} duct height");
+        var width = MainForm.ReadPositive(widthInput, $"{name} duct width");
+        var height = MainForm.ReadPositive(heightInput, $"{name} duct height");
         return GeometryCalculator.Rectangular(
-            _currentUnits == UnitSystem.Imperial ? UnitConversions.InchesToM(width) : UnitConversions.MillimetersToM(width),
-            _currentUnits == UnitSystem.Imperial ? UnitConversions.InchesToM(height) : UnitConversions.MillimetersToM(height));
+            _host._currentUnits == UnitSystem.Imperial ? UnitConversions.InchesToM(width) : UnitConversions.MillimetersToM(width),
+            _host._currentUnits == UnitSystem.Imperial ? UnitConversions.InchesToM(height) : UnitConversions.MillimetersToM(height));
     }
 
     private double ReadFittingTemperatureC()
@@ -1631,18 +1638,18 @@ public sealed partial class MainForm
         if (!double.TryParse(_fittingTemperatureText.Text, NumberStyles.Float | NumberStyles.AllowThousands,
                 CultureInfo.CurrentCulture, out var value))
             throw new FormatException("Enter a valid air temperature.");
-        return _currentUnits == UnitSystem.Imperial ? UnitConversions.FahrenheitToCelsius(value) : value;
+        return _host._currentUnits == UnitSystem.Imperial ? UnitConversions.FahrenheitToCelsius(value) : value;
     }
 
-    private string FormatFittingPressure(double pascals) => _currentUnits == UnitSystem.Imperial
+    private string FormatFittingPressure(double pascals) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.PaToInchesWater(pascals):0.####} in. w.c."
         : $"{pascals:0.##} Pa";
 
-    private string FormatFittingVelocity(double metersPerSecond) => _currentUnits == UnitSystem.Imperial
+    private string FormatFittingVelocity(double metersPerSecond) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.MpsToFpm(metersPerSecond):N0} fpm"
         : $"{metersPerSecond:0.##} m/s";
 
-    private string FormatFittingArea(double squareMeters) => _currentUnits == UnitSystem.Imperial
+    private string FormatFittingArea(double squareMeters) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.SquareMetersToSquareFeet(squareMeters):0.###} ft²"
         : $"{squareMeters:0.####} m²";
 
@@ -1829,7 +1836,7 @@ public sealed partial class MainForm
         box.ScrollToCaret();
     }
 
-    private static string FittingIntermediateLabel(string key) => key.ToLowerInvariant() switch
+    internal static string FittingIntermediateLabel(string key) => key.ToLowerInvariant() switch
     {
         "qbqc" => "Branch/common airflow ratio Qb/Qc",
         "qsqc" => "Straight/common airflow ratio Qs/Qc",
@@ -1845,7 +1852,7 @@ public sealed partial class MainForm
         _ => key
     };
 
-    private string FormatFittingDimension(double meters) => _currentUnits == UnitSystem.Imperial
+    private string FormatFittingDimension(double meters) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.MToInches(meters):0.###} in"
         : $"{UnitConversions.MToMillimeters(meters):0.##} mm";
 
@@ -1855,7 +1862,7 @@ public sealed partial class MainForm
                                 && (IsPerformanceGrd(definition) || IsPerformanceVav(definition));
         _fittingTemperatureLabel.Visible = _fittingTemperatureText.Visible = !performanceLookup;
         _fittingShapeLabel.Visible = _fittingShapeCombo.Visible = !performanceLookup;
-        var round = Selected(_fittingShapeCombo, DuctShape.Round) == DuctShape.Round;
+        var round = MainForm.Selected(_fittingShapeCombo, DuctShape.Round) == DuctShape.Round;
         _fittingDiameterLabel.Visible = _fittingDiameterText.Visible = !performanceLookup && round;
         _fittingWidthLabel.Visible = _fittingWidthText.Visible = !performanceLookup && !round;
         _fittingHeightLabel.Visible = _fittingHeightText.Visible = !performanceLookup && !round;
@@ -1866,7 +1873,7 @@ public sealed partial class MainForm
     {
         if (definition.ReferenceDuctShape is DuctShape inferredShape)
         {
-            SelectChoice(_fittingShapeCombo, inferredShape);
+            MainForm.SelectChoice(_fittingShapeCombo, inferredShape);
             EnsureValidInferredGeometry(inferredShape);
         }
         _fittingShapeCombo.Enabled = definition.ReferenceDuctShape is null;
@@ -1880,14 +1887,14 @@ public sealed partial class MainForm
         if (shape == DuctShape.Round)
         {
             if (!IsPositive(_fittingDiameterText))
-                _fittingDiameterText.Text = _currentUnits == UnitSystem.Imperial ? "12" : "300";
+                _fittingDiameterText.Text = _host._currentUnits == UnitSystem.Imperial ? "12" : "300";
             return;
         }
 
         if (!IsPositive(_fittingWidthText))
-            _fittingWidthText.Text = _currentUnits == UnitSystem.Imperial ? "24" : "600";
+            _fittingWidthText.Text = _host._currentUnits == UnitSystem.Imperial ? "24" : "600";
         if (!IsPositive(_fittingHeightText))
-            _fittingHeightText.Text = _currentUnits == UnitSystem.Imperial ? "12" : "300";
+            _fittingHeightText.Text = _host._currentUnits == UnitSystem.Imperial ? "12" : "300";
     }
 
     private void ResizeFittingParameterRows()
@@ -1927,11 +1934,11 @@ public sealed partial class MainForm
         }
     }
 
-    private void UpdateFittingUnitLabels()
+    internal void UpdateFittingUnitLabels()
     {
         if (_fittingAirflowLabel.IsDisposed)
             return;
-        var imperial = _currentUnits == UnitSystem.Imperial;
+        var imperial = _host._currentUnits == UnitSystem.Imperial;
         _fittingAirflowLabel.Text = imperial ? "Airflow (cfm)" : "Airflow (L/s)";
         if (_fittingTypeCombo.SelectedItem is FittingDefinition definition && definition.IsJunction)
             _fittingAirflowLabel.Text = imperial ? "Common Airflow (cfm)" : "Common Airflow (L/s)";
@@ -1982,92 +1989,92 @@ public sealed partial class MainForm
         }
     }
 
-    private void ConvertFittingUnitInputs(UnitSystem from, UnitSystem to)
+    internal void ConvertFittingUnitInputs(UnitSystem from, UnitSystem to)
     {
         if (from == to || _fittingAirflowText.IsDisposed)
             return;
         if (from == UnitSystem.Imperial)
         {
-            ConvertText(_fittingAirflowText, UnitConversions.CfmToM3PerS, UnitConversions.M3PerSToLps);
-            ConvertText(_fittingDiameterText, value => UnitConversions.MToMillimeters(UnitConversions.InchesToM(value)));
-            ConvertText(_fittingWidthText, value => UnitConversions.MToMillimeters(UnitConversions.InchesToM(value)));
-            ConvertText(_fittingHeightText, value => UnitConversions.MToMillimeters(UnitConversions.InchesToM(value)));
-            ConvertText(_fittingTemperatureText, UnitConversions.FahrenheitToCelsius);
+            MainForm.ConvertText(_fittingAirflowText, UnitConversions.CfmToM3PerS, UnitConversions.M3PerSToLps);
+            MainForm.ConvertText(_fittingDiameterText, value => UnitConversions.MToMillimeters(UnitConversions.InchesToM(value)));
+            MainForm.ConvertText(_fittingWidthText, value => UnitConversions.MToMillimeters(UnitConversions.InchesToM(value)));
+            MainForm.ConvertText(_fittingHeightText, value => UnitConversions.MToMillimeters(UnitConversions.InchesToM(value)));
+            MainForm.ConvertText(_fittingTemperatureText, UnitConversions.FahrenheitToCelsius);
             ConvertJunctionInputs(true);
         }
         else
         {
-            ConvertText(_fittingAirflowText, UnitConversions.LpsToM3PerS, UnitConversions.M3PerSToCfm);
-            ConvertText(_fittingDiameterText, value => UnitConversions.MToInches(UnitConversions.MillimetersToM(value)));
-            ConvertText(_fittingWidthText, value => UnitConversions.MToInches(UnitConversions.MillimetersToM(value)));
-            ConvertText(_fittingHeightText, value => UnitConversions.MToInches(UnitConversions.MillimetersToM(value)));
-            ConvertText(_fittingTemperatureText, UnitConversions.CelsiusToFahrenheit);
+            MainForm.ConvertText(_fittingAirflowText, UnitConversions.LpsToM3PerS, UnitConversions.M3PerSToCfm);
+            MainForm.ConvertText(_fittingDiameterText, value => UnitConversions.MToInches(UnitConversions.MillimetersToM(value)));
+            MainForm.ConvertText(_fittingWidthText, value => UnitConversions.MToInches(UnitConversions.MillimetersToM(value)));
+            MainForm.ConvertText(_fittingHeightText, value => UnitConversions.MToInches(UnitConversions.MillimetersToM(value)));
+            MainForm.ConvertText(_fittingTemperatureText, UnitConversions.CelsiusToFahrenheit);
             ConvertJunctionInputs(false);
         }
     }
 
     private void AddCurrentFittingToSystem()
     {
-        var returnToDesigner = PendingLayoutNode(LayoutNodeType.Fitting) is not null;
-        var historyState = returnToDesigner ? CaptureLayoutHistoryState() : null;
+        var returnToDesigner = _host.PendingLayoutNode(LayoutNodeType.Fitting) is not null;
+        var historyState = returnToDesigner ? _host.CaptureLayoutHistoryState() : null;
         CalculateFittingAndDisplay();
         if (_lastFittingCalculation is null)
             return;
-        var existing = _editingFittingSequence is int editingSequence
-            ? _ductSystem.Fittings.FirstOrDefault(x => x.Sequence == editingSequence)
+        var existing = _host._editingFittingSequence is int editingSequence
+            ? _host._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == editingSequence)
             : null;
-        var existingNode = existing is null ? null : _ductSystem.LayoutNodes
+        var existingNode = existing is null ? null : _host._ductSystem.LayoutNodes
             .FirstOrDefault(x => x.LinkedFittingSequence == existing.Sequence);
-        if (existing is not null && !ConfirmAirflowOverride(existingNode,
+        if (existing is not null && !_host.ConfirmAirflowOverride(existingNode,
                 _lastFittingCalculation.AirflowM3PerS ?? existing.AirflowM3PerS, existing.Id))
             return;
-        var sequence = existing?.Sequence ?? _ductSystem.ReserveFittingSequence();
+        var sequence = existing?.Sequence ?? _host._ductSystem.ReserveFittingSequence();
         var description = existing?.Description ?? _fittingDescription.Trim();
         if (string.IsNullOrWhiteSpace(description))
             description = $"{_lastFittingCalculation.Definition.Code} — {_lastFittingCalculation.Definition.Description}";
         var fitting = SavedFitting.FromResult(sequence, description, _lastFittingCalculation,
-            existing?.AirSystemType ?? _ductSystem.DefaultAirSystemType,
-            existing?.BranchId ?? _ductSystem.DefaultBranchId);
+            existing?.AirSystemType ?? _host._ductSystem.DefaultAirSystemType,
+            existing?.BranchId ?? _host._ductSystem.DefaultBranchId);
         fitting.CustomId = existing?.CustomId ?? string.Empty;
         fitting.DeltaXM = existing?.DeltaXM ?? 0;
         fitting.DeltaYM = existing?.DeltaYM ?? 0;
         fitting.DeltaZM = existing?.DeltaZM ?? 0;
-        ApplyLayoutMetadata(fitting, _lastFittingCalculation, allowBranchReservation: existing is null);
+        _host.ApplyLayoutMetadata(fitting, _lastFittingCalculation, allowBranchReservation: existing is null);
         if (existing is null)
-            _ductSystem.Fittings.Add(fitting);
+            _host._ductSystem.Fittings.Add(fitting);
         else
-            _ductSystem.Fittings[_ductSystem.Fittings.IndexOf(existing)] = fitting;
-        _editingFittingSequence = null;
-        _addFittingButton.Text = DefaultFittingActionText;
+            _host._ductSystem.Fittings[_host._ductSystem.Fittings.IndexOf(existing)] = fitting;
+        _host._editingFittingSequence = null;
+        _addFittingButton.Text = MainForm.DefaultFittingActionText;
         _addFittingButton.Visible = false;
         _fittingEditingLabel.Visible = false;
         if (historyState is not null)
-            CommitLayoutHistoryState(historyState);
-        SaveDuctSystem();
-        RefreshDuctSystemGrid();
-        _mainTabs.SelectedTab = returnToDesigner ? _layoutTab : _systemTab;
+            _host.CommitLayoutHistoryState(historyState);
+        _host.SaveDuctSystem();
+        _host.RefreshDuctSystemGrid();
+        _host._mainTabs.SelectedTab = returnToDesigner ? _host._layoutTab : _host._systemTab;
         if (returnToDesigner)
-            _layoutStatusLabel.Text = existing is null
+            _host._layoutStatusLabel.Text = existing is null
                 ? "Fitting configured and linked. Continue placing components on the grid."
                 : $"Updated {fitting.Id} and refreshed its designer component.";
-        _systemStorageStatusLabel.Text = existing is null
+        _host._systemStorageStatusLabel.Text = existing is null
             ? $"Added fitting F-{sequence:000} and saved the duct system locally."
             : $"Updated fitting {fitting.Id} and saved the duct system locally.";
-        _systemStorageStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+        _host._systemStorageStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
-    private void LoadFittingIntoCalculator(SavedFitting fitting)
+    internal void LoadFittingIntoCalculator(SavedFitting fitting)
     {
         var definition = FittingCatalog.Find(fitting.FittingCode);
         SelectFittingGroup(FittingCatalog.SelectionGroup(definition), definition.Code);
-        SelectChoice(_fittingShapeCombo, definition.ReferenceDuctShape ?? fitting.Shape);
-        _fittingAirflowText.Text = (_currentUnits == UnitSystem.Imperial
+        MainForm.SelectChoice(_fittingShapeCombo, definition.ReferenceDuctShape ?? fitting.Shape);
+        _fittingAirflowText.Text = (_host._currentUnits == UnitSystem.Imperial
             ? UnitConversions.M3PerSToCfm(fitting.AirflowM3PerS)
             : UnitConversions.M3PerSToLps(fitting.AirflowM3PerS)).ToString("0.####", CultureInfo.CurrentCulture);
-        _fittingTemperatureText.Text = (_currentUnits == UnitSystem.Imperial
+        _fittingTemperatureText.Text = (_host._currentUnits == UnitSystem.Imperial
             ? UnitConversions.CelsiusToFahrenheit(fitting.TemperatureC)
             : fitting.TemperatureC).ToString("0.####", CultureInfo.CurrentCulture);
-        if (_currentUnits == UnitSystem.Imperial)
+        if (_host._currentUnits == UnitSystem.Imperial)
         {
             _fittingDiameterText.Text = UnitConversions.MToInches(fitting.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
             _fittingWidthText.Text = UnitConversions.MToInches(fitting.WidthM).ToString("0.####", CultureInfo.CurrentCulture);
@@ -2090,8 +2097,8 @@ public sealed partial class MainForm
             {
                 var match = combo.Items.Cast<object>()
                     .Select((item, index) => (item, index))
-                    .Where(x => x.item is Choice<double>)
-                    .OrderBy(x => Math.Abs(((Choice<double>)x.item).Value - value))
+                    .Where(x => x.item is MainForm.Choice<double>)
+                    .OrderBy(x => Math.Abs(((MainForm.Choice<double>)x.item).Value - value))
                     .FirstOrDefault();
                 if (match.item is not null)
                     combo.SelectedIndex = match.index;
@@ -2100,7 +2107,7 @@ public sealed partial class MainForm
 
         if (fitting.Junction is { } junction)
         {
-            SelectChoice(_junctionPathCombo, junction.Path);
+            MainForm.SelectChoice(_junctionPathCombo, junction.Path);
             LoadJunctionPath(_junctionStraightShapeCombo, _junctionStraightAirflowText,
                 _junctionStraightDiameterText, _junctionStraightWidthText, _junctionStraightHeightText,
                 junction.StraightAirflowM3PerS, junction.StraightGeometry);
@@ -2116,11 +2123,11 @@ public sealed partial class MainForm
     private void LoadJunctionPath(ComboBox shape, TextBox airflow, TextBox diameter, TextBox width, TextBox height,
         double airflowM3PerS, DuctGeometry geometry)
     {
-        SelectChoice(shape, geometry.Shape);
-        airflow.Text = (_currentUnits == UnitSystem.Imperial
+        MainForm.SelectChoice(shape, geometry.Shape);
+        airflow.Text = (_host._currentUnits == UnitSystem.Imperial
             ? UnitConversions.M3PerSToCfm(airflowM3PerS)
             : UnitConversions.M3PerSToLps(airflowM3PerS)).ToString("0.####", CultureInfo.CurrentCulture);
-        if (_currentUnits == UnitSystem.Imperial)
+        if (_host._currentUnits == UnitSystem.Imperial)
         {
             diameter.Text = UnitConversions.MToInches(geometry.DiameterM).ToString("0.####", CultureInfo.CurrentCulture);
             width.Text = UnitConversions.MToInches(geometry.WidthM).ToString("0.####", CultureInfo.CurrentCulture);

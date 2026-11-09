@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using DuctSizer.Core;
@@ -7,8 +7,11 @@ namespace DuctSizer.WinForms;
 
 public sealed partial class MainForm : Form
 {
-    private const double FixedRelativeHumidity = 0.50;
-    private const double FixedAtmosphericPressurePa = 101_325.0;
+    private FittingCalculatorScreen? _fittingScreen;
+    internal FittingCalculatorScreen FittingScreen => _fittingScreen ??= new FittingCalculatorScreen(this);
+
+    internal const double FixedRelativeHumidity = 0.50;
+    internal const double FixedAtmosphericPressurePa = 101_325.0;
 
     private readonly ComboBox _unitsCombo = CreateDropDown();
     private readonly ComboBox _modeCombo = CreateDropDown();
@@ -56,7 +59,7 @@ public sealed partial class MainForm : Form
     private readonly ListViewGroup _flowGroup = new("Flow");
     private readonly ListViewGroup _pressureGroup = new("Pressure loss");
     private readonly ListViewGroup _propertiesGroup = new("Air and material");
-    private UnitSystem _currentUnits = UnitSystem.Imperial;
+    internal UnitSystem _currentUnits = UnitSystem.Imperial;
     private bool _updatingControls;
     private bool _stackedLayout;
     private bool _ductCalculationsCollapsed;
@@ -68,7 +71,7 @@ public sealed partial class MainForm : Form
     private readonly Button _ductCalculationsHideButton = CreatePaneButton("Hide", 58);
     private readonly Button _ductCalculationsExpandButton = CreatePaneButton("Expand", 88);
 
-    private sealed record Choice<T>(string Label, T Value)
+    internal sealed record Choice<T>(string Label, T Value)
     {
         public override string ToString() => Label;
     }
@@ -526,7 +529,7 @@ public sealed partial class MainForm : Form
         Resize += (_, _) => ApplyResponsiveLayout();
     }
 
-    private static void ConfigureCalculatorInputBody(TableLayoutPanel body, Panel inputScroll,
+    internal static void ConfigureCalculatorInputBody(TableLayoutPanel body, Panel inputScroll,
         TableLayoutPanel inputTable, Control outputHeading, Control summary, Control actionRow,
         int summaryHeight, int actionHeight)
     {
@@ -633,7 +636,7 @@ public sealed partial class MainForm : Form
         _updatingControls = true;
         try
         {
-            ConvertFittingUnitInputs(_currentUnits, selected);
+            FittingScreen.ConvertFittingUnitInputs(_currentUnits, selected);
             if (_currentUnits == UnitSystem.Imperial && selected == UnitSystem.Metric)
             {
                 ConvertText(_airflowText, UnitConversions.CfmToM3PerS, value => UnitConversions.M3PerSToLps(value));
@@ -665,7 +668,7 @@ public sealed partial class MainForm : Form
 
             _currentUnits = selected;
             UpdateUnitsLabels();
-            UpdateFittingUnitLabels();
+            FittingScreen.UpdateFittingUnitLabels();
         }
         finally
         {
@@ -673,7 +676,7 @@ public sealed partial class MainForm : Form
         }
 
         CalculateAndDisplay();
-        CalculateFittingAndDisplay();
+        FittingScreen.CalculateFittingAndDisplay();
         RefreshDuctSystemGrid();
     }
 
@@ -1366,7 +1369,7 @@ public sealed partial class MainForm : Form
         _results.Items.Add(item);
     }
 
-    private static Panel CreateCardHeader(string title, string subtitle)
+    internal static Panel CreateCardHeader(string title, string subtitle)
     {
         var panel = new CardHeaderPanel
         {
@@ -1413,7 +1416,7 @@ public sealed partial class MainForm : Form
         return panel;
     }
 
-    private static Label CreateOutputSectionLabel(string name) => new()
+    internal static Label CreateOutputSectionLabel(string name) => new()
     {
         Name = name,
         Text = "OUTPUTS",
@@ -1425,7 +1428,7 @@ public sealed partial class MainForm : Form
         BackColor = Color.White
     };
 
-    private static Panel CreateSummaryCard(string caption, Label valueLabel)
+    internal static Panel CreateSummaryCard(string caption, Label valueLabel)
     {
         var panel = new Panel
         {
@@ -1466,7 +1469,7 @@ public sealed partial class MainForm : Form
         return panel;
     }
 
-    private static Label CreateSummaryValue() => new()
+    internal static Label CreateSummaryValue() => new()
     {
         Text = "—",
         Dock = DockStyle.Fill,
@@ -1506,7 +1509,7 @@ public sealed partial class MainForm : Form
         return host;
     }
 
-    private static Button CreatePaneButton(string text, int width) => new()
+    internal static Button CreatePaneButton(string text, int width) => new()
     {
         Text = text,
         Size = new Size(width, 28),
@@ -1517,7 +1520,7 @@ public sealed partial class MainForm : Form
         Anchor = AnchorStyles.Top | AnchorStyles.Right
     };
 
-    private static void AddCalculationPaneControls(Panel inputHeader, Panel calculationsHeader,
+    internal static void AddCalculationPaneControls(Panel inputHeader, Panel calculationsHeader,
         Button showButton, Button hideButton, Button expandButton,
         Action show, Action hide, Action expand)
     {
@@ -1815,7 +1818,7 @@ public sealed partial class MainForm : Form
         }
     }
 
-    private static void ConfigureCalculatorSplitter(SplitContainer splitter, string name)
+    internal static void ConfigureCalculatorSplitter(SplitContainer splitter, string name)
     {
         splitter.Name = name;
         splitter.Dock = DockStyle.Fill;
@@ -1867,7 +1870,7 @@ public sealed partial class MainForm : Form
         _contentLayout.ColumnStyles[1].Width = (float)((1.0 - _ductCalculatorSplitRatio) * 100.0);
     }
 
-    private static ComboBox CreateDropDown() => new()
+    internal static ComboBox CreateDropDown() => new()
     {
         DropDownStyle = ComboBoxStyle.DropDownList,
         IntegralHeight = false,
@@ -1877,7 +1880,7 @@ public sealed partial class MainForm : Form
         ForeColor = UiPalette.Ink
     };
 
-    private static void ConfigureComboDropDown(ComboBox combo)
+    internal static void ConfigureComboDropDown(ComboBox combo)
     {
         combo.MaxDropDownItems = Math.Clamp(combo.Items.Count, 2, 12);
         combo.DropDown += (_, _) => ResizeComboDropDown(combo);
@@ -1885,7 +1888,7 @@ public sealed partial class MainForm : Form
         ResizeComboDropDown(combo);
     }
 
-    private static void ResizeComboDropDown(ComboBox combo)
+    internal static void ResizeComboDropDown(ComboBox combo)
     {
         if (combo.Items.Count == 0)
             return;
@@ -1910,7 +1913,7 @@ public sealed partial class MainForm : Form
         }
     }
 
-    private static TextBox CreateInput(string text) => new()
+    internal static TextBox CreateInput(string text) => new()
     {
         Text = text,
         TextAlign = HorizontalAlignment.Right,
@@ -1919,7 +1922,7 @@ public sealed partial class MainForm : Form
         ForeColor = UiPalette.Ink
     };
 
-    private static T Selected<T>(ComboBox combo, T fallback) where T : struct
+    internal static T Selected<T>(ComboBox combo, T fallback) where T : struct
     {
         return combo.SelectedItem is Choice<T> choice ? choice.Value : fallback;
     }
@@ -1934,7 +1937,7 @@ public sealed partial class MainForm : Form
         return value;
     }
 
-    private static double ReadPositive(TextBox box, string name)
+    internal static double ReadPositive(TextBox box, string name)
     {
         var value = ReadFinite(box, name);
         if (value <= 0.0)
@@ -1959,14 +1962,14 @@ public sealed partial class MainForm : Form
                && Math.Abs(first.HeightM - second.HeightM) <= toleranceM;
     }
 
-    private static void ConvertText(TextBox box, Func<double, double> conversion)
+    internal static void ConvertText(TextBox box, Func<double, double> conversion)
     {
         if (double.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out var value)
             || double.TryParse(box.Text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value))
             box.Text = conversion(value).ToString("0.####", CultureInfo.CurrentCulture);
     }
 
-    private static void ConvertText(TextBox box, Func<double, double> toSi, Func<double, double> fromSi)
+    internal static void ConvertText(TextBox box, Func<double, double> toSi, Func<double, double> fromSi)
     {
         ConvertText(box, value => fromSi(toSi(value)));
     }

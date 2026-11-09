@@ -294,7 +294,7 @@ internal static class Program
             using (var wideDropDown = new ComboBox { Width = 612, DropDownStyle = ComboBoxStyle.DropDownList })
             {
                 wideDropDown.Items.Add("A deliberately long dropdown item used to verify responsive sizing");
-                typeof(MainForm).GetMethod("ResizeComboDropDown", BindingFlags.Static | BindingFlags.NonPublic)!
+                UiMember.Method("ResizeComboDropDown", BindingFlags.Static | BindingFlags.NonPublic)!
                     .Invoke(null, new object[] { wideDropDown });
                 Require(wideDropDown.DropDownWidth >= wideDropDown.Width,
                     "Wide dropdowns should resize safely without reversing their minimum and maximum limits.");
@@ -451,12 +451,12 @@ internal static class Program
                 "The Layout Designer toolbox should use a tight, evenly spaced compact icon column.");
             sourceSpaceTool.GetType().GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(sourceSpaceTool, new object[] { EventArgs.Empty });
-            Require((LayoutNodeType?)typeof(MainForm).GetField("_selectedLayoutTool", BindingFlags.Instance | BindingFlags.NonPublic)!
+            Require((LayoutNodeType?)UiMember.Field("_selectedLayoutTool", BindingFlags.Instance | BindingFlags.NonPublic)!
                         .GetValue(form) == LayoutNodeType.Reservoir,
                 "Clicking a toolbox component should enter placement mode.");
-            Require((bool)typeof(MainForm).GetMethod("CancelSelectedLayoutTool", BindingFlags.Instance | BindingFlags.NonPublic)!
+            Require((bool)UiMember.Method("CancelSelectedLayoutTool", BindingFlags.Instance | BindingFlags.NonPublic)!
                         .Invoke(form, null)!
-                    && typeof(MainForm).GetField("_selectedLayoutTool", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    && UiMember.Field("_selectedLayoutTool", BindingFlags.Instance | BindingFlags.NonPublic)!
                         .GetValue(form) is null
                     && layoutCanvas.GetType().GetProperty("SelectedTool", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
                         .GetValue(layoutCanvas) is null,
@@ -593,7 +593,7 @@ internal static class Program
 
             shape.SelectedIndex = 0;
             mode.SelectedIndex = 0;
-            typeof(MainForm).GetMethod("AddOrUpdateCurrentDuct", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("AddOrUpdateCurrentDuct", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Application.DoEvents();
             Require(grid.Rows.Count == 1, "Add duct should create one duct-system row.");
@@ -1069,7 +1069,7 @@ internal static class Program
                 .Select((definition, index) => (definition, index))
                 .First(item => item.definition.Code == "3-1").index;
             Application.DoEvents();
-            typeof(MainForm).GetMethod("AddCurrentFittingToSystem", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("AddCurrentFittingToSystem", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Application.DoEvents();
             Require(grid.Rows.Count == 2, "Adding a fitting should create a second system row.");
@@ -1159,14 +1159,14 @@ internal static class Program
             Require(fittingVelocity.Text.Contains("fpm", StringComparison.Ordinal),
                 "A junction selection should calculate from the common-duct velocity pressure.");
 
-            var systemField = typeof(MainForm).GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)
+            var systemField = UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)
                               ?? throw new InvalidOperationException("Could not inspect the local system model.");
             var document = (DuctSystemDocument)systemField.GetValue(form)!;
             SavedDuct mainDuct1() => document.Ducts.Single(x => x.Sequence == 1);
             var firstDuctRow = grid.Rows.Cast<DataGridViewRow>().Single(row =>
                 Convert.ToString(row.Cells["Id"].Value) == "D-001");
             firstDuctRow.Cells["DeltaX"].Value = "12";
-            typeof(MainForm).GetMethod("SaveEditedSystemCell", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("SaveEditedSystemCell", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { firstDuctRow.Index, grid.Columns["DeltaX"].Index });
             Application.DoEvents();
             Require(Math.Abs(document.Ducts.Single().DeltaXM - UnitConversions.FeetToM(12)) < 1e-12,
@@ -1193,8 +1193,8 @@ internal static class Program
                 AirflowM3PerS = fanNode.AirflowM3PerS, PressureDropPa = UnitConversions.InchesWaterToPa(.10)
             };
             document.LayoutNodes.Add(filterNode);
-            typeof(MainForm).GetMethod("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
-            typeof(MainForm).GetMethod("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             layoutNavigation.PerformClick();
             form.Size = new Size(1280, 820);
             Application.DoEvents();
@@ -1326,18 +1326,18 @@ internal static class Program
                 "Center on Start should return the viewport to the first system component.");
             var existingLayoutNodes = document.LayoutNodes.ToArray();
             document.LayoutNodes.Clear();
-            typeof(MainForm).GetField("_layoutViewportInitialized", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Field("_layoutViewportInitialized", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(form, false);
-            typeof(MainForm).GetMethod("EnsureLayoutViewportPositioned", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("EnsureLayoutViewportPositioned", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { true });
             Application.DoEvents();
             var emptyOffset = (PointF)viewOffsetProperty.GetValue(layoutCanvas)!;
             Require(Math.Abs(emptyOffset.X) <= 1 && Math.Abs(emptyOffset.Y) <= 1,
                 "An empty Designer should begin near the center of its larger canvas so it can be extended upward and leftward.");
             document.LayoutNodes.AddRange(existingLayoutNodes);
-            typeof(MainForm).GetField("_layoutViewportInitialized", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Field("_layoutViewportInitialized", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(form, false);
-            typeof(MainForm).GetMethod("EnsureLayoutViewportPositioned", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("EnsureLayoutViewportPositioned", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { true });
             Application.DoEvents();
             coilNode.DeltaXM = UnitConversions.FeetToM(18);
@@ -1354,12 +1354,12 @@ internal static class Program
                 "Opening Layout Designer should synchronize linked component metadata from Duct System.");
             synchronizedDuct.AirSystemType = "Supply Air";
             coilNode.AirSystemType = "Supply Air";
-            var fanCaption = (string)typeof(MainForm).GetMethod("LayoutNodeCaption",
+            var fanCaption = (string)UiMember.Method("LayoutNodeCaption",
                                  BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, new object[] { fanNode })!;
             Require(fanCaption == fanNode.Id && !fanCaption.Contains('\n'),
                 "Designer components should display only their component ID.");
             var nodeCountBeforeUnconnectedPlacement = document.LayoutNodes.Count;
-            typeof(MainForm).GetMethod("PlaceLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("PlaceLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object?[] { LayoutNodeType.Filter, 10, 16, null });
             var unconnectedPlacement = document.LayoutNodes.OrderByDescending(x => x.Sequence).First();
             Require(document.LayoutNodes.Count == nodeCountBeforeUnconnectedPlacement + 1
@@ -1567,7 +1567,7 @@ internal static class Program
             fanAfterNegativeSource.ConnectionDuctSequence = negativeDuctSequence;
             document.Ducts.Add(negativeDuct);
             document.LayoutNodes.AddRange(new[] { negativeSource, fanAfterNegativeSource });
-            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             var fanInletPressure = (double)(typeof(MainForm)
                 .GetMethod("SystemInletPressureForNode", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -1611,18 +1611,18 @@ internal static class Program
                 GridX = 94, GridY = 82, IsDefined = true
             };
             document.LayoutNodes.AddRange(new[] { pressureSource, pressureFitting, pressureFan, pressureSink });
-            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Require(double.IsNaN(pressureSink.PressurePa)
                     && Math.Abs(synchronizedFitting.AirflowM3PerS - synchronizedFlow) < 1e-12,
                 "Pressures downstream of an unsized connection must be not available, never a zero-loss value.");
             var pressureDucts = new[] { pressureFitting, pressureFan, pressureSink }
                 .Select(node => SizeConnection(document, node, document.Ducts.First())).ToArray();
-            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             pressureFan.FanStaticPressurePa = synchronizedLoss
                 + pressureDucts.Sum(duct => duct.Calculate().TotalPressureLossUpperPa);
-            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Require(Math.Abs(pressureSink.PressurePa) < 1e-8
                     && Math.Abs(synchronizedFitting.AirflowM3PerS - synchronizedFlow) < 1e-12,
@@ -1700,7 +1700,7 @@ internal static class Program
             document.LayoutNodes.AddRange(new[] { mergeSourceA, mergeSourceB, mergeNode, mergeOutlet });
             document.Ducts.AddRange(new[] { mergeDuctA, mergeDuctB, mergeOutletDuct });
 
-            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Require(Math.Abs(UnitConversions.M3PerSToCfm(mainDuct.AirflowM3PerS) - 600) < .01
                     && Math.Abs(UnitConversions.M3PerSToCfm(branchDuct.AirflowM3PerS) - 400) < .01
@@ -1763,9 +1763,9 @@ internal static class Program
             boundarySink.ConnectionDuctSequence = boundaryDuctB.Sequence;
             document.LayoutNodes.AddRange(new[] { boundarySource, boundaryMiddle, boundarySink });
             document.Ducts.AddRange(new[] { boundaryDuctA, boundaryDuctB });
-            typeof(MainForm).GetMethod("ApplyReservoirAirflowChange", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("ApplyReservoirAirflowChange", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { boundarySink });
-            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Require(Math.Abs(UnitConversions.M3PerSToCfm(boundaryDuctA.AirflowM3PerS) - 650) < .01
                     && Math.Abs(UnitConversions.M3PerSToCfm(boundaryDuctB.AirflowM3PerS) - 650) < .01
@@ -1876,9 +1876,9 @@ internal static class Program
             undefinedPlacementNode.GridY = fanNode.GridY + 4;
             document.LayoutNodes.Add(undefinedPlacementNode);
             var ductCountBeforeUndefinedPlacement = document.Ducts.Count;
-            typeof(MainForm).GetMethod("EnsureInitialConnectionDuct", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("EnsureInitialConnectionDuct", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { undefinedPlacementNode, fanNode, false });
-            typeof(MainForm).GetMethod("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             Require(document.Ducts.Count == ductCountBeforeUndefinedPlacement
                     && undefinedPlacementNode.ConnectionDuctSequence is null
                     && !grid.Rows.Cast<DataGridViewRow>().Any(row =>
@@ -1897,10 +1897,10 @@ internal static class Program
             if (undefinedPlacementNode.ConnectionDuctSequence is int automaticDuctSequence)
                 document.Ducts.RemoveAll(x => x.Sequence == automaticDuctSequence);
             document.LayoutNodes.Remove(undefinedPlacementNode);
-            typeof(MainForm).GetMethod("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             layoutCanvas.GetType().GetMethod("SelectNode", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
                 .Invoke(layoutCanvas, new object?[] { null });
-            typeof(MainForm).GetMethod("ClearLayoutHistory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("ClearLayoutHistory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             var mouseWheelMethod = layoutCanvas.GetType().GetMethod("OnMouseWheel", BindingFlags.Instance | BindingFlags.NonPublic)
                                    ?? throw new InvalidOperationException("Could not inspect Designer mouse-wheel zoom.");
             mouseWheelMethod.Invoke(layoutCanvas, new object[]
@@ -1920,7 +1920,7 @@ internal static class Program
                 "The Designer should use mouse-wheel zoom without separate plus/minus buttons.");
             var originalFanDeltaX = fanNode.DeltaXM;
             layoutScale.Text = "2";
-            typeof(MainForm).GetMethod("ApplyLayoutScaleInput", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("ApplyLayoutScaleInput", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Application.DoEvents();
             Require(document.LayoutShowToScale && Math.Abs(document.LayoutFeetPerGridCell - 2.0) < 1e-9
@@ -1931,7 +1931,7 @@ internal static class Program
                 Sequence = document.ReserveLayoutSequence(), Type = LayoutNodeType.Filter,
                 GridX = fanNode.GridX + 4, GridY = fanNode.GridY + 2
             };
-            typeof(MainForm).GetMethod("SetDefaultNodeDeltas", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("SetDefaultNodeDeltas", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object?[] { scaledPlacement, fanNode });
             Require(Math.Abs(UnitConversions.MToFeet(scaledPlacement.DeltaXM) - 6.0) < 1e-9
                     && Math.Abs(UnitConversions.MToFeet(scaledPlacement.DeltaYM) + 2.0) < 1e-9
@@ -1942,7 +1942,7 @@ internal static class Program
                 Sequence = document.ReserveLayoutSequence(), Type = LayoutNodeType.Filter,
                 GridX = fanNode.GridX + 4, GridY = fanNode.GridY + 4
             };
-            typeof(MainForm).GetMethod("SetDefaultNodeDeltas", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("SetDefaultNodeDeltas", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object?[] { sameXAxisPlacement, fanNode });
             Require(Math.Abs(UnitConversions.MToFeet(sameXAxisPlacement.DeltaXM) - 8.0) < 1e-9
                     && Math.Abs(sameXAxisPlacement.DeltaYM) < 1e-12,
@@ -1952,7 +1952,7 @@ internal static class Program
                 Sequence = document.ReserveLayoutSequence(), Type = LayoutNodeType.Filter,
                 GridX = fanNode.GridX - 4, GridY = fanNode.GridY + 4
             };
-            typeof(MainForm).GetMethod("SetDefaultNodeDeltas", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("SetDefaultNodeDeltas", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object?[] { sameYAxisPlacement, fanNode });
             Require(Math.Abs(sameYAxisPlacement.DeltaXM) < 1e-12
                     && Math.Abs(UnitConversions.MToFeet(sameYAxisPlacement.DeltaYM) - 8.0) < 1e-9,
@@ -1983,7 +1983,7 @@ internal static class Program
             document.CoordinateOriginXM = document.CoordinateOriginYM = document.CoordinateOriginZM = 0;
             var layoutConnectionRefType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutConnectionRef")
                                           ?? throw new InvalidOperationException("Could not find the layout connection reference type.");
-            var insertionAxis = (string)typeof(MainForm).GetMethod("SetInsertionNodeDeltas",
+            var insertionAxis = (string)UiMember.Method("SetInsertionNodeDeltas",
                                     BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { insertionNode, insertionParent, insertionDownstream })!;
             Require(insertionAxis == "X"
@@ -2022,7 +2022,7 @@ internal static class Program
                                           BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
                                           null, new object[] { insertionDownstream, false }, null)
                                       ?? throw new InvalidOperationException("Could not create a layout connection reference.");
-            typeof(MainForm).GetMethod("InsertLayoutNodeIntoConnection", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("InsertLayoutNodeIntoConnection", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new[] { insertionNode, insertionConnection });
             var firstSplitDuct = document.Ducts.Single(x => x.Sequence == insertionNode.ConnectionDuctSequence);
             var secondSplitDuct = document.Ducts.Single(x => x.Sequence == insertionDownstream.ConnectionDuctSequence);
@@ -2045,7 +2045,7 @@ internal static class Program
                                                  BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
                                                  null, new object[] { insertionNode, false }, null)
                                              ?? throw new InvalidOperationException("Could not create the inserted upstream connection reference.");
-            var autoSizeConnectionDuct = typeof(MainForm).GetMethod("AutoSizeConnectionDuct",
+            var autoSizeConnectionDuct = UiMember.Method("AutoSizeConnectionDuct",
                                              BindingFlags.Instance | BindingFlags.NonPublic)
                                          ?? throw new InvalidOperationException("Could not find connection duct auto-sizing.");
             autoSizeConnectionDuct.Invoke(form, new[] { insertedUpstreamConnection });
@@ -2073,7 +2073,7 @@ internal static class Program
                 ConnectionDeltaConfirmed = true, IsDefined = true
             };
             document.LayoutNodes.AddRange(new[] { coordinateMiddle, coordinateChild });
-            typeof(MainForm).GetMethod("ApplyAbsoluteCoordinateEdit", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("ApplyAbsoluteCoordinateEdit", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[]
                 {
                     coordinateMiddle,
@@ -2095,7 +2095,7 @@ internal static class Program
             var childVisualBeforeRemoval = (Point)visualLocationMethod.Invoke(layoutCanvas,
                 new object[] { coordinateChild })!;
             var parentBeforeRemoval = shiftedCoordinates[insertionParent.Sequence];
-            typeof(MainForm).GetMethod("RemoveLayoutNodePreservingCoordinates",
+            UiMember.Method("RemoveLayoutNodePreservingCoordinates",
                     BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { coordinateMiddle });
             var coordinatesAfterComponentRemoval = LayoutCoordinateResolver.Resolve(document);
@@ -2122,7 +2122,7 @@ internal static class Program
                                           BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
                                           null, new object[] { coordinateChild, false }, null)
                                       ?? throw new InvalidOperationException("Could not create a layout connection reference.");
-            typeof(MainForm).GetMethod("RemoveLayoutConnectionPreservingCoordinates",
+            UiMember.Method("RemoveLayoutConnectionPreservingCoordinates",
                     BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new[] { removableConnection });
             var coordinatesAfterDuctRemoval = LayoutCoordinateResolver.Resolve(document);
@@ -2148,13 +2148,13 @@ internal static class Program
                 "The drawing scale should be an editable text field wide enough for a two-digit value.");
 
             var fanCountBeforeDuplicate = document.LayoutNodes.Count(node => node.Type == LayoutNodeType.Fan);
-            typeof(MainForm).GetMethod("PlaceLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("PlaceLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object?[] { LayoutNodeType.Fan, fanNode.GridX + 20, fanNode.GridY + 20, null });
             Require(document.LayoutNodes.Count(node => node.Type == LayoutNodeType.Fan) == fanCountBeforeDuplicate
                     && Find<Label>(form, "LayoutDesignerStatus").Text.Contains("Only one fan", StringComparison.Ordinal),
                 "The Layout Designer should reject a second system fan with a clear error.");
 
-            var tryAutoSizeFan = typeof(MainForm).GetMethod("TryAutoSizeFan", BindingFlags.Instance | BindingFlags.NonPublic)
+            var tryAutoSizeFan = UiMember.Method("TryAutoSizeFan", BindingFlags.Instance | BindingFlags.NonPublic)
                                   ?? throw new InvalidOperationException("Could not find fan auto-sizing.");
             var autoSizeArguments = new object?[] { null };
             var mainDuctForSystem = document.Ducts.Single(x => x.Sequence == 1);
@@ -2176,10 +2176,10 @@ internal static class Program
                     SizeConnection(document, unsized, mainDuctForSystem);
             }
             var autoSized = (bool)tryAutoSizeFan.Invoke(form, autoSizeArguments)!;
-            Require(!autoSized || (bool)typeof(MainForm).GetField("_criticalPathFilterEnabled",
+            Require(!autoSized || (bool)UiMember.Field("_criticalPathFilterEnabled",
                         BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!,
                 "After Auto-size Fan the Duct System table should isolate the critical path used to size the fan.");
-            var criticalLoss = (double)(typeof(MainForm).GetField("_criticalPathPressureLossPa",
+            var criticalLoss = (double)(UiMember.Field("_criticalPathPressureLossPa",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(form) ?? 0.0);
             Require(autoSized && fanNode.FanStaticPressurePa > 0
                     && Math.Abs(fanNode.FanStaticPressurePa - criticalLoss) < 1e-9
@@ -2187,7 +2187,7 @@ internal static class Program
                     && Convert.ToString(autoSizeArguments[0])!.Contains(fanNode.Id, StringComparison.Ordinal),
                 "Auto-size Fan should set the single fan to the required system airflow and current critical-path net loss. "
                 + $"Result: {autoSizeArguments[0]}");
-            var fanInformationMethod = typeof(MainForm).GetMethod("TryGetFanInformation",
+            var fanInformationMethod = UiMember.Method("TryGetFanInformation",
                                            BindingFlags.Instance | BindingFlags.NonPublic)
                                        ?? throw new InvalidOperationException("Could not inspect fan information.");
             var fanInformationArguments = new object?[] { null };
@@ -2294,13 +2294,13 @@ internal static class Program
                     BranchId = "Main", AirSystemType = "Supply Air", IsDefined = false
                 };
                 document.LayoutNodes.Add(undefinedNode);
-                typeof(MainForm).GetMethod("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+                UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
                 Application.DoEvents();
                 using var undefinedPreview = new Bitmap(layoutCanvas.Width, layoutCanvas.Height);
                 layoutCanvas.DrawToBitmap(undefinedPreview, new Rectangle(Point.Empty, layoutCanvas.Size));
                 undefinedPreview.Save(undefinedCapturePath);
                 document.LayoutNodes.Remove(undefinedNode);
-                typeof(MainForm).GetMethod("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+                UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             }
 
             var hitTestNode = layoutCanvas.GetType().GetMethod("HitTest", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -2399,7 +2399,7 @@ internal static class Program
                 AbsoluteAnchorXM = UnitConversions.FeetToM(50), AbsoluteAnchorYM = UnitConversions.FeetToM(50)
             };
             document.LayoutNodes.Add(isolatedNode);
-            var moveLayoutNode = typeof(MainForm).GetMethod("MoveLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)
+            var moveLayoutNode = UiMember.Method("MoveLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)
                                  ?? throw new InvalidOperationException("Could not inspect Designer move history.");
             moveLayoutNode.Invoke(form, new object[] { isolatedNode, fanNode.GridX, fanNode.GridY });
             Require(string.IsNullOrWhiteSpace(isolatedNode.ParentNodeId)
@@ -2407,7 +2407,7 @@ internal static class Program
                     && isolatedNode.ConnectionDuctSequence is null,
                 "Moving an unconnected component near an existing component must not create a proximity connection.");
             document.LayoutNodes.Remove(isolatedNode);
-            typeof(MainForm).GetMethod("ClearLayoutHistory", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("ClearLayoutHistory", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             var originalFilterX = filterNode.GridX;
             var movedFilterX = originalFilterX - 2;
@@ -2439,7 +2439,7 @@ internal static class Program
             restoredFilter = restoredDocument.LayoutNodes.FirstOrDefault(x => x.Sequence == filterNode.Sequence);
             Require(restoredFilter is not null && restoredFilter.GridX == movedFilterX,
                 "Redo should restore the reapplied Designer component position.");
-            var processShortcut = typeof(MainForm).GetMethod("ProcessCmdKey",
+            var processShortcut = UiMember.Method("ProcessCmdKey",
                                       BindingFlags.Instance | BindingFlags.NonPublic)
                                   ?? throw new InvalidOperationException("Could not inspect Designer keyboard shortcuts.");
             var undoShortcutArgs = new object[]
@@ -2482,7 +2482,7 @@ internal static class Program
                 "System rows should follow the drawn graph from upstream component through duct and downstream components.");
 
             filterNode.AirflowOverride = true;
-            typeof(MainForm).GetMethod("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             var overrideRow = grid.Rows.Cast<DataGridViewRow>().Single(row =>
                 Convert.ToString(row.Cells["Id"].Value) == filterNode.Id);
             Require(overrideRow.DefaultCellStyle.BackColor == Color.FromArgb(255, 237, 213),
@@ -2499,7 +2499,7 @@ internal static class Program
                 IsDefined = true
             };
             document.LayoutNodes.Add(pressurePoint);
-            typeof(MainForm).GetMethod("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             var pressurePointRow = grid.Rows.Cast<DataGridViewRow>().Single(row =>
                 Convert.ToString(row.Cells["Id"].Value) == pressurePoint.Id);
             var pressureOrderedIds = grid.Rows.Cast<DataGridViewRow>()
@@ -2536,21 +2536,21 @@ internal static class Program
             document.LayoutNodes.Add(sinkForPressureBalance);
             SizeConnection(document, sinkForPressureBalance, mainDuct1());
             // Solve once so the new duct carries the system airflow and temperature before losses are summed.
-            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             var routeDuctLossPa = new[] { coilNode, filterNode, sinkForPressureBalance }
                 .Select(node => document.Ducts.Single(x => x.Sequence == node.ConnectionDuctSequence))
                 .Sum(duct => duct.Calculate().TotalPressureLossUpperPa);
             var expectedNetLossPa = routeDuctLossPa + coilNode.PressureDropPa + filterNode.PressureDropPa;
             fanNode.FanStaticPressurePa = expectedNetLossPa;
-            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Require(Math.Abs(sinkForPressureBalance.PressurePa) < 1e-8,
                 "When fan static equals the critical-path net loss, the Space Sink pressure should solve to 0 in. w.c. "
                 + $"fan {fanNode.PressurePa:R} (parent '{fanNode.ParentNodeId}'), coil {coilNode.PressurePa:R}, filter {filterNode.PressurePa:R}, "
                 + $"sink {sinkForPressureBalance.PressurePa:R}, expected loss {expectedNetLossPa:R}, ducts "
                 + string.Join(",", new[] { coilNode, filterNode, sinkForPressureBalance }.Select(x => x.ConnectionDuctSequence)));
-            typeof(MainForm).GetMethod("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             tabs.SelectedTab = tabs.TabPages[2];
             Application.DoEvents();
             var criticalLabel = Find<Label>(form, "SystemCriticalPathLabel");
@@ -2579,7 +2579,7 @@ internal static class Program
             AutomationOptions.ExportBasePath = greenSaveBasePath;
             try
             {
-                typeof(MainForm).GetMethod("ExportDuctSystem", BindingFlags.Instance | BindingFlags.NonPublic)!
+                UiMember.Method("ExportDuctSystem", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(form, null);
             }
             finally
@@ -2687,12 +2687,12 @@ internal static class Program
                 Visible = true
             };
             document.LayoutViewMode = LayoutViewMode.TopDown;
-            typeof(MainForm).GetMethod("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Application.DoEvents();
             Require(layoutPdfBackground.Text == "PDF Background" && layoutViewMode.SelectedIndex == 2,
                 "An imported construction sheet should activate the Top-Down overlay and expose its management menu.");
-            var renderSchematicMethod = typeof(MainForm).GetMethod("RenderPdfSchematic",
+            var renderSchematicMethod = UiMember.Method("RenderPdfSchematic",
                 BindingFlags.Instance | BindingFlags.NonPublic)
                 ?? throw new InvalidOperationException("Could not capture a report schematic.");
             var importedBackground = document.LayoutPdfBackground;
@@ -2772,7 +2772,7 @@ internal static class Program
             layoutCanvas.GetType().GetField("_viewOffset", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(layoutCanvas, originalViewOffset);
 
-            var managePdfMethod = typeof(MainForm).GetMethod("ManageLayoutPdfBackground",
+            var managePdfMethod = UiMember.Method("ManageLayoutPdfBackground",
                 BindingFlags.Instance | BindingFlags.NonPublic)
                 ?? throw new InvalidOperationException("Could not open the PDF background commands.");
             managePdfMethod.Invoke(form, null);
@@ -2829,7 +2829,7 @@ internal static class Program
                 "Delete PDF should remove only the background and leave the Designer available.");
             document.LayoutViewMode = priorPdfTestViewMode;
             document.LayoutFeetPerGridCell = priorPdfTestFeetPerGridCell;
-            typeof(MainForm).GetMethod("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
 
             var pdfReportItems = (IReadOnlyList<DuctSystemPdfReportItem>)(typeof(MainForm)
@@ -3002,7 +3002,7 @@ internal static class Program
             }
 
             document.LayoutNodes.Remove(pressurePoint);
-            typeof(MainForm).GetMethod("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
 
             var layoutCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_LAYOUT_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(layoutCapturePath))
@@ -3221,7 +3221,7 @@ internal static class Program
                     directFittingEditor.Hide();
                 }
             }
-            typeof(MainForm).GetMethod("LoadFittingIntoCalculator", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("LoadFittingIntoCalculator", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { savedDesignerFitting });
             var loadedDefinition = fittingType.SelectedItem as FittingDefinition;
             Require(loadedDefinition is not null && loadedDefinition.Code == savedDesignerFitting.FittingCode
@@ -3282,11 +3282,11 @@ internal static class Program
                     "Pressing a designer duct should offer a direct flow-direction switch.");
             }
 
-            var rewire = typeof(MainForm).GetMethod("RewireLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)
+            var rewire = UiMember.Method("RewireLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)
                          ?? throw new InvalidOperationException("Could not access layout rewiring behavior.");
             var rewired = (bool)rewire.Invoke(form, new object[] { filterNode, fanNode.Id, true })!;
-            typeof(MainForm).GetMethod("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
-            typeof(MainForm).GetMethod("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             Application.DoEvents();
             var rewireElbow = document.LayoutNodes.FirstOrDefault(x =>
                 x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows"
@@ -3302,7 +3302,7 @@ internal static class Program
                 $"ducts={string.Join(',', document.Ducts.Select(x => $"{x.Sequence}:{UnitConversions.M3PerSToCfm(x.AirflowM3PerS):0}"))}; " +
                 $"fittings={string.Join(',', document.LayoutNodes.Where(x => x.Type == LayoutNodeType.Fitting).Select(x => $"{x.Id}<{x.ParentNodeId}[{x.FittingGroup}]"))}.");
 
-            var automaticElbowMethod = typeof(MainForm).GetMethod("AddAutomaticElbowsForMultiAxisConnection",
+            var automaticElbowMethod = UiMember.Method("AddAutomaticElbowsForMultiAxisConnection",
                                           BindingFlags.Instance | BindingFlags.NonPublic)
                                       ?? throw new InvalidOperationException("Could not inspect multi-axis routing behavior.");
             var routeStart = new SavedLayoutNode
@@ -3400,7 +3400,7 @@ internal static class Program
             Require(afterMain == 1 && afterBranch == 0,
                 "A second split connection should automatically use the only remaining main or branch outlet.");
             document.LayoutNodes.AddRange(new[] { splitPreviewNode, splitSameBranch, splitNewBranch });
-            typeof(MainForm).GetMethod("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             layoutNavigation.PerformClick();
             Application.DoEvents();
             var splitCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_SPLIT_CAPTURE_PATH");
@@ -3440,7 +3440,7 @@ internal static class Program
             Require(ReferenceEquals(gestureRequest.GetType().GetProperty("Upstream")?.GetValue(gestureRequest), secondarySource)
                     && ReferenceEquals(gestureRequest.GetType().GetProperty("Downstream")?.GetValue(gestureRequest), convergingNode),
                 "A connector drag must use its initial connector as upstream and the connector it is dragged to as downstream.");
-            typeof(MainForm).GetMethod("ConnectLayoutPorts", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("ConnectLayoutPorts", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { secondarySource, convergingNode, 0, 1 });
             Application.DoEvents();
             var secondaryPathElbow = document.LayoutNodes.FirstOrDefault(x =>
@@ -3489,18 +3489,18 @@ internal static class Program
             var childBefore = outletCoordinatesBefore[existingOutletChild.Sequence];
             var elbowCountBeforeOutletConnection = document.LayoutNodes.Count(x =>
                 x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows");
-            typeof(MainForm).GetMethod("ConnectLayoutPorts", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("ConnectLayoutPorts", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { convergingNode, convergingOutletTarget, 0, 0 });
             Application.DoEvents();
             var outletCoordinatesAfter = LayoutCoordinateResolver.Resolve(document);
             var targetAfter = outletCoordinatesAfter[convergingOutletTarget.Sequence];
             var childAfter = outletCoordinatesAfter[existingOutletChild.Sequence];
-            var ensureCoordinates = typeof(MainForm).GetMethod("EnsureConnectedCoordinateDeltas",
+            var ensureCoordinates = UiMember.Method("EnsureConnectedCoordinateDeltas",
                                         BindingFlags.Instance | BindingFlags.NonPublic)
                                     ?? throw new InvalidOperationException("Could not inspect edit-time coordinate stability.");
             Require((bool)ensureCoordinates.Invoke(form, new object[] { convergingOutletTarget })!,
                 "An already connected converging outlet should remain valid when its fitting is edited.");
-            typeof(MainForm).GetMethod("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             var outletCoordinatesAfterEdit = LayoutCoordinateResolver.Resolve(document);
             Require(convergingOutletTarget.ParentNodeId == convergingNode.Id
@@ -3532,7 +3532,7 @@ internal static class Program
             var belowBefore = LayoutCoordinateResolver.Resolve(document)[directlyBelowTarget.Sequence];
             var belowElbowCount = document.LayoutNodes.Count(x =>
                 x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows");
-            typeof(MainForm).GetMethod("ConnectLayoutPorts", BindingFlags.Instance | BindingFlags.NonPublic)!
+            UiMember.Method("ConnectLayoutPorts", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, new object[] { convergingNode, directlyBelowTarget, 0, 0 });
             Application.DoEvents();
             var belowAfter = LayoutCoordinateResolver.Resolve(document)[directlyBelowTarget.Sequence];
@@ -3597,7 +3597,7 @@ internal static class Program
                     .Select((item, index) => (item, index))
                     .First(x => x.item.ToString()?.StartsWith("5-24 ", StringComparison.Ordinal) == true).index;
                 form.Size = new Size(1280, 820);
-                typeof(MainForm).GetMethod("ResetFittingInputScroll", BindingFlags.Instance | BindingFlags.NonPublic)!
+                UiMember.Method("ResetFittingInputScroll", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(form, null);
                 Application.DoEvents();
                 Application.DoEvents();
@@ -3632,7 +3632,7 @@ internal static class Program
                 form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
                 preview.Save(spacingCapturePath);
             }
-            typeof(MainForm).GetMethod("ClearAllSystemData", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            UiMember.Method("ClearAllSystemData", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             Application.DoEvents();
             Require(document.Ducts.Count == 0 && document.Fittings.Count == 0 && document.LayoutNodes.Count == 0
                     && grid.Rows.Count == 0,
@@ -3645,7 +3645,7 @@ internal static class Program
                 AutomationOptions.OpenProjectPath = greenSaveProjectPath;
                 try
                 {
-                    typeof(MainForm).GetMethod("OpenProject", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    UiMember.Method("OpenProject", BindingFlags.Instance | BindingFlags.NonPublic)!
                         .Invoke(form, null);
                 }
                 finally
@@ -3659,7 +3659,7 @@ internal static class Program
                         && openedModel.LayoutNodes.Count > 0
                         && openedModel.Ducts.Count == savedProject.Ducts.Count
                         && openedModel.Fittings.Count == savedProject.Fittings.Count
-                        && (string)typeof(MainForm).GetField("_lastExportBasePath",
+                        && (string)UiMember.Field("_lastExportBasePath",
                             BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)! == greenSaveBasePath,
                     "Open Project should restore the full model and make later saves write back to the opened project.");
             }
@@ -3721,8 +3721,11 @@ internal static class Program
 
     private static T PrivateField<T>(object instance, string name) where T : class
     {
-        var field = instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?? throw new InvalidOperationException($"Could not find private field {name}.");
+        var field = instance is MainForm
+            ? UiMember.Field(name, BindingFlags.Instance | BindingFlags.NonPublic)
+              ?? throw new InvalidOperationException($"Could not find private field {name}.")
+            : new UiField(instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+                          ?? throw new InvalidOperationException($"Could not find private field {name}."), null);
         return field.GetValue(instance) as T
                ?? throw new InvalidOperationException($"Private field {name} was not a {typeof(T).Name}.");
     }
@@ -3781,4 +3784,60 @@ internal static class Program
         if (!condition)
             throw new InvalidOperationException(message);
     }
+}
+
+
+/// <summary>
+/// Finds a non-public member of the main window. Since step 9 each tab is its own screen class owned by the window,
+/// so a member is looked up on <see cref="MainForm"/> first and then on its screen objects; Invoke/GetValue/SetValue
+/// take the window as target and redirect to the owning screen.
+/// </summary>
+internal static class UiMember
+{
+    private static IEnumerable<(Type Type, Func<object?, object?> Owner)> Owners()
+    {
+        yield return (typeof(MainForm), target => target);
+        foreach (var property in typeof(MainForm).GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
+                     .Where(property => property.PropertyType.Name.EndsWith("Screen", StringComparison.Ordinal)))
+            yield return (property.PropertyType, target => target is null ? null : property.GetValue(target));
+    }
+
+    internal static UiMethod? Method(string name, BindingFlags flags)
+    {
+        foreach (var (type, owner) in Owners())
+            if (type.GetMethod(name, flags) is { } method)
+                return new UiMethod(method, method.IsStatic ? _ => null : owner);
+        return null;
+    }
+
+    internal static UiMethod? Method(string name, BindingFlags flags, Binder? binder, Type[] types, ParameterModifier[]? modifiers)
+    {
+        foreach (var (type, owner) in Owners())
+            if (type.GetMethod(name, flags, binder, types, modifiers) is { } method)
+                return new UiMethod(method, method.IsStatic ? _ => null : owner);
+        return null;
+    }
+
+    internal static UiField? Field(string name, BindingFlags flags)
+    {
+        foreach (var (type, owner) in Owners())
+            if (type.GetField(name, flags) is { } field)
+                return new UiField(field, field.IsStatic ? _ => null : owner);
+        return null;
+    }
+}
+
+internal sealed class UiMethod(MethodInfo method, Func<object?, object?> owner)
+{
+    public MethodInfo Info => method;
+    public object? Invoke(object? target, object?[]? arguments) => method.Invoke(owner(target), arguments);
+    public ParameterInfo[] GetParameters() => method.GetParameters();
+    public Type ReturnType => method.ReturnType;
+}
+
+internal sealed class UiField(FieldInfo field, Func<object?, object?>? owner)
+{
+    public Type FieldType => field.FieldType;
+    public object? GetValue(object? target) => field.GetValue(owner is null ? target : owner(target));
+    public void SetValue(object? target, object? value) => field.SetValue(owner is null ? target : owner(target), value);
 }
