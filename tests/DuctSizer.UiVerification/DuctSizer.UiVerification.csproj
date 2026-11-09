@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- CS0436: FanWorks exposes its internals to this test assembly (InternalsVisibleTo), so the
+         WinForms-generated ApplicationConfiguration class exists in both assemblies. The local copy is
+         the intended one; the duplicate is harmless. -->
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\DuctSizer.WinForms\DuctSizer.WinForms.csproj" />
