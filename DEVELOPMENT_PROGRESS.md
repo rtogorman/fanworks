@@ -142,7 +142,7 @@ laptop folder is a plain copy (no `.git`); it is kept in step by copying changed
 - `08e97aa` Step 9: per-type component data (schema 14)
 - `9f86bbb` / `589371d` / `70265c9` / `1949647` Step 9: one screen class per tab
 - `a3b08c6` v0.95.0: docs, unsized display fix
-- (next) Test warnings fixed; v0.95.0 Windows verification recorded
+- `bebe54e` Test warnings fixed; v0.95.0 Windows verification recorded
 
 ## Reference project golden results (v0.93.0 Core)
 
