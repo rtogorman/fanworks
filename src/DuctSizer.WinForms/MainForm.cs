@@ -16,6 +16,29 @@ public sealed partial class MainForm : Form
     protected override bool ProcessCmdKey(ref Message message, Keys keyData) =>
         LayoutScreen.TryHandleCommandKey(keyData) || base.ProcessCmdKey(ref message, keyData);
 
+    /// <summary>
+    /// The window opens at its designed 1200 x 1200 size. On a screen whose working area (the
+    /// desktop minus the taskbar) is smaller, it opens at the working-area size instead, centred,
+    /// so no part of it starts off-screen or under the taskbar.
+    /// </summary>
+    internal static Size OpeningSize(Size designed, Rectangle workingArea) => new(
+        Math.Min(designed.Width, workingArea.Width),
+        Math.Min(designed.Height, workingArea.Height));
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        var workingArea = Screen.FromControl(this).WorkingArea;
+        var fitted = OpeningSize(Size, workingArea);
+        if (fitted != Size)
+        {
+            Size = fitted;
+            Location = new Point(
+                workingArea.Left + (workingArea.Width - fitted.Width) / 2,
+                workingArea.Top + (workingArea.Height - fitted.Height) / 2);
+        }
+    }
+
     private DuctSystemScreen? _ductSystemScreen;
     internal DuctSystemScreen DuctSystemScreen => _ductSystemScreen ??= new DuctSystemScreen(this);
 

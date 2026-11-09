@@ -21,6 +21,17 @@ jobs:
       - name: Engineering verification
         run: dotnet run --project tests/DuctSizer.Verification/DuctSizer.Verification.csproj -c Release
 
+      # The hosted runner's virtual display is 1024 x 768. The interface checks exercise real window
+      # sizes (wide/stacked layouts, image panes), so give them a desktop-sized display first.
+      - name: Desktop-sized display for interface checks
+        shell: pwsh
+        run: |
+          Set-DisplayResolution -Width 1920 -Height 1080 -Force
+          Add-Type -AssemblyName System.Windows.Forms
+          $area = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+          Write-Host "Working area: $($area.Width) x $($area.Height)"
+          if ($area.Width -lt 1600 -or $area.Height -lt 900) { throw "Display too small for the interface checks." }
+
       - name: Interface verification
         shell: pwsh
         run: |

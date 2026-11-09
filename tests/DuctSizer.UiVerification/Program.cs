@@ -22,8 +22,13 @@ internal static class Program
             form.CreateControl();
             form.Show();
             Application.DoEvents();
-            Require(form.Size == new Size(1200, 1200),
-                "The application should open in the requested compact near-square window.");
+            var openingArea = Screen.FromControl(form).WorkingArea;
+            Require(form.Size == MainForm.OpeningSize(new Size(1200, 1200), openingArea)
+                    && openingArea.Contains(form.Bounds),
+                $"The application should open at 1200 x 1200, or fitted to a smaller working area ({openingArea.Width} x {openingArea.Height}); it opened at {form.Width} x {form.Height}.");
+            Require(MainForm.OpeningSize(new Size(1200, 1200), new Rectangle(0, 0, 1366, 728)) == new Size(1200, 728)
+                    && MainForm.OpeningSize(new Size(1200, 1200), new Rectangle(0, 0, 2560, 1400)) == new Size(1200, 1200),
+                "The opening size should keep the designed size when it fits and shrink only the dimension that does not.");
             var openingCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_OPENING_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(openingCapturePath))
             {
