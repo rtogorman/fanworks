@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-09 (steps 1-10 done; v0.94.0 built and verified on the owner's laptop)
+Last updated: 2026-11-09 (owner directives done; steps 8 and 9 completed in full; v0.95.0 pending Windows build)
 
 ## Where things live
 
@@ -34,7 +34,7 @@ name the repo).
 | 6. Logging + v0.93 release (findings 9, 11) | Done | `DiagnosticLog`, crash reports, `AutomationOptions` replaces env vars; v0.93.0 built on owner's laptop: 41/41 engineering, 16/16 interface checks |
 | 7. System solver into Core (finding 6) | Done | `SystemSolver` (Core) replaces the window's solver; bit-identical on reference project + 3 variants; 8 new solver checks (49/49); UI 16/16 (Wine) |
 | 8. One coordinate model (finding 7) | Done in full 2026-11-09 (see "Step 8 (full) record"); earlier partial record kept below | `LayoutGeometryCheck` detects non-closing loops, duct offset/length mismatches, unplaced components; shown on the Duct System summary, tooltip and PDF; resolver documented. Storage still relative (decision recorded) |
-| 9. Break up main window (findings 12-14) | Done, reduced scope (see Step 9 record) | undo capped; 14 classes moved to own files; `LayoutModelCheck` per-type rules. Per-tab screen classes deferred (decision recorded) |
+| 9. Break up main window (findings 12-14) | Done in full 2026-11-09 (see "Step 9 (full)" records A and B) | undo capped; 14 classes moved to own files; `LayoutModelCheck` per-type rules. Per-tab screen classes deferred (decision recorded) |
 | 10. Docs, independent verification, CI (findings 15-16) | Done in code; human items open | XML docs with equations/sources; `docs/TABLE_VERIFICATION.md` (108 entries, all "Not verified"); ARCHITECTURE/DEVELOPER_GUIDE; culture test; warnings as errors; `global.json`; CI workflow. Open: independent table re-check, IP clearance, GitHub |
 
 ## Completed changes (v0.93.0)
@@ -233,11 +233,30 @@ step 10 refresh, release v0.95.0.
 - Checks: each type saves only its own block; schema-13 flat fields load unchanged -> 63/63; interface 16/16 (Wine);
   reference project identical (schema 14 round trip, positions unchanged).
 
+## Step 9 (full) record — part B: one class per tab
+
+- `MainForm.FittingLoss.cs` -> `FittingCalculatorScreen`, `MainForm.DuctSystem.cs` -> `DuctSystemScreen`,
+  `MainForm.LayoutDesigner.cs` -> `LayoutDesignerScreen`, and the calculator part of `MainForm.cs` ->
+  `DuctCalculatorScreen`. `MainForm` (about 1,000 lines) keeps the window frame, tabs, units, menus, keyboard
+  routing (`ProcessCmdKey` -> `LayoutScreen.TryHandleCommandKey`) and shared static control builders.
+- Each screen receives the window (`_host`); cross-tab use is explicit (`_host.DuctSystemScreen._ductSystem`, etc.).
+  Done with a compiler-driven tool (`/home/claude/extract_screen.py`, outside the repo) that fixed each compile error
+  at its position; no logic was edited by hand apart from the keyboard routing and qualifying shared nested types.
+- Interface test: reflection goes through `UiMember` (finds a member on the window or any `*Screen` property and
+  redirects the target), so the test reaches the same members after the split.
+- Verification after each extraction: 16/16 interface (Wine); start-up smoke test logs normally. Final: 63/63 and
+  16/16.
+- Remaining structural debt: the two system screens are still ~4,000 lines each and share state through the window.
+
+## Step 10 refresh (2026-11-09)
+
+- README "What changed in 0.95.0"; ARCHITECTURE (positions, per-type blocks, screens, unsized rule) and
+  DEVELOPER_GUIDE (UiMember, position rule) updated; version 0.95.0.
+- Fixed a last display path that still treated an unsized connection as zero loss (Duct System inlet pressure column).
+
 ## Current task detail
 
-None in progress. v0.94.0 built on the owner's laptop on 2026-11-09: 58/58 engineering, 16/16 interface checks,
-`outputs\FanWorks-win-x64-v0.94.0\FanWorks.exe`. Next work is owner-directed: the open decisions and deferred
-restructuring below, GitHub setup (then push history and the CI workflow), and the human verification items.
-
-Note: `.github\workflows\build.yml` could not be written into the owner's folder (protected path for the
-remote-file tool); it is in the Claude working repo and goes up with the first GitHub push.
+Build v0.95.0 on the owner's laptop and confirm both suites on Windows. Old partial files
+(`MainForm.FittingLoss.cs`, `MainForm.DuctSystem.cs`, `MainForm.LayoutDesigner.cs`) were replaced in the owner's
+folder by one-line stubs (the remote-file tool cannot delete); they can be deleted. Then: push history to GitHub once
+the Claude GitHub App is installed.

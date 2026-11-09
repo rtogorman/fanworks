@@ -47,10 +47,12 @@ reproducibility, then code clarity.
    are explicit (see `DuctSizingSolver`).
 5. **Culture-invariant files.** Anything written to a file (JSON, CSV, PDF commands) uses
    `CultureInfo.InvariantCulture`. The check "Exports do not depend on regional settings" guards this.
-6. **Saved format changes are versioned.** Increment `DuctSystemDocument.SchemaVersion`, add the upgrade step in
+6. **Positions are stored absolute and entered relative.** Never store a position only as an offset; never show the
+   user raw absolute coordinates for a connected component. Use `LayoutPositionReference` in dialogs.
+7. **Saved format changes are versioned.** Increment `DuctSystemDocument.SchemaVersion`, add the upgrade step in
    `DuctSystemStore.Load`, and add a round-trip check. Never make an old file unreadable.
-7. **Every defect fix gets a regression check** in `tests\DuctSizer.Verification` (engineering) or the interface suite.
-8. **Pin behavior before moving code.** For refactoring, compare the solved state of a reference project before and
+8. **Every defect fix gets a regression check** in `tests\DuctSizer.Verification` (engineering) or the interface suite.
+9. **Pin behavior before moving code.** For refactoring, compare the solved state of a reference project before and
    after (see "Reference comparison" below) and expect bit-identical output.
 
 ## Adding an engineering check
@@ -76,8 +78,9 @@ FanWorks version, OS and architecture. Ask users to send the latest `crash-*.txt
 
 `tests\DuctSizer.UiVerification` builds a real `MainForm`, drives it, and checks the results. It uses the internal
 `AutomationOptions` (via `InternalsVisibleTo`) to store its working file in a temporary folder and to suppress
-dialogs; it never touches the user's own project. It also reaches many private members of `MainForm` by name, so a
-renamed private method can break it: search the test for the old name when renaming.
+dialogs; it never touches the user's own project. It also reaches private members by name through `UiMember`, which
+looks on `MainForm` and then on its screen classes, so a renamed private method can break it: search the test for the
+old name when renaming.
 
 ## Reference comparison
 

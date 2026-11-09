@@ -1842,8 +1842,8 @@ internal sealed partial class DuctSystemScreen
                 string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
             if (parent is null)
                 return;
-            // Unsized connection: close-coupled, no loss. Assigned duct that fails: NaN.
-            var ductLoss = ductSequence is int sequence ? _host.LayoutScreen.SafeDuctPressureLoss(sequence) : 0.0;
+            // An unsized connection or a duct that cannot be calculated: the inlet pressure is not available (NaN).
+            var ductLoss = ductSequence is int sequence ? _host.LayoutScreen.SafeDuctPressureLoss(sequence) : double.NaN;
             incomingPressures.Add(_host.LayoutScreen.OutletPressureToward(parent, node) - ductLoss);
         }
     }

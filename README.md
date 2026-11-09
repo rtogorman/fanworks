@@ -197,6 +197,15 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.95.0
+
+- **Unsized connections block results.** A drawn connection with no sized duct is no longer counted as zero loss: the critical-path total shows "not available" and names it, Auto-size Fan refuses until it is sized, and pressures downstream show "—".
+- **Auto-size Fan isolates the critical path.** After sizing, the Duct System table shows only the items whose losses set the fan static pressure (the same view as "Isolate Critical Path"); "Show All Items" restores the full list.
+- **Positions are stored as absolute coordinates.** Project files (format 14) store each component's absolute X/Y/Z; when a file is opened, the connection offsets are rebuilt from those positions. Older projects convert automatically without moving anything. Converging loops can no longer have offsets that disagree.
+- **Positions are entered relative to a neighbour.** The component and fitting position fields show and accept the offset from the upstream component, or from the downstream component when there is no upstream one (labelled DOWNSTREAM). Only an unconnected component uses absolute X/Y/Z.
+- **Each component type saves only its own data** (fan, terminal, space, calculation point, fitting blocks).
+- **For developers:** each tab is its own class (`DuctCalculatorScreen`, `FittingCalculatorScreen`, `DuctSystemScreen`, `LayoutDesignerScreen`); `MainForm` keeps the window frame, units and shared control builders.
+
 ## What changed in 0.94.0
 
 Version 0.94.0 restructures the code for maintainability; calculated results are unchanged from 0.93.0.
@@ -214,7 +223,7 @@ Version 0.93.0 is a correctness and stability release that follows the v0.92.0 c
 - **Junction fittings use the real connected duct sizes.** Diverging and converging tees and wyes take their common, straight, and branch areas from the ducts actually connected to each leg. When a leg has no sized duct yet, the fitting's own reference geometry is used and the leg is listed as assumed.
 - **Each junction outlet is charged its own loss.** The critical path charges a route through the main outlet the ASHRAE straight-path coefficient and a route through the branch outlet the branch-path coefficient (and likewise for converging inlets). Earlier versions charged every route the single coefficient selected on the fitting, which could understate a branch route.
 - **Failures are never silent zeros.** A duct or fitting that cannot be calculated makes the critical-path total "not available" and names the item. Auto-size Fan refuses, and leaves the fan unchanged, until the route is complete. Fan horsepower rejects invalid airflow, pressure, or efficiency.
-- **Unsized connections are shown as an assumption.** A drawn connection with no duct assigned (red in the Designer) is treated as close-coupled with no loss, and the critical-path total says so and lists the components it affects.
+- **Unsized connections are shown as an assumption.** (Superseded in 0.95.0: unsized connections now block the total.)
 - **Out-of-range table lookups are flagged.** When an ASHRAE table input falls outside the published range, the edge value is still used but the fitting result, the Fitting Calculator status, and the PDF report carry a "review required" note.
 - **Transitional flow** uses the conservative upper-bound friction rate everywhere, matching the documented method.
 - **Fan airflow** comes from the fan's own connected system rather than the largest airflow anywhere in the project.

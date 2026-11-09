@@ -36,7 +36,7 @@ FittingLossInput ──► FittingCatalog.All[code] (ASHRAE / manufacturer table
                   = FittingCalculationResult (C, reference velocity, loss, TableRangeWarnings)
 
 DuctSystemDocument ──► SystemSolver.Solve   (airflow balance, temperatures, junction legs, static pressure)
-                    ──► CriticalPathAnalyzer (worst route; per-route junction path; Issues and RouteAssumptions)
+                    ──► CriticalPathAnalyzer (worst route; per-route junction path; Issues)
                     ──► LayoutGeometryCheck / LayoutModelCheck (consistency reports, change nothing)
                     ──► FanSizing / FanPerformance (required airflow, brake horsepower)
 ```
@@ -51,8 +51,8 @@ residual, basis description) so the PDF report can show the full substitution fo
   `InvalidOperationException`. They never return a plausible fallback number.
 - In the system analysis an item that cannot be calculated is NaN ("not available") and is named in
   `CriticalPathResult.Issues`; totals that depend on it are not shown as valid, and Auto-size Fan refuses.
-- A drawn connection with no duct assigned is treated as close-coupled (no loss) and is listed in
-  `CriticalPathResult.RouteAssumptions`.
+- A drawn connection with no sized duct has an unknown loss: it is an issue that blocks the total and Auto-size Fan,
+  and pressures downstream of it are NaN. It is never counted as zero loss.
 - Digitized tables never extrapolate; an input outside a table uses the edge value and adds a
   `TableRangeWarnings` entry that appears in the calculator and the PDF.
 
@@ -67,9 +67,15 @@ The window edits this model and redraws from it; nothing is inferred from drawin
   `SecondaryConnectionDuctSequence`). `LayoutTopology` (`SystemAnalysis.cs`) answers topology questions.
 - A diverging fitting's main (straight-through) outlet is the downstream component on the fitting's own branch
   (`BranchId`); the other outlet is the branch.
-- Positions are stored as X/Y/Z offsets from the upstream component. `LayoutCoordinateResolver` derives absolute
-  positions (deterministic, first route wins) and `LayoutGeometryCheck` reports offsets that do not close.
-- `LayoutModelCheck` documents and enforces which fields apply to which component type.
+- Positions: each component stores its absolute X/Y/Z (`XM/YM/ZM`, schema 13+), and these are authoritative when a
+  file is opened (`LayoutPositions.DeriveOffsetsFromAbsolute` rebuilds every connection offset from them). In memory
+  the Designer edits offsets, because users enter positions relative to the upstream component (or the downstream
+  component when there is none); `LayoutCoordinateResolver` derives positions from the offsets and
+  `LayoutPositions.StoreAbsolute` writes them back as absolute on every save, rewriting second-inlet offsets so a
+  converging loop always closes. `LayoutGeometryCheck` reports any remaining geometric inconsistency.
+- Component data: common fields on `SavedLayoutNode`; type-specific data in per-type blocks (`Fan`, `Grd`, `Space`,
+  `CalculationPoint`, `Fitting`), written only for that type (schema 14). `LayoutModelCheck` enforces the per-type
+  rules.
 
 ## Persistence
 
@@ -81,22 +87,25 @@ The window edits this model and redraws from it; nothing is inferred from drawin
 | Logs | `%LOCALAPPDATA%\FanWorks\logs` | daily log and crash reports, 30-day retention |
 
 `DuctSystemStore.Save` writes to a temporary file, keeps the previous file as `.bak`, then replaces it, so an
-interrupted save cannot destroy the last good file. Files carry `SchemaVersion` (currently 12) and
+interrupted save cannot destroy the last good file. Files carry `SchemaVersion` (currently 14) and
 `DuctSystemStore.Load` upgrades older versions step by step; a file from a newer FanWorks is refused with an update
 message. Changing the saved format means: increment the version, add an upgrade step, add a round-trip check.
 
 ## The application
 
-`MainForm` is one window split across partial files by tab: `MainForm.cs` (Duct Calculator), `MainForm.FittingLoss.cs`
-(Fitting Calculator), `MainForm.DuctSystem.cs` (Duct System schedule, report, project files) and
-`MainForm.LayoutDesigner.cs` (Layout Designer). Dialogs, the Designer canvas and drawing helpers are separate classes
-in their own files. The window holds UI state only; calculations are delegated to Core.
+`MainForm` is the window frame: tab setup, units, menus, keyboard routing and shared control builders. Each tab is
+its own class that receives the window (`_host`): `DuctCalculatorScreen`, `FittingCalculatorScreen`,
+`DuctSystemScreen` (schedule, report, project files, critical path display) and `LayoutDesignerScreen`. The window
+exposes them as `CalculatorScreen`, `FittingScreen`, `DuctSystemScreen` and `LayoutScreen`; cross-tab calls go
+through these properties, so every dependency between tabs is visible in the code. Dialogs, the Designer canvas and
+drawing helpers are separate classes. Screens hold UI state only; calculations are delegated to Core.
 
 `Program.cs` starts logging and installs the crash handlers. `AutomationOptions` holds test-only switches (dialog
 suppression, storage path); they are internal and reachable only by the interface test assembly.
 
 ## Known structural limits (see DEVELOPMENT_PROGRESS.md)
 
-- The main window is still large and the interface test reaches many of its private members by name.
-- Positions are stored as relative offsets rather than absolute coordinates.
-- Every component type shares one saved record (`SavedLayoutNode`); type rules are enforced by `LayoutModelCheck`.
+- The screens still share state through the window (for example the Designer reads the Duct System screen's
+  project), and the two system screens are large (about 4,000 lines each). Further splitting should follow the
+  feature seams inside them (report building, project files, Designer editing operations).
+- The interface test reaches private members by name through `UiMember`, which looks on the window and its screens.
