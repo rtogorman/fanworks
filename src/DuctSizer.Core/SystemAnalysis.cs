@@ -219,17 +219,10 @@ public sealed record CriticalPathResult(
     string StartId,
     string EndId,
     IReadOnlyList<SystemCalculationIssue> Issues,
-    bool IsSeriesTotal,
-    IReadOnlyList<SystemCalculationIssue>? Assumptions = null)
+    bool IsSeriesTotal)
 {
     /// <summary>True when every item that could lie on the critical route was calculated.</summary>
     public bool IsComplete => Issues.Count == 0 && ItemKeys.Count > 0;
-
-    /// <summary>
-    /// Assumptions made on the reported route that the engineer should confirm. Currently: drawn connections
-    /// with no duct assigned (shown red in the designer), which are treated as close-coupled with no loss.
-    /// </summary>
-    public IReadOnlyList<SystemCalculationIssue> RouteAssumptions => Assumptions ?? Array.Empty<SystemCalculationIssue>();
 }
 
 /// <summary>
@@ -242,13 +235,11 @@ public sealed record CriticalPathResult(
 /// A route entering a converging fitting through its primary inlet is charged the straight path, and through its
 /// secondary inlet the branch path. Duct friction uses the conservative upper bound in transitional flow.
 /// Any item that fails to calculate is reported in <see cref="CriticalPathResult.Issues"/> and is never counted
-/// as a zero loss. A drawn connection with no duct assigned is treated as close-coupled (no loss); this is
-/// reported in <see cref="CriticalPathResult.RouteAssumptions"/> when it lies on the reported route.
+/// as a zero loss. A drawn connection with no duct assigned (unsized, shown red in the Designer) has an unknown loss:
+/// it is reported as an issue and blocks the total until it is sized.
 /// </remarks>
 public static class CriticalPathAnalyzer
 {
-    private const string UnsizedPrefix = "U:";
-
     /// <summary>Key for a scheduled duct.</summary>
     public static string DuctKey(int sequence) => $"D:{sequence}";
 
@@ -287,17 +278,8 @@ public static class CriticalPathAnalyzer
                 string.Empty, string.Empty, issues.Values.ToArray(), false);
         }
 
-        var routeKeys = new HashSet<string>(best.Value.Keys.Where(key => !key.StartsWith(UnsizedPrefix, StringComparison.Ordinal)),
-            StringComparer.OrdinalIgnoreCase);
-        var assumptions = best.Value.Keys
-            .Where(key => key.StartsWith(UnsizedPrefix, StringComparison.Ordinal))
-            .Select(key => key[UnsizedPrefix.Length..])
-            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
-            .Select(id => new SystemCalculationIssue(id,
-                "The connection into this component has no duct assigned; it is treated as close-coupled with no pressure loss."))
-            .ToArray();
-        return new CriticalPathResult(best.Value.Loss, routeKeys, best.Value.Start, best.Value.End,
-            issues.Values.ToArray(), false, assumptions);
+        return new CriticalPathResult(best.Value.Loss, best.Value.Keys, best.Value.Start, best.Value.End,
+            issues.Values.ToArray(), false);
 
         void Walk(SavedLayoutNode node, bool arrivedSecondary, double lossBefore, HashSet<string> keysBefore,
             HashSet<string> visited, string startId)
@@ -369,8 +351,8 @@ public static class CriticalPathAnalyzer
             var sequence = secondary ? downstream.SecondaryConnectionDuctSequence : downstream.ConnectionDuctSequence;
             if (sequence is null)
             {
-                // A drawn but unsized connection: treated as close-coupled (no loss) and reported as an assumption.
-                keys.Add(UnsizedPrefix + downstream.Id);
+                // A drawn but unsized connection has an unknown loss; it blocks the total until a duct is sized.
+                Report(downstream.Id, "The connection into this component has no sized duct; size it to complete the total.");
                 return 0.0;
             }
             var duct = LayoutTopology.DuctForConnection(document, downstream, secondary);

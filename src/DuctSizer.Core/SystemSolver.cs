@@ -53,8 +53,8 @@ public sealed class SystemSolution
 /// (<see cref="JunctionLegBuilder"/>).</item>
 /// <item>Static pressure (gauge, Pa): a root fan starts at its fan static pressure, a root Space Source keeps its
 /// entered pressure, any other root starts at 0. Each connection subtracts its duct's total pressure loss (upper
-/// bound in transitional flow). An unsized connection (no duct assigned) is close-coupled and subtracts nothing.
-/// A duct that cannot be calculated makes downstream pressures NaN ("not available"), never a silent zero.
+/// bound in transitional flow). An unsized connection (no duct assigned) or a duct that cannot be calculated makes
+/// downstream pressures NaN ("not available"), never a silent zero.
 /// A fan adds its static pressure at the outlet; other components subtract their own loss. A diverging fitting
 /// subtracts the ASHRAE path loss of the outlet each child is on (<see cref="OutletPressureToward"/>); its own
 /// displayed pressure is the main-outlet value. A converging fitting charges each inlet its own path loss and its
@@ -125,9 +125,8 @@ public static class SystemSolver
                     point.VelocityMPerS = 0;
                 }
             }
-            // An unsized connection is close-coupled (no loss, reported as an assumption on the critical path).
-            // NaN (shown as "—") when an assigned duct cannot be calculated; never a silent zero loss.
-            var ductLoss = incomingSequence is int ductSequence ? DuctLoss(document, ductSequence) : 0.0;
+            // NaN (shown as "—") for an unsized connection or a duct that cannot be calculated; never a silent zero loss.
+            var ductLoss = incomingSequence is int ductSequence ? DuctLoss(document, ductSequence) : double.NaN;
             point.PressurePa = OutletPressureToward(document, solution, upstream, downstream)
                                - ductLoss * Math.Clamp(point.CalculationConnectionFraction, 0.0, 1.0);
         }
@@ -166,10 +165,9 @@ public static class SystemSolver
                     var airflow = ResolveConnectionAirflow(document, parent.Node, node, parent.Secondary, duct);
                     if (duct is not null)
                         duct.TemperatureC = parent.Node.TemperatureC;
-                    // An assigned duct that cannot be calculated makes downstream pressures "not available" (NaN)
-                    // instead of silently treating it as having no loss. An unsized connection (no duct assigned)
-                    // is close-coupled; the critical path reports it as an assumption.
-                    var loss = sequence is int lossSequence ? DuctLoss(document, lossSequence) : 0.0;
+                    // An unsized connection (no duct assigned) or a duct that cannot be calculated makes downstream
+                    // pressures "not available" (NaN) instead of silently treating it as having no loss.
+                    var loss = sequence is int lossSequence ? DuctLoss(document, lossSequence) : double.NaN;
                     return new
                     {
                         Parent = parent.Node,

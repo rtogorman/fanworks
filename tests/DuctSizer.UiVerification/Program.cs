@@ -1162,6 +1162,7 @@ internal static class Program
             var systemField = typeof(MainForm).GetField("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)
                               ?? throw new InvalidOperationException("Could not inspect the local system model.");
             var document = (DuctSystemDocument)systemField.GetValue(form)!;
+            SavedDuct mainDuct1() => document.Ducts.Single(x => x.Sequence == 1);
             var firstDuctRow = grid.Rows.Cast<DataGridViewRow>().Single(row =>
                 Convert.ToString(row.Cells["Id"].Value) == "D-001");
             firstDuctRow.Cells["DeltaX"].Value = "12";
@@ -1612,11 +1613,24 @@ internal static class Program
             document.LayoutNodes.AddRange(new[] { pressureSource, pressureFitting, pressureFan, pressureSink });
             typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
+            Require(double.IsNaN(pressureSink.PressurePa)
+                    && Math.Abs(synchronizedFitting.AirflowM3PerS - synchronizedFlow) < 1e-12,
+                "Pressures downstream of an unsized connection must be not available, never a zero-loss value.");
+            var pressureDucts = new[] { pressureFitting, pressureFan, pressureSink }
+                .Select(node => SizeConnection(document, node, document.Ducts.First())).ToArray();
+            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(form, null);
+            pressureFan.FanStaticPressurePa = synchronizedLoss
+                + pressureDucts.Sum(duct => duct.Calculate().TotalPressureLossUpperPa);
+            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(form, null);
             Require(Math.Abs(pressureSink.PressurePa) < 1e-8
                     && Math.Abs(synchronizedFitting.AirflowM3PerS - synchronizedFlow) < 1e-12,
                 "Linked fitting airflow must synchronize before loss propagation so matching fan static closes the terminal gauge pressure to zero.");
             foreach (var node in new[] { pressureSource, pressureFitting, pressureFan, pressureSink })
                 document.LayoutNodes.Remove(node);
+            foreach (var duct in pressureDucts)
+                document.Ducts.Remove(duct);
 
             var flowTemplate = document.Ducts.First().Calculate();
             var splitSource = new SavedLayoutNode
@@ -2143,7 +2157,28 @@ internal static class Program
             var tryAutoSizeFan = typeof(MainForm).GetMethod("TryAutoSizeFan", BindingFlags.Instance | BindingFlags.NonPublic)
                                   ?? throw new InvalidOperationException("Could not find fan auto-sizing.");
             var autoSizeArguments = new object?[] { null };
+            var mainDuctForSystem = document.Ducts.Single(x => x.Sequence == 1);
+            var unsizedOnFanSystem = document.LayoutNodes
+                .Where(node => node.Type != LayoutNodeType.CalculationPoint
+                               && document.LayoutNodes.Any(parent => parent.Id == node.ParentNodeId)
+                               && node.ConnectionDuctSequence is null)
+                .ToArray();
+            if (unsizedOnFanSystem.Length > 0)
+            {
+                var priorFanStatic = fanNode.FanStaticPressurePa;
+                var refusedArguments = new object?[] { null };
+                Require(!(bool)tryAutoSizeFan.Invoke(form, refusedArguments)!
+                        && fanNode.FanStaticPressurePa == priorFanStatic
+                        && Convert.ToString(refusedArguments[0])!.Contains("no sized duct", StringComparison.Ordinal),
+                    "Auto-size Fan must refuse, leaving the fan unchanged, while a connection on the system is unsized. "
+                    + $"Result: {refusedArguments[0]}");
+                foreach (var unsized in unsizedOnFanSystem)
+                    SizeConnection(document, unsized, mainDuctForSystem);
+            }
             var autoSized = (bool)tryAutoSizeFan.Invoke(form, autoSizeArguments)!;
+            Require(!autoSized || (bool)typeof(MainForm).GetField("_criticalPathFilterEnabled",
+                        BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!,
+                "After Auto-size Fan the Duct System table should isolate the critical path used to size the fan.");
             var criticalLoss = (double)(typeof(MainForm).GetField("_criticalPathPressureLossPa",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(form) ?? 0.0);
             Require(autoSized && fanNode.FanStaticPressurePa > 0
@@ -2499,20 +2534,29 @@ internal static class Program
                 GridX = 30, GridY = 16, AirSystemType = "Supply Air", BranchId = "Main", IsDefined = true
             };
             document.LayoutNodes.Add(sinkForPressureBalance);
-            var expectedNetLossPa = document.Ducts.Single().Calculate().TotalPressureLossUpperPa
-                                    + coilNode.PressureDropPa + filterNode.PressureDropPa;
+            SizeConnection(document, sinkForPressureBalance, mainDuct1());
+            // Solve once so the new duct carries the system airflow and temperature before losses are summed.
+            typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(form, null);
+            var routeDuctLossPa = new[] { coilNode, filterNode, sinkForPressureBalance }
+                .Select(node => document.Ducts.Single(x => x.Sequence == node.ConnectionDuctSequence))
+                .Sum(duct => duct.Calculate().TotalPressureLossUpperPa);
+            var expectedNetLossPa = routeDuctLossPa + coilNode.PressureDropPa + filterNode.PressureDropPa;
             fanNode.FanStaticPressurePa = expectedNetLossPa;
             typeof(MainForm).GetMethod("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Require(Math.Abs(sinkForPressureBalance.PressurePa) < 1e-8,
-                "When fan static equals the critical-path net loss, the Space Sink pressure should solve to 0 in. w.c.");
+                "When fan static equals the critical-path net loss, the Space Sink pressure should solve to 0 in. w.c. "
+                + $"fan {fanNode.PressurePa:R} (parent '{fanNode.ParentNodeId}'), coil {coilNode.PressurePa:R}, filter {filterNode.PressurePa:R}, "
+                + $"sink {sinkForPressureBalance.PressurePa:R}, expected loss {expectedNetLossPa:R}, ducts "
+                + string.Join(",", new[] { coilNode, filterNode, sinkForPressureBalance }.Select(x => x.ConnectionDuctSequence)));
             typeof(MainForm).GetMethod("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             tabs.SelectedTab = tabs.TabPages[2];
             Application.DoEvents();
             var criticalLabel = Find<Label>(form, "SystemCriticalPathLabel");
             var expectedCriticalInWg = UnitConversions.PaToInchesWater(expectedNetLossPa).ToString("0.###");
             var allRowsInWg = UnitConversions.PaToInchesWater(
-                document.Ducts.Single().Calculate().TotalPressureLossUpperPa
+                routeDuctLossPa
                 + coilNode.PressureDropPa + filterNode.PressureDropPa
                 + document.Fittings.Single().Calculate().PressureLossPa).ToString("0.###");
             Require(criticalPathFilter.Enabled
@@ -2793,10 +2837,10 @@ internal static class Program
                 .Invoke(form, null) ?? Array.Empty<DuctSystemPdfReportItem>());
             Require(pdfReportItems.Count >= 5
                     && pdfReportItems[0].Id == fanNode.Id
-                    && pdfReportItems[1].Id == document.Ducts.Single().Id
+                    && pdfReportItems[1].Id == mainDuct1().Id
                     && pdfReportItems[2].Id == pressurePoint.Id
                     && pdfReportItems[3].Id == coilNode.Id
-                    && pdfReportItems.Any(item => item.Id == document.Ducts.Single().Id
+                    && pdfReportItems.Any(item => item.Id == mainDuct1().Id
                         && item.Inputs.Any(field => field.Label == "Equivalent diameter method")
                         && item.QuickCheck?.Select(field => field.Label).SequenceEqual(new[]
                         {
@@ -2807,7 +2851,7 @@ internal static class Program
                         && item.Outputs.Any(field => field.Label == "Static pressure out")
                         && item.Calculations?.Any(section => section.Heading == "4. DARCY FRICTION FACTOR"
                             && section.Lines.Any(line => line.Formula.Contains("Colebrook", StringComparison.Ordinal))) == true)
-                    && pdfReportItems.Any(item => item.Id == document.Ducts.Single().Id
+                    && pdfReportItems.Any(item => item.Id == mainDuct1().Id
                         && item.Calculations?.Any(section => section.Heading == "REQUIRED EQUATIONS"
                             && section.Lines.Any(line => line.Formula == "\\frac{1}{\\sqrt{f}} = -2 log_{10}(X)")
                             && section.Lines.Any(line => line.Formula == "X = \\frac{\\epsilon}{3.7D} + \\frac{2.51}{Re\\sqrt{f}}")
@@ -2973,7 +3017,7 @@ internal static class Program
                                        ?? throw new InvalidOperationException("Could not find the direct designer duct editor.");
             using (var directDuctEditor = (Form?)Activator.CreateInstance(
                        directDuctEditorType, BindingFlags.Instance | BindingFlags.NonPublic, null,
-                       new object?[] { document.Ducts.Single(), UnitSystem.Imperial,
+                       new object?[] { mainDuct1(), UnitSystem.Imperial,
                            document.DefaultSizingIncrementM, document.DefaultSizeRoundingDirection }, null)
                    ?? throw new InvalidOperationException("Could not create the direct designer duct editor."))
             {
@@ -3613,6 +3657,20 @@ internal static class Program
             if (Directory.Exists(testDirectory))
                 Directory.Delete(testDirectory, recursive: true);
         }
+    }
+
+    /// <summary>
+    /// Gives the connection into <paramref name="downstream"/> a sized duct (a copy of <paramref name="template"/>,
+    /// 1 ft long). Since v0.95 an unsized connection blocks pressure results instead of counting as zero loss.
+    /// </summary>
+    private static SavedDuct SizeConnection(DuctSystemDocument document, SavedLayoutNode downstream, SavedDuct template)
+    {
+        var duct = SavedDuct.FromResult(document.ReserveSequence(), $"Connection into {downstream.Id}",
+            template.Calculate(), downstream.AirSystemType, downstream.BranchId);
+        duct.LengthM = UnitConversions.FeetToM(1);
+        document.Ducts.Add(duct);
+        downstream.ConnectionDuctSequence = duct.Sequence;
+        return duct;
     }
 
     private static T Find<T>(Control root, string name) where T : Control

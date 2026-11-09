@@ -55,7 +55,6 @@ public sealed partial class MainForm
     private double _criticalPathPressureLossPa;
     private string _criticalPathRoute = string.Empty;
     private IReadOnlyList<SystemCalculationIssue> _criticalPathIssues = Array.Empty<SystemCalculationIssue>();
-    private IReadOnlyList<SystemCalculationIssue> _criticalPathAssumptions = Array.Empty<SystemCalculationIssue>();
     private sealed record SystemRowTag(bool IsFitting, int Sequence);
 
     private string DuctSystemStoragePath
@@ -1134,13 +1133,11 @@ public sealed partial class MainForm
         fan.IsDefined = true;
         UpdateCalculatedLayoutValues();
         _criticalPathCalculated = true;
-        _criticalPathFilterEnabled = false;
+        // Show exactly the items whose losses set the fan static pressure (same as "Isolate Critical Path").
+        _criticalPathFilterEnabled = true;
         ApplyCriticalRoute(ComputeLongestRoute());
         var horsepower = TryBrakeHorsepower(requiredAirflow, fan.FanStaticPressurePa, fan.FanEfficiencyPercent);
-        message = $"{fan.Id} was sized to {FormatSystemAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} static pressure, and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency."
-                  + (_criticalPathAssumptions.Count > 0
-                      ? $"\r\n\r\nNote: the critical path {CriticalPathAssumptionNote()}. Size those connections for a complete result."
-                      : string.Empty);
+        message = $"{fan.Id} was sized to {FormatSystemAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} static pressure, and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency.";
         return true;
     }
 
@@ -1214,7 +1211,6 @@ public sealed partial class MainForm
         _criticalPathRoute = string.Empty;
         _criticalPathItemKeys.Clear();
         _criticalPathIssues = Array.Empty<SystemCalculationIssue>();
-        _criticalPathAssumptions = Array.Empty<SystemCalculationIssue>();
     }
 
     private void ApplyCriticalRoute(CriticalPathResult route)
@@ -1222,7 +1218,6 @@ public sealed partial class MainForm
         _criticalPathPressureLossPa = route.PressureLossPa;
         _criticalPathItemKeys = new HashSet<string>(route.ItemKeys, StringComparer.OrdinalIgnoreCase);
         _criticalPathIssues = route.Issues;
-        _criticalPathAssumptions = route.RouteAssumptions;
         _criticalPathRoute = route.StartId == route.EndId ? route.StartId : $"{route.StartId} → {route.EndId}";
     }
 
@@ -1273,16 +1268,6 @@ public sealed partial class MainForm
         var count = _layoutModelIssues.Count + _layoutGeometryIssues.Count;
         return count == 0 ? string.Empty
             : $"{separator}Layout: {count} item{(count == 1 ? string.Empty : "s")} to review";
-    }
-
-    /// <summary>Short note on assumptions made on the critical route, or empty when there are none.</summary>
-    private string CriticalPathAssumptionNote()
-    {
-        if (_criticalPathAssumptions.Count == 0)
-            return string.Empty;
-        var names = _criticalPathAssumptions.Select(x => x.ItemId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var listed = string.Join(", ", names.Take(6)) + (names.Length > 6 ? $" and {names.Length - 6} more" : string.Empty);
-        return $"assumes no loss in {names.Length} unsized connection{(names.Length == 1 ? string.Empty : "s")} (into {listed})";
     }
 
     private bool ShowCriticalItem(string key) => !_criticalPathFilterEnabled || _criticalPathItemKeys.Contains(key);
@@ -1522,10 +1507,8 @@ public sealed partial class MainForm
             ? "Critical-path net pressure loss: —"
             : _criticalPathIssues.Count > 0
                 ? $"Critical-path net pressure loss: not available ({CriticalPathIssueSummary()})"
-                : $"Critical-path net pressure loss: {FormatSystemTotal(_criticalPathPressureLossPa)}"
-                  + (_criticalPathAssumptions.Count > 0 ? $" — {CriticalPathAssumptionNote()}" : string.Empty);
-        _systemTotalLabel.ForeColor = _criticalPathIssues.Count > 0 ? Color.Firebrick
-            : _criticalPathAssumptions.Count > 0 ? Color.FromArgb(150, 85, 0) : Color.FromArgb(22, 65, 102);
+                : $"Critical-path net pressure loss: {FormatSystemTotal(_criticalPathPressureLossPa)}";
+        _systemTotalLabel.ForeColor = _criticalPathIssues.Count > 0 ? Color.Firebrick : Color.FromArgb(22, 65, 102);
         _systemCountLabel.Text = itemCount == 1 ? "1 item" : $"{itemCount} items";
         _layoutGeometryIssues = LayoutGeometryCheck.Check(_ductSystem);
         _layoutModelIssues = LayoutModelCheck.Check(_ductSystem);
@@ -2624,8 +2607,7 @@ public sealed partial class MainForm
         }
         builder.AppendLine(_criticalPathIssues.Count > 0
             ? $"Critical-path total pressure loss\tnot available ({CriticalPathIssueSummary()})"
-            : $"Critical-path total pressure loss\t{FormatSystemTotal(_criticalPathPressureLossPa)}"
-              + (_criticalPathAssumptions.Count > 0 ? $"\t{CriticalPathAssumptionNote()}" : string.Empty));
+            : $"Critical-path total pressure loss\t{FormatSystemTotal(_criticalPathPressureLossPa)}");
         try
         {
             Clipboard.SetText(builder.ToString());
@@ -2743,8 +2725,7 @@ public sealed partial class MainForm
                     ? "Not calculated"
                     : _criticalPathIssues.Count > 0
                         ? $"Not available. {CriticalPathIssueSummary()}."
-                        : $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss"
-                          + (_criticalPathAssumptions.Count > 0 ? $"; {CriticalPathAssumptionNote()})" : ")")
+                        : $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss)"
                           + LayoutGeometryNote(". ")
                           + (LayoutReviewMessages() is { Count: > 0 } review
                               ? ": " + string.Join(" ", review.Take(6))

@@ -151,26 +151,17 @@ internal static class SystemTests
             throw new Exception("A connection that refers to a missing duct record must make the critical path incomplete.");
     }
 
-    public static void UnsizedConnectionIsAReportedAssumption()
+    public static void UnsizedConnectionBlocksTheTotal()
     {
-        // A drawn connection with no duct assigned is close-coupled (no loss). The result stays usable,
-        // but the route must say so, so the engineer can see what was assumed.
-        var sized = CriticalPathAnalyzer.Analyze(BuildDivergingSystem().Document);
-        if (sized.RouteAssumptions.Count != 0)
-            throw new Exception("A fully sized route must not report assumptions.");
-
+        // Owner decision (2026-11-09): a drawn connection with no sized duct has an unknown loss. It must block the
+        // critical-path total and be named; it must never be counted as zero loss.
         var system = BuildDivergingSystem();
-        system.MainSink.ConnectionDuctSequence = null;
         system.BranchSink.ConnectionDuctSequence = null;
         var result = CriticalPathAnalyzer.Analyze(system.Document);
-        if (!result.IsComplete)
-            throw new Exception("Unsized connections alone must not block the critical path.");
-        if (!result.RouteAssumptions.Any(x => x.ItemId == result.EndId))
-            throw new Exception("The unsized connection on the reported route must be listed as an assumption.");
-        if (result.ItemKeys.Any(key => key.StartsWith("U:", StringComparison.Ordinal)))
-            throw new Exception("Assumption markers must not leak into the route's item keys.");
-        if (result.PressureLossPa >= sized.PressureLossPa)
-            throw new Exception("Removing duct losses must not increase the critical-path total.");
+        if (result.IsComplete)
+            throw new Exception("An unsized connection must make the critical path incomplete.");
+        if (!result.Issues.Any(x => x.ItemId == system.BranchSink.Id && x.Message.Contains("no sized duct", StringComparison.Ordinal)))
+            throw new Exception("The unsized connection must be named in the critical-path issues.");
     }
 
     public static void ProjectFileRoundTripsTheFullModel()

@@ -87,14 +87,15 @@ internal static class SolverTests
             throw new Exception("A failure on one branch must not affect the other branch.");
     }
 
-    public static void UnsizedConnectionIsCloseCoupled()
+    public static void UnsizedConnectionMakesDownstreamPressureNotAvailable()
     {
         var system = SystemTests.BuildDivergingSystem();
         system.MainSink.ConnectionDuctSequence = null;
-        var solution = SystemSolver.Solve(system.Document);
-        solution.TryGetInletPressure(system.Splitter.Id, out var splitterInlet);
-        var straightPath = system.Fitting.CalculateForPath(JunctionPath.Straight).PressureLossPa;
-        AssertNear(system.MainSink.PressurePa, splitterInlet - straightPath, 1e-9);
+        SystemSolver.Solve(system.Document);
+        if (!double.IsNaN(system.MainSink.PressurePa))
+            throw new Exception("Pressure downstream of an unsized connection must be NaN, not a zero-loss value.");
+        if (!double.IsFinite(system.BranchSink.PressurePa))
+            throw new Exception("An unsized connection on one branch must not affect the other branch.");
     }
 
     public static void ConvergingJunctionSumsItsInlets()

@@ -42,7 +42,7 @@ name the repo).
 - Junction legs use the connected duct sizes (`JunctionLegBuilder`); legs with no sized duct fall back to the fitting's reference geometry and are listed as assumed.
 - Critical path (`CriticalPathAnalyzer`, Core) charges each route the ASHRAE path it takes through a junction.
 - An item that fails to calculate makes the total "not available" and is named; Auto-size Fan refuses and restores the fan.
-- Drawn connections with no duct assigned are close-coupled (zero loss) and reported as `RouteAssumptions` (owner decision still open: keep, or block the total).
+- Drawn connections with no duct assigned: v0.93 treated them as close-coupled; superseded 2026-11-09 by the owner's decision (they now block the total).
 - Out-of-range table lookups produce `TableRangeWarnings` on fitting results, shown in the UI and PDF.
 - Transitional-flow headline rate = upper bound (no midpoint blend).
 - `FanPerformance` throws on invalid input; UI shows "not available".
@@ -154,7 +154,6 @@ the three sinks it feeds total 1,200 cfm.
 
 ## Outstanding issues and open decisions
 
-- Owner decision: unsized connections = zero loss with a visible note (current) vs. block the total.
 - GitHub repository not yet connected (needed for CI to run and to carry history to the owner's folder).
 - Independent re-check of ASHRAE / Titus / Price table transcriptions needs the source documents and a second person.
 - IP / licensing clearance for embedded ASHRAE tables and images, Titus catalog data and toolbox icons (owner / legal).
@@ -175,6 +174,32 @@ the three sinks it feeds total 1,200 cfm.
 ## Next steps
 
 See the step currently "In progress" above; its detailed plan is in the section below.
+
+## Owner directives (2026-11-09)
+
+1. Unsized connections: block the critical-path total until sized; never count them as zero loss. (Replaces the
+   v0.93 "close-coupled assumption".)
+2. Auto Size Fan: after sizing, isolate the critical path in the Duct System table (same as "Isolate critical path")
+   instead of showing all items.
+3. Step 8 in full: store absolute X/Y/Z as the position. Users still enter and see positions relative to the
+   upstream component (or the downstream component when there is no upstream one).
+4. Step 9 in full and step 10: continue through everything.
+5. ASHRAE sourcing and licensing are being handled by the owner: not my tasks.
+6. GitHub: https://github.com/rtogorman/fanworks (empty). Push refused until the Claude GitHub App is installed
+   on the owner's account; remote `origin` is configured in the working repo.
+
+Work order: directive 1, directive 2, step 8 (absolute storage), step 9 (per-tab screens, per-type models),
+step 10 refresh, release v0.95.0.
+
+## Directive 1 and 2 record (done)
+
+- Unsized connections: `CriticalPathAnalyzer` reports "no sized duct" as an issue (total not available, Auto-size
+  Fan refuses); `SystemSolver` makes downstream pressures NaN. `RouteAssumptions` and the window's assumption note
+  removed. Checks: "An unsized connection blocks the total", "System solver: unsized connection makes downstream
+  pressure not available". Interface test updated: refusal first, then the test sizes the connections.
+- Auto-size Fan sets the Duct System filter to the isolated critical path (`_criticalPathFilterEnabled = true`);
+  interface test asserts it.
+- 58/58 engineering, 16/16 interface (Wine).
 
 ## Current task detail
 
