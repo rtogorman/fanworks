@@ -274,6 +274,8 @@ step 10 refresh, release v0.95.0.
   the runner display to 1920 x 1080 first, because other interface checks exercise real window sizes (under Wine at
   1024 x 768 a fitting-image layout check fails; at 1920 x 1080 all 16 pass). CI run 42716963071: 63/63, 16/16,
   FanWorks-win-x64 artifact uploaded.
+- Laptop rebuilt after `b19b520`: 63/63, 16/16, 0 warnings, 0 errors; `outputs\FanWorks-win-x64-v0.95.0\FanWorks.exe`
+  now matches `main`.
 - CI annotation (not an error): actions/checkout, setup-dotnet and upload-artifact v4 target Node 20, which GitHub
   is retiring; bump them to their next major versions when convenient.
 - Owner's folder: `MainForm.FittingLoss.cs`, `MainForm.DuctSystem.cs`, `MainForm.LayoutDesigner.cs` are one-line
