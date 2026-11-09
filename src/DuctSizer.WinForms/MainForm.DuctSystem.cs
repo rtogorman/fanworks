@@ -1254,6 +1254,14 @@ public sealed partial class MainForm
         return $"Incomplete: {listed} could not be calculated";
     }
 
+    /// <summary>Layout geometry problems found at the last schedule refresh (see <see cref="LayoutGeometryCheck"/>).</summary>
+    private IReadOnlyList<LayoutGeometryIssue> _layoutGeometryIssues = Array.Empty<LayoutGeometryIssue>();
+
+    /// <summary>"Layout geometry: N issue(s)" preceded by <paramref name="separator"/>, or empty when the layout is consistent.</summary>
+    private string LayoutGeometryNote(string separator) => _layoutGeometryIssues.Count == 0
+        ? string.Empty
+        : $"{separator}Layout geometry: {_layoutGeometryIssues.Count} issue{(_layoutGeometryIssues.Count == 1 ? string.Empty : "s")} to review";
+
     /// <summary>Short note on assumptions made on the critical route, or empty when there are none.</summary>
     private string CriticalPathAssumptionNote()
     {
@@ -1506,9 +1514,17 @@ public sealed partial class MainForm
         _systemTotalLabel.ForeColor = _criticalPathIssues.Count > 0 ? Color.Firebrick
             : _criticalPathAssumptions.Count > 0 ? Color.FromArgb(150, 85, 0) : Color.FromArgb(22, 65, 102);
         _systemCountLabel.Text = itemCount == 1 ? "1 item" : $"{itemCount} items";
-        _systemCriticalLabel.Text = !_criticalPathCalculated
+        _layoutGeometryIssues = LayoutGeometryCheck.Check(_ductSystem);
+        _systemCriticalLabel.Text = (!_criticalPathCalculated
             ? "Critical route: not available"
-            : $"Route: {_criticalPathRoute}";
+            : $"Route: {_criticalPathRoute}") + LayoutGeometryNote(" · ");
+        _systemCriticalLabel.ForeColor = _layoutGeometryIssues.Count > 0
+            ? Color.FromArgb(150, 85, 0) : Color.FromArgb(31, 120, 180);
+        _layoutToolTips.SetToolTip(_systemCriticalLabel, _layoutGeometryIssues.Count == 0
+            ? string.Empty
+            : "Layout geometry to review:\r\n" + string.Join("\r\n",
+                _layoutGeometryIssues.Take(12).Select(issue => "• " + issue.Message))
+              + (_layoutGeometryIssues.Count > 12 ? $"\r\n• and {_layoutGeometryIssues.Count - 12} more" : string.Empty));
         _criticalPathFilterButton.Enabled = _criticalPathCalculated;
         _criticalPathFilterButton.Text = _criticalPathFilterEnabled ? "Show All Items" : "Isolate Critical Path";
         _systemTab.Text = "Duct System";
@@ -2710,7 +2726,11 @@ public sealed partial class MainForm
                     : _criticalPathIssues.Count > 0
                         ? $"Not available. {CriticalPathIssueSummary()}."
                         : $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss"
-                          + (_criticalPathAssumptions.Count > 0 ? $"; {CriticalPathAssumptionNote()})" : ")"));
+                          + (_criticalPathAssumptions.Count > 0 ? $"; {CriticalPathAssumptionNote()})" : ")")
+                          + LayoutGeometryNote(". ")
+                          + (_layoutGeometryIssues.Count > 0
+                              ? ": " + string.Join(" ", _layoutGeometryIssues.Take(6).Select(issue => issue.Message))
+                              : string.Empty));
             DuctSystemPdf.Export(temporaryPdfPath, "Duct System Schedule",
                 $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_currentUnits} units", headers, rows,
                 _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)

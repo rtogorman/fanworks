@@ -325,8 +325,23 @@ public sealed class SavedLayoutNode
 
 public readonly record struct LayoutCoordinate(double XM, double YM, double ZM);
 
+/// <summary>
+/// Derives absolute X/Y/Z positions (metres) for Layout Designer components from the stored offsets.
+/// </summary>
+/// <remarks>
+/// Each component stores its offset from its upstream component (<see cref="SavedLayoutNode.DeltaXM"/> etc., and
+/// the <c>Secondary*</c> offsets for a converging fitting's second inlet). Starting at the coordinate origin
+/// component (<see cref="DuctSystemDocument.CoordinateOriginNodeId"/>, else the lowest sequence) placed at the
+/// document's origin coordinates, the resolver walks connections breadth-first, upstream and downstream, visiting
+/// components in document order, and keeps the first position reached for each component. Fragments that are not
+/// connected to the origin are placed from their absolute anchor when they have one; others get no position.
+/// Calculation points are placed by their fraction along the connection they observe. The result is deterministic
+/// for a given document. Offsets that disagree around a loop are not resolved here: <see cref="LayoutGeometryCheck"/>
+/// reports them.
+/// </remarks>
 public static class LayoutCoordinateResolver
 {
+    /// <summary>Absolute positions by component sequence (components with no defined position are omitted).</summary>
     public static IReadOnlyDictionary<int, LayoutCoordinate> Resolve(DuctSystemDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);

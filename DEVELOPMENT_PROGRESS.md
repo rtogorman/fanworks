@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-08 (step 7 done; step 8 starting)
+Last updated: 2026-11-08 (step 8 done; step 9 starting)
 
 ## Where things live
 
@@ -33,7 +33,7 @@ name the repo).
 | 5. Project file (finding 4) | Done | `.fanworks` via `ProjectFile`; Save writes it first; Settings > Open Project |
 | 6. Logging + v0.93 release (findings 9, 11) | Done | `DiagnosticLog`, crash reports, `AutomationOptions` replaces env vars; v0.93.0 built on owner's laptop: 41/41 engineering, 16/16 interface checks |
 | 7. System solver into Core (finding 6) | Done | `SystemSolver` (Core) replaces the window's solver; bit-identical on reference project + 3 variants; 8 new solver checks (49/49); UI 16/16 (Wine) |
-| 8. One coordinate model (finding 7) | Not started | |
+| 8. One coordinate model (finding 7) | Done, reduced scope (see Step 8 record) | `LayoutGeometryCheck` detects non-closing loops, duct offset/length mismatches, unplaced components; shown on the Duct System summary, tooltip and PDF; resolver documented. Storage still relative (decision recorded) |
 | 9. Break up main window (findings 12-14) | Not started | |
 | 10. Docs, independent verification, CI (findings 15-16) | Not started | table re-check and IP clearance need the owner / a second person |
 
@@ -68,6 +68,22 @@ name the repo).
   bit-identical results.
 - Not moved (UI workflows, not calculations): source/sink editor reconciliation (`ReconcileBoundaryAirflowAfterDirectEdit`,
   `ApplyBalancedBoundaryAirflows`), automatic sizing dialogs.
+
+## Step 8 record
+
+- New `src/DuctSizer.Core/LayoutGeometryCheck.cs` (4 issue kinds, 1 mm tolerance); 4 new checks (53/53).
+- Duct System tab: the route label adds "Layout geometry: N issues to review" (orange) with a tooltip listing them;
+  the PDF project summary carries the same note. Reference project: 0 issues.
+- `LayoutCoordinateResolver` documented (deterministic: breadth-first from the origin in document order, first
+  position wins). Its order was deliberately NOT changed: for a project whose offsets disagree, a different order
+  would move components, which the plan forbids. The check reports the disagreement instead.
+- Decision (deviation from the plan, owner to confirm): storing absolute X/Y/Z as the only position was deferred.
+  Offsets are written in about 60 places in the Designer (connect, insert, remove-while-preserving-coordinates,
+  move subtree, origin changes, table edits), and the interface suite pins many of those behaviors. Converting the
+  storage is a Designer rewrite with real regression risk; detection removes the silent-failure part of finding 7
+  now. Recommended as a separate, dedicated task: add stored absolute positions (schema 13) with offsets derived on
+  demand, migrating each project through the resolver and refusing to migrate a project whose geometry check fails
+  until the user resolves it.
 
 ## Commits (Claude working repo)
 
@@ -113,7 +129,7 @@ See the step currently "In progress" above; its detailed plan is in the section 
 
 ## Current task detail
 
-Step 8: one coordinate model (finding 7). Survey how positions are stored (grid cells, parent-relative deltas,
-absolute anchors, duct deltas) and resolved (`LayoutCoordinateResolver`), then make absolute coordinates the
-stored source of truth with a schema migration, a deterministic resolver, and a closure check that flags loops
-whose deltas disagree. Validate with coordinate tests, the reference project, and the interface suite.
+Step 9: break up the main window (findings 12-14). Plan, lowest risk first: (a) cap undo history (finding 14);
+(b) move dialog classes nested in the MainForm files into their own files (pure moves); (c) typed component
+views/validation for layout node types without changing the saved JSON (finding 13); (d) extract self-contained
+tab/screen pieces where they do not share private state. Validate after each with both suites.

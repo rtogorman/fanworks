@@ -51,7 +51,11 @@ var tests = new (string Name, Action Run)[]
     ("System solver: failed duct makes downstream pressure not available", SolverTests.FailedDuctMakesDownstreamPressureNotAvailable),
     ("System solver: unsized connection is close-coupled", SolverTests.UnsizedConnectionIsCloseCoupled),
     ("System solver sums converging inlets", SolverTests.ConvergingJunctionSumsItsInlets),
-    ("System solver is repeatable", SolverTests.SolvingTwiceGivesTheSameResult)
+    ("System solver is repeatable", SolverTests.SolvingTwiceGivesTheSameResult),
+    ("Layout geometry: consistent layout is clean", GeometryTests.ConsistentLayoutHasNoGeometryIssues),
+    ("Layout geometry: loop that does not close is flagged", GeometryTests.LoopThatDoesNotCloseIsFlagged),
+    ("Layout geometry: duct offset and length checked", GeometryTests.DuctOffsetAndLengthAreCheckedAgainstTheConnection),
+    ("Layout geometry: unplaced component flagged unless anchored", GeometryTests.UnplacedComponentIsFlaggedUnlessAnchored)
 };
 
 var failures = new List<string>();
