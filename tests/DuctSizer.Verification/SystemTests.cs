@@ -211,7 +211,7 @@ internal static class SystemTests
             // A project from a newer FanWorks must be refused with a clear message, not half-read.
             var newerPath = Path.Combine(directory, "newer" + ProjectFile.Extension);
             File.WriteAllText(newerPath, File.ReadAllText(path)
-                .Replace("\"SchemaVersion\": 12", "\"SchemaVersion\": 99", StringComparison.Ordinal));
+                .Replace("\"SchemaVersion\": 13", "\"SchemaVersion\": 99", StringComparison.Ordinal));
             var refused = false;
             try { ProjectFile.Load(newerPath); }
             catch (InvalidDataException ex) when (ex.Message.Contains("newer version", StringComparison.Ordinal))

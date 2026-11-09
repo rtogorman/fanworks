@@ -2244,7 +2244,7 @@ public sealed partial class MainForm
             var resolvedCoordinates = LayoutCoordinateResolver.Resolve(_ductSystem);
             using var dialog = resolvedCoordinates.TryGetValue(node.Sequence, out var absoluteCoordinate)
                 ? new LayoutEquipmentDialog(node, _ductSystem.LayoutNodes, LayoutNodeCaption, absoluteCoordinate,
-                    EditableAxesForNode(node))
+                    EditableAxesForNode(node), PositionReferenceFor(node, resolvedCoordinates))
                 : new LayoutEquipmentDialog(node, _ductSystem.LayoutNodes, LayoutNodeCaption);
             if (dialog.ShowDialog(this) == DialogResult.OK)
             {
@@ -2315,7 +2315,8 @@ public sealed partial class MainForm
             LayoutCoordinate? absoluteCoordinate = resolvedCoordinates.TryGetValue(node.Sequence, out var resolved)
                 ? resolved : null;
             using var dialog = new LayoutFittingNodeDialog(node, _ductSystem.LayoutNodes, LayoutNodeCaption,
-                linkedFitting, absoluteCoordinate, EditableAxesForNode(node));
+                linkedFitting, absoluteCoordinate, EditableAxesForNode(node),
+                PositionReferenceFor(node, resolvedCoordinates));
             if (dialog.ShowDialog(this) != DialogResult.OK)
                 return;
             var draft = linkedFitting is null
@@ -3100,6 +3101,33 @@ public sealed partial class MainForm
     }
 
     private static LayoutEditableAxes EditableAxesForNode(SavedLayoutNode node) => new(true, true, true);
+
+    /// <summary>
+    /// The component whose position an edit of <paramref name="node"/> is entered relative to: its upstream
+    /// component (primary, else second inlet); when it has none, its first downstream component; null when it is
+    /// not connected to any positioned component (the position is then entered as absolute X/Y/Z).
+    /// </summary>
+    private LayoutPositionReference? PositionReferenceFor(SavedLayoutNode node,
+        IReadOnlyDictionary<int, LayoutCoordinate> coordinates)
+    {
+        var byId = _ductSystem.LayoutNodes
+            .Where(candidate => candidate.Type != LayoutNodeType.CalculationPoint)
+            .ToDictionary(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase);
+        foreach (var parentId in new[] { node.ParentNodeId, node.SecondaryParentNodeId })
+        {
+            if (!string.IsNullOrWhiteSpace(parentId) && byId.TryGetValue(parentId, out var parent)
+                && coordinates.TryGetValue(parent.Sequence, out var parentCoordinate))
+                return new LayoutPositionReference(parent.Id, parentCoordinate, IsDownstream: false);
+        }
+        var downstream = _ductSystem.LayoutNodes
+            .Where(candidate => candidate.Type != LayoutNodeType.CalculationPoint
+                                && (string.Equals(candidate.ParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)
+                                    || string.Equals(candidate.SecondaryParentNodeId, node.Id, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(candidate => candidate.Sequence)
+            .FirstOrDefault(candidate => coordinates.ContainsKey(candidate.Sequence));
+        return downstream is null ? null
+            : new LayoutPositionReference(downstream.Id, coordinates[downstream.Sequence], IsDownstream: true);
+    }
 
     private void ApplyAbsoluteCoordinateEdit(SavedLayoutNode node, LayoutCoordinate original,
         LayoutCoordinate requested)

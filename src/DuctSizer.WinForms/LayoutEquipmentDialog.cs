@@ -35,6 +35,7 @@ internal sealed class LayoutEquipmentDialog : Form
     private readonly bool _absoluteLocation;
     private readonly LayoutEditableAxes? _editableAxes;
     private LayoutCoordinate _desiredAbsoluteCoordinate;
+    private readonly LayoutPositionReference? _reference;
 
     internal string SelectedParentNodeId =>
         (_upstream.SelectedItem as LayoutNodeChoice)?.Id ?? _node.ParentNodeId;
@@ -61,16 +62,17 @@ internal sealed class LayoutEquipmentDialog : Form
 
     internal LayoutEquipmentDialog(SavedLayoutNode node, IReadOnlyList<SavedLayoutNode> nodes,
         Func<SavedLayoutNode, string> captionSource, LayoutCoordinate absoluteCoordinate,
-        LayoutEditableAxes editableAxes)
-        : this(node, nodes, captionSource, true, absoluteCoordinate, editableAxes)
+        LayoutEditableAxes editableAxes, LayoutPositionReference? reference = null)
+        : this(node, nodes, captionSource, true, absoluteCoordinate, editableAxes, reference)
     {
     }
 
     private LayoutEquipmentDialog(SavedLayoutNode node, IReadOnlyList<SavedLayoutNode> nodes,
         Func<SavedLayoutNode, string> captionSource, bool showTopology, LayoutCoordinate? absoluteCoordinate,
-        LayoutEditableAxes? editableAxes)
+        LayoutEditableAxes? editableAxes, LayoutPositionReference? reference = null)
     {
         _node = node;
+        _reference = absoluteCoordinate.HasValue ? reference : null;
         _showTopology = showTopology;
         _absoluteLocation = absoluteCoordinate.HasValue;
         _editableAxes = editableAxes;
@@ -124,6 +126,9 @@ internal sealed class LayoutEquipmentDialog : Form
             .ToString("0.###", CultureInfo.CurrentCulture);
         var location = absoluteCoordinate ?? new LayoutCoordinate(node.DeltaXM, node.DeltaYM, node.DeltaZM);
         _desiredAbsoluteCoordinate = location;
+        // Positions are stored absolute; the user sees and enters the offset from the reference component.
+        if (absoluteCoordinate.HasValue)
+            location = LayoutPositionReference.ToDisplay(location, _reference);
         _deltaX.Text = UnitConversions.MToFeet(location.XM).ToString("0.##", CultureInfo.CurrentCulture);
         _deltaY.Text = UnitConversions.MToFeet(location.YM).ToString("0.##", CultureInfo.CurrentCulture);
         _deltaZ.Text = UnitConversions.MToFeet(location.ZM).ToString("0.##", CultureInfo.CurrentCulture);
@@ -252,8 +257,10 @@ internal sealed class LayoutEquipmentDialog : Form
             AddRow(table, row++, "Pressure Drop (in. w.g.)", _pressureDrop);
             AddRow(table, row++, "Air System Type", _airSystem);
         }
-        AddRow(table, row++, _absoluteLocation ? "ABSOLUTE X / Y / Z (ft)" : "RELATIVE DELTA (ft)",
+        AddRow(table, row++, _absoluteLocation ? LayoutPositionReference.CaptionFor(_reference) : "RELATIVE DELTA (ft)",
             LayoutDialogControls.CreateLocationEditor(_deltaX, _deltaY, _deltaZ));
+        if (table.GetControlFromPosition(0, row - 1) is Label locationCaption)
+            locationCaption.Name = "LayoutLocationCaption";
         if (showTopology)
         {
             AddRow(table, row++, "Upstream Item / Fitting", _upstream);
@@ -555,12 +562,14 @@ internal sealed class LayoutEquipmentDialog : Form
         }
         else
         {
-            if (!TryReadDelta(_deltaX, "absolute X", out var absoluteX)
-                || !TryReadDelta(_deltaY, "absolute Y", out var absoluteY)
-                || !TryReadDelta(_deltaZ, "absolute Z", out var absoluteZ))
+            var kind = _reference is null ? "absolute" : "offset";
+            if (!TryReadDelta(_deltaX, $"{kind} X", out var absoluteX)
+                || !TryReadDelta(_deltaY, $"{kind} Y", out var absoluteY)
+                || !TryReadDelta(_deltaZ, $"{kind} Z", out var absoluteZ))
                 return;
-            _desiredAbsoluteCoordinate = new LayoutCoordinate(UnitConversions.FeetToM(absoluteX),
-                UnitConversions.FeetToM(absoluteY), UnitConversions.FeetToM(absoluteZ));
+            _desiredAbsoluteCoordinate = LayoutPositionReference.FromDisplay(new LayoutCoordinate(
+                UnitConversions.FeetToM(absoluteX), UnitConversions.FeetToM(absoluteY),
+                UnitConversions.FeetToM(absoluteZ)), _reference);
         }
         if (_node.Type == LayoutNodeType.Grd)
         {

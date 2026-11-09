@@ -25,6 +25,7 @@ internal sealed class LayoutFittingNodeDialog : Form
     private readonly SavedLayoutNode _node;
     private readonly bool _absoluteLocation;
     private LayoutCoordinate _desiredAbsoluteCoordinate;
+    private readonly LayoutPositionReference? _reference;
     internal LayoutCoordinate DesiredAbsoluteCoordinate => _desiredAbsoluteCoordinate;
 
     internal LayoutFittingNodeDialog(SavedLayoutNode node, IReadOnlyList<SavedLayoutNode> nodes,
@@ -42,9 +43,11 @@ internal sealed class LayoutFittingNodeDialog : Form
 
     internal LayoutFittingNodeDialog(SavedLayoutNode node, IReadOnlyList<SavedLayoutNode> nodes,
         Func<SavedLayoutNode, string> captionSource, SavedFitting? fitting,
-        LayoutCoordinate? absoluteCoordinate, LayoutEditableAxes? editableAxes)
+        LayoutCoordinate? absoluteCoordinate, LayoutEditableAxes? editableAxes,
+        LayoutPositionReference? reference = null)
     {
         _node = node;
+        _reference = absoluteCoordinate.HasValue ? reference : null;
         _absoluteLocation = absoluteCoordinate.HasValue;
         Text = "Fitting Layout Inputs";
         StartPosition = FormStartPosition.CenterParent;
@@ -67,6 +70,9 @@ internal sealed class LayoutFittingNodeDialog : Form
             string.Equals(x, node.AirSystemType, StringComparison.OrdinalIgnoreCase)) ?? "Supply Air";
         var location = absoluteCoordinate ?? new LayoutCoordinate(node.DeltaXM, node.DeltaYM, node.DeltaZM);
         _desiredAbsoluteCoordinate = location;
+        // Positions are stored absolute; the user sees and enters the offset from the reference component.
+        if (absoluteCoordinate.HasValue)
+            location = LayoutPositionReference.ToDisplay(location, _reference);
         _deltaX.Text = UnitConversions.MToFeet(location.XM).ToString("0.##", CultureInfo.CurrentCulture);
         _deltaY.Text = UnitConversions.MToFeet(location.YM).ToString("0.##", CultureInfo.CurrentCulture);
         _deltaZ.Text = UnitConversions.MToFeet(location.ZM).ToString("0.##", CultureInfo.CurrentCulture);
@@ -112,8 +118,10 @@ internal sealed class LayoutFittingNodeDialog : Form
         AddDialogRow(table, row++, "Air System Type", _airSystem, 42);
         AddDialogRow(table, row++, "Upstream Item", _upstream, 42);
         AddDialogRow(table, row++, "Downstream Item(s)", downstream, 42);
-        AddDialogRow(table, row++, _absoluteLocation ? "ABSOLUTE X / Y / Z (ft)" : "RELATIVE DELTA (ft)",
+        AddDialogRow(table, row++, _absoluteLocation ? LayoutPositionReference.CaptionFor(_reference) : "RELATIVE DELTA (ft)",
             LayoutDialogControls.CreateLocationEditor(_deltaX, _deltaY, _deltaZ), 42);
+        if (table.GetControlFromPosition(0, row - 1) is Label locationCaption)
+            locationCaption.Name = "LayoutLocationCaption";
 
         var note = new Label
         {
@@ -175,12 +183,13 @@ internal sealed class LayoutFittingNodeDialog : Form
     private bool TryReadLocation(out LayoutCoordinate coordinate)
     {
         coordinate = _desiredAbsoluteCoordinate;
-        if (!TryRead(_deltaX, "absolute X", out var x)
-            || !TryRead(_deltaY, "absolute Y", out var y)
-            || !TryRead(_deltaZ, "absolute Z", out var z))
+        var kind = _reference is null ? "absolute" : "offset";
+        if (!TryRead(_deltaX, $"{kind} X", out var x)
+            || !TryRead(_deltaY, $"{kind} Y", out var y)
+            || !TryRead(_deltaZ, $"{kind} Z", out var z))
             return false;
-        coordinate = new LayoutCoordinate(UnitConversions.FeetToM(x), UnitConversions.FeetToM(y),
-            UnitConversions.FeetToM(z));
+        coordinate = LayoutPositionReference.FromDisplay(new LayoutCoordinate(UnitConversions.FeetToM(x),
+            UnitConversions.FeetToM(y), UnitConversions.FeetToM(z)), _reference);
         return true;
     }
 

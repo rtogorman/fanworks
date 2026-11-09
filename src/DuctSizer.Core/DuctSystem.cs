@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace DuctSizer.Core;
@@ -76,7 +76,11 @@ public sealed class SavedDuct
 
 public sealed class DuctSystemDocument
 {
-    public int SchemaVersion { get; set; } = 12;
+    /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
+    public const int CurrentSchemaVersion = 13;
+
+    /// <summary>Saved-format version of this document.</summary>
+    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public int NextSequence { get; set; } = 1;
     public int NextFittingSequence { get; set; } = 1;
     public int NextLayoutSequence { get; set; } = 1;
@@ -286,6 +290,18 @@ public sealed class SavedLayoutNode
     public double SecondaryDeltaYM { get; set; }
     public double SecondaryDeltaZM { get; set; }
     public double ElbowAngleDegrees { get; set; } = 90.0;
+    /// <summary>Absolute X position (m) of the component. Stored from schema 13; authoritative when the file is loaded.</summary>
+    public double XM { get; set; }
+
+    /// <summary>Absolute Y position (m). See <see cref="XM"/>.</summary>
+    public double YM { get; set; }
+
+    /// <summary>Absolute Z position (elevation, m). See <see cref="XM"/>.</summary>
+    public double ZM { get; set; }
+
+    /// <summary>True when <see cref="XM"/>, <see cref="YM"/> and <see cref="ZM"/> hold a defined position.</summary>
+    public bool HasStoredPosition { get; set; }
+
     public bool HasAbsoluteCoordinateAnchor { get; set; }
     public double AbsoluteAnchorXM { get; set; }
     public double AbsoluteAnchorYM { get; set; }
@@ -335,6 +351,8 @@ public readonly record struct LayoutCoordinate(double XM, double YM, double ZM);
 /// document's origin coordinates, the resolver walks connections breadth-first, upstream and downstream, visiting
 /// components in document order, and keeps the first position reached for each component. Fragments that are not
 /// connected to the origin are placed from their absolute anchor when they have one; others get no position.
+/// Stored absolute positions (schema 13) are applied when a file is loaded, by rebuilding these offsets from them
+/// (<see cref="LayoutPositions.DeriveOffsetsFromAbsolute"/>), so the resolver always works from current offsets.
 /// Calculation points are placed by their fraction along the connection they observe. The result is deterministic
 /// for a given document. Offsets that disagree around a loop are not resolved here: <see cref="LayoutGeometryCheck"/>
 /// reports them.
@@ -673,8 +691,13 @@ public static class DuctSystemStore
         }
         if (document.SchemaVersion == 11)
             document.SchemaVersion = 12;
-        if (document.SchemaVersion != 12)
-            throw new InvalidDataException(document.SchemaVersion > 12
+        // Version 13: absolute X/Y/Z positions are stored and are authoritative. Older files only have offsets;
+        // their absolute positions are derived from those offsets below (no component moves).
+        var positionsFromOffsets = document.SchemaVersion == 12;
+        if (document.SchemaVersion == 12)
+            document.SchemaVersion = 13;
+        if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
+            throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."
                 : $"Unsupported duct-system file version {document.SchemaVersion}.");
         if (document.Ducts.Any(x => x.Sequence <= 0)
@@ -812,6 +835,9 @@ public static class DuctSystemStore
             .DefaultIfEmpty(0)
             .Max();
         document.NextBranchSequence = Math.Max(document.NextBranchSequence, highestBranch + 1);
+        if (!positionsFromOffsets)
+            LayoutPositions.DeriveOffsetsFromAbsolute(document);
+        LayoutPositions.StoreAbsolute(document);
         return document;
     }
 
@@ -961,6 +987,8 @@ public static class DuctSystemStore
         Directory.CreateDirectory(directory);
         var temporaryPath = path + ".tmp";
         var backupPath = path + ".bak";
+        // The saved absolute positions are the authoritative geometry: bring them up to date first.
+        LayoutPositions.StoreAbsolute(document);
         File.WriteAllText(temporaryPath, JsonSerializer.Serialize(document, JsonOptions));
         if (File.Exists(path))
             File.Copy(path, backupPath, overwrite: true);

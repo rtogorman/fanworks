@@ -33,7 +33,7 @@ name the repo).
 | 5. Project file (finding 4) | Done | `.fanworks` via `ProjectFile`; Save writes it first; Settings > Open Project |
 | 6. Logging + v0.93 release (findings 9, 11) | Done | `DiagnosticLog`, crash reports, `AutomationOptions` replaces env vars; v0.93.0 built on owner's laptop: 41/41 engineering, 16/16 interface checks |
 | 7. System solver into Core (finding 6) | Done | `SystemSolver` (Core) replaces the window's solver; bit-identical on reference project + 3 variants; 8 new solver checks (49/49); UI 16/16 (Wine) |
-| 8. One coordinate model (finding 7) | Done, reduced scope (see Step 8 record) | `LayoutGeometryCheck` detects non-closing loops, duct offset/length mismatches, unplaced components; shown on the Duct System summary, tooltip and PDF; resolver documented. Storage still relative (decision recorded) |
+| 8. One coordinate model (finding 7) | Done in full 2026-11-09 (see "Step 8 (full) record"); earlier partial record kept below | `LayoutGeometryCheck` detects non-closing loops, duct offset/length mismatches, unplaced components; shown on the Duct System summary, tooltip and PDF; resolver documented. Storage still relative (decision recorded) |
 | 9. Break up main window (findings 12-14) | Done, reduced scope (see Step 9 record) | undo capped; 14 classes moved to own files; `LayoutModelCheck` per-type rules. Per-tab screen classes deferred (decision recorded) |
 | 10. Docs, independent verification, CI (findings 15-16) | Done in code; human items open | XML docs with equations/sources; `docs/TABLE_VERIFICATION.md` (108 entries, all "Not verified"); ARCHITECTURE/DEVELOPER_GUIDE; culture test; warnings as errors; `global.json`; CI workflow. Open: independent table re-check, IP clearance, GitHub |
 
@@ -200,6 +200,27 @@ step 10 refresh, release v0.95.0.
 - Auto-size Fan sets the Duct System filter to the isolated critical path (`_criticalPathFilterEnabled = true`);
   interface test asserts it.
 - 58/58 engineering, 16/16 interface (Wine).
+
+## Step 8 (full) record — absolute positions stored
+
+- Schema 13: `SavedLayoutNode.XM/YM/ZM` + `HasStoredPosition`. `DuctSystemStore.Save` calls
+  `LayoutPositions.StoreAbsolute` (resolve, store, rewrite second-inlet offsets and their duct records from the two
+  positions, so a converging loop always closes). `Load` of a schema-13 file rebuilds every connection offset and
+  the coordinate origin from the stored absolute positions (`DeriveOffsetsFromAbsolute`): the absolute positions
+  are authoritative. Schema 12 files migrate by resolving their offsets (no component moves). Anchors of detached
+  fragments are absolute inputs and are kept as entered.
+- In memory the Designer still edits offsets (that is how users enter positions); positions are derived from them
+  by the resolver, and written as absolute on every save. Stored positions are not used to place components in
+  memory (avoids stale positions between saves).
+- Dialogs: the equipment and fitting "position" row now shows and accepts the OFFSET FROM the upstream component
+  (primary, else second inlet), or FROM the first downstream component (labelled DOWNSTREAM) when there is no
+  upstream one; only an unconnected component uses absolute X/Y/Z. `LayoutPositionReference` converts
+  offset <-> absolute; the commit path (`ApplyAbsoluteCoordinateEdit`) is unchanged, so downstream components stay
+  put when a component is moved, as before. New-component placement was already relative to the upstream item.
+- Checks: 3 new engineering checks (absolute positions saved; stored absolute positions win over offsets; schema 12
+  migrates without moving anything) -> 61/61; interface check for the offset caption and offset->absolute
+  conversion (upstream and downstream reference) -> 16/16 (Wine). Reference project: positions identical after
+  save + load; results identical.
 
 ## Current task detail
 

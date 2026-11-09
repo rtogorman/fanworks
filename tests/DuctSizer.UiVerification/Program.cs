@@ -3086,6 +3086,43 @@ internal static class Program
                 }
             }
 
+            // Positions are stored absolute, but the dialogs show and accept the offset from the upstream component,
+            // or from a downstream component when there is no upstream one.
+            {
+                var referenceType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutPositionReference")
+                                    ?? throw new InvalidOperationException("Could not find the position reference type.");
+                var absolute = new LayoutCoordinate(UnitConversions.FeetToM(30), UnitConversions.FeetToM(12), UnitConversions.FeetToM(9));
+                var upstreamAt = new LayoutCoordinate(UnitConversions.FeetToM(20), UnitConversions.FeetToM(12), UnitConversions.FeetToM(9));
+                foreach (var downstreamReference in new[] { false, true })
+                {
+                    var reference = Activator.CreateInstance(referenceType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        null, new object[] { "REF-1", upstreamAt, downstreamReference }, null)!;
+                    using var offsetDialog = (Form)Activator.CreateInstance(equipmentDialogType,
+                        BindingFlags.Instance | BindingFlags.NonPublic, null,
+                        new object?[] { coilNode, document.LayoutNodes, testCaption, absolute, new LayoutEditableAxes(true, true, true), reference },
+                        null)!;
+                    var caption = Find<Label>(offsetDialog, "LayoutLocationCaption");
+                    var xBox = Descendants<TextBox>(offsetDialog).First(box => box.Text == "10");
+                    Require(caption.Text.StartsWith("OFFSET FROM REF-1", StringComparison.Ordinal)
+                            && caption.Text.Contains("DOWNSTREAM", StringComparison.Ordinal) == downstreamReference,
+                        $"The equipment dialog should label the position as an offset from the reference component. Caption: {caption.Text}");
+                    xBox.Text = "14";
+                    var save = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutEquipmentDialog")!
+                        .GetMethod("SaveInputs", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Require(save is not null, "The equipment dialog save method should exist.");
+                    {
+                        var priorDelta = (coilNode.DeltaXM, coilNode.DeltaYM, coilNode.DeltaZM);
+                        save.Invoke(offsetDialog, null);
+                        var desired = (LayoutCoordinate)equipmentDialogType.GetProperty("DesiredAbsoluteCoordinate",
+                            BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(offsetDialog)!;
+                        Require(Math.Abs(UnitConversions.MToFeet(desired.XM) - 34) < 1e-9
+                                && Math.Abs(UnitConversions.MToFeet(desired.YM) - 12) < 1e-9,
+                            "An entered offset should be converted back to an absolute position (reference + offset).");
+                        (coilNode.DeltaXM, coilNode.DeltaYM, coilNode.DeltaZM) = priorDelta;
+                    }
+                }
+            }
+
             var fittingDialogType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutFittingNodeDialog")
                                     ?? throw new InvalidOperationException("Could not find the layout fitting editor.");
             var longDefinition = FittingCatalog.All.OrderByDescending(x => x.Description.Length).First();
@@ -3262,7 +3299,8 @@ internal static class Program
                 $"Changing an icon's upstream item should preserve the path, size the axial replacement run, and insert a reviewable elbow when the next run changes axis. " +
                 $"rewired={rewired}; parents={filterNode.ParentNodeId}/{coilNode.ParentNodeId}; " +
                 $"duct links={filterNode.ConnectionDuctSequence}/{coilNode.ConnectionDuctSequence}; " +
-                $"ducts={string.Join(',', document.Ducts.Select(x => $"{x.Sequence}:{UnitConversions.M3PerSToCfm(x.AirflowM3PerS):0}"))}.");
+                $"ducts={string.Join(',', document.Ducts.Select(x => $"{x.Sequence}:{UnitConversions.M3PerSToCfm(x.AirflowM3PerS):0}"))}; " +
+                $"fittings={string.Join(',', document.LayoutNodes.Where(x => x.Type == LayoutNodeType.Fitting).Select(x => $"{x.Id}<{x.ParentNodeId}[{x.FittingGroup}]"))}.");
 
             var automaticElbowMethod = typeof(MainForm).GetMethod("AddAutomaticElbowsForMultiAxisConnection",
                                           BindingFlags.Instance | BindingFlags.NonPublic)

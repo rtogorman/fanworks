@@ -152,3 +152,117 @@ internal static class ModelCheckTests
         SystemSolver.Solve(document);                                  // and the solver must still terminate
     }
 }
+
+/// <summary>Checks for stored absolute positions (<see cref="LayoutPositions"/>, schema 13).</summary>
+internal static class PositionTests
+{
+    private static (DuctSystemDocument Document, SavedLayoutNode Source, SavedLayoutNode A, SavedLayoutNode B, SavedLayoutNode Merger) BuildLoop()
+    {
+        var document = new DuctSystemDocument { CoordinateOriginXM = 10, CoordinateOriginYM = 20, CoordinateOriginZM = 3 };
+        var source = SystemTests.AddNode(document, LayoutNodeType.Reservoir, parent: null, duct: null);
+        source.SpaceRole = "Space Source";
+        document.CoordinateOriginNodeId = source.Id;
+        var a = SystemTests.AddNode(document, LayoutNodeType.Fitting, source, duct: null);
+        a.DeltaXM = 3;
+        var b = SystemTests.AddNode(document, LayoutNodeType.Fitting, source, duct: null);
+        b.DeltaYM = 3;
+        var merger = SystemTests.AddNode(document, LayoutNodeType.Fitting, a, duct: null);
+        merger.FittingGroup = "Converging Fittings";
+        merger.DeltaYM = 3;
+        merger.SecondaryParentNodeId = b.Id;
+        merger.SecondaryDeltaXM = 3.5;   // does not close by 0.5 m
+        return (document, source, a, b, merger);
+    }
+
+    public static void SavedFileStoresAbsolutePositions()
+    {
+        var loop = BuildLoop();
+        var path = Path.Combine(Path.GetTempPath(), $"fanworks-positions-{Guid.NewGuid():N}{ProjectFile.Extension}");
+        try
+        {
+            ProjectFile.Save(path, loop.Document);
+            var loaded = ProjectFile.Load(path);
+            var merger = loaded.LayoutNodes.Single(x => x.Id == loop.Merger.Id);
+            if (loaded.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion || !merger.HasStoredPosition
+                || Math.Abs(merger.XM - 13) > 1e-12 || Math.Abs(merger.YM - 23) > 1e-12 || Math.Abs(merger.ZM - 3) > 1e-12)
+                throw new Exception("The saved file must hold each component's absolute position.");
+            if (LayoutGeometryCheck.Check(loaded).Any(x => x.Kind == LayoutGeometryIssueKind.ConnectionDoesNotClose))
+                throw new Exception("With one stored position per component, a converging loop must always close.");
+            AssertNear(merger.SecondaryDeltaXM, 3.0);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".bak");
+        }
+    }
+
+    public static void StoredAbsolutePositionsWinOverOffsets()
+    {
+        var loop = BuildLoop();
+        var path = Path.Combine(Path.GetTempPath(), $"fanworks-positions-{Guid.NewGuid():N}{ProjectFile.Extension}");
+        try
+        {
+            ProjectFile.Save(path, loop.Document);
+            // Move component A in the file by editing only its absolute X (offsets left as they were).
+            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+            var nodeA = json["LayoutNodes"]!.AsArray().Single(x => (int)x!["Sequence"]! == loop.A.Sequence)!;
+            nodeA["XM"] = 15.0;
+            File.WriteAllText(path, json.ToJsonString());
+            var loaded = ProjectFile.Load(path);
+            var a = loaded.LayoutNodes.Single(x => x.Id == loop.A.Id);
+            var merger = loaded.LayoutNodes.Single(x => x.Id == loop.Merger.Id);
+            AssertNear(a.XM, 15.0);
+            AssertNear(a.DeltaXM, 5.0);           // 15 - 10: the offset follows the stored position
+            AssertNear(merger.XM, 13.0);          // the downstream component did not move
+            AssertNear(merger.DeltaXM, -2.0);     // 13 - 15
+            var resolved = LayoutCoordinateResolver.Resolve(loaded);
+            AssertNear(resolved[a.Sequence].XM, 15.0);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".bak");
+        }
+    }
+
+    public static void OlderFilesMigrateWithoutMovingComponents()
+    {
+        var loop = BuildLoop();
+        var before = LayoutCoordinateResolver.Resolve(loop.Document);
+        var path = Path.Combine(Path.GetTempPath(), $"fanworks-positions-{Guid.NewGuid():N}{ProjectFile.Extension}");
+        try
+        {
+            // Write a schema-12 file: offsets only, no absolute positions.
+            var json = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(loop.Document))!;
+            json["SchemaVersion"] = 12;
+            foreach (var node in json["LayoutNodes"]!.AsArray())
+            {
+                node!.AsObject().Remove("XM");
+                node.AsObject().Remove("YM");
+                node.AsObject().Remove("ZM");
+                node.AsObject().Remove("HasStoredPosition");
+            }
+            File.WriteAllText(path, json.ToJsonString());
+            var loaded = ProjectFile.Load(path);
+            foreach (var node in loaded.LayoutNodes)
+            {
+                if (!node.HasStoredPosition)
+                    throw new Exception($"{node.Id} has no stored position after migration.");
+                AssertNear(node.XM, before[node.Sequence].XM);
+                AssertNear(node.YM, before[node.Sequence].YM);
+                AssertNear(node.ZM, before[node.Sequence].ZM);
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static void AssertNear(double actual, double expected)
+    {
+        if (!double.IsFinite(actual) || Math.Abs(actual - expected) > 1e-9)
+            throw new Exception($"Expected {expected:R}, got {actual:R}.");
+    }
+}

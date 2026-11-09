@@ -60,7 +60,10 @@ var tests = new (string Name, Action Run)[]
     ("Layout model check: valid system is clean", ModelCheckTests.ValidSystemHasNoModelIssues),
     ("Layout model check: invalid combinations reported", ModelCheckTests.InvalidCombinationsAreReported),
     ("Layout model check: closed upstream loop reported", ModelCheckTests.ClosedUpstreamLoopIsReported),
-    ("Exports do not depend on regional settings", ExportCultureTests.ExportsDoNotDependOnRegionalSettings)
+    ("Exports do not depend on regional settings", ExportCultureTests.ExportsDoNotDependOnRegionalSettings),
+    ("Positions: saved file stores absolute positions", PositionTests.SavedFileStoresAbsolutePositions),
+    ("Positions: stored absolute positions win over offsets", PositionTests.StoredAbsolutePositionsWinOverOffsets),
+    ("Positions: older files migrate without moving components", PositionTests.OlderFilesMigrateWithoutMovingComponents)
 };
 
 var failures = new List<string>();
@@ -1142,7 +1145,7 @@ static void TestDuctSystemPersistence()
         var migratedPointDocument = DuctSystemStore.Load(legacyPointPath);
         var migratedPoint = migratedPointDocument.LayoutNodes.Single(x => x.Type == LayoutNodeType.CalculationPoint);
         var migratedSink = migratedPointDocument.LayoutNodes.Single(x => x.Type == LayoutNodeType.Filter);
-        if (migratedPointDocument.SchemaVersion != 12 || migratedPointDocument.Ducts.Count != 1
+        if (migratedPointDocument.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion || migratedPointDocument.Ducts.Count != 1
             || migratedPoint.ParentNodeId.Length != 0 || migratedPoint.CalculationConnectionNodeId != migratedSink.Id
             || migratedSink.ParentNodeId != legacySource.Id || migratedPoint.ObservedDuctSequence is null)
             throw new Exception("Legacy calculation points were not converted to non-destructive duct annotations.");
@@ -1157,7 +1160,7 @@ static void TestDuctSystemPersistence()
         });
         DuctSystemStore.Save(legacyPath, legacyDocument);
         var upgradedLayout = DuctSystemStore.Load(legacyPath);
-        if (upgradedLayout.SchemaVersion != 12 || upgradedLayout.LayoutNodes[0].GridX != 4
+        if (upgradedLayout.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion || upgradedLayout.LayoutNodes[0].GridX != 4
             || upgradedLayout.LayoutNodes[0].GridY != 12 || !upgradedLayout.LayoutNodes[0].IsDefined)
             throw new Exception("Legacy Designer coordinates were not upgraded to the full isometric intersection lattice.");
 
