@@ -56,6 +56,7 @@ public sealed partial class MainForm
     private static readonly JsonSerializerOptions LayoutHistoryJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals,
         Converters = { new JsonStringEnumConverter() }
     };
 

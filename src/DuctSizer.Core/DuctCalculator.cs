@@ -52,9 +52,12 @@ public static class DuctCalculator
         var velocityPressure = air.DensityKgPerM3 * calculationVelocity * calculationVelocity / 2.0;
         var lowerRate = friction.LowerFactor / calculationDiameter * velocityPressure;
         var upperRate = friction.UpperFactor / calculationDiameter * velocityPressure;
+        // Transitional flow (2300 < Re <= 4000) has no single accepted friction factor. The laminar and turbulent
+        // results are reported as bounds, and the headline rate is the conservative upper bound so that the
+        // calculator, the system schedule and the critical-path total always agree. No blended value is used.
         var rate = friction.Factor.HasValue
             ? friction.Factor.Value / calculationDiameter * velocityPressure
-            : 0.5 * (lowerRate + upperRate);
+            : Math.Max(lowerRate, upperRate);
 
         EnsureFinitePositive(rate, "pressure loss");
         EnsureFinitePositive(lowerRate, "lower pressure-loss bound");

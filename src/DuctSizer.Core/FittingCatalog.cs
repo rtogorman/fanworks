@@ -98,7 +98,16 @@ public sealed record FittingCalculationResult(
     double PressureLossPa,
     double? AirflowM3PerS = null,
     DuctGeometry? ReferenceGeometry = null,
-    JunctionFlowData? Junction = null);
+    JunctionFlowData? Junction = null,
+    IReadOnlyList<string>? RangeWarnings = null)
+{
+    /// <summary>
+    /// Inputs that fell outside a published ASHRAE table and were held at the table edge. Empty when every lookup
+    /// stayed inside the published range. A non-empty list means the coefficient is an edge value, not an
+    /// interpolated table value, and must be reviewed.
+    /// </summary>
+    public IReadOnlyList<string> TableRangeWarnings => RangeWarnings ?? Array.Empty<string>();
+}
 
 public sealed record JunctionFlowData(
     JunctionPath Path,
@@ -191,7 +200,13 @@ public static class FittingCalculator
             throw new ArgumentOutOfRangeException(nameof(referenceVelocityMPerS), "Reference velocity cannot be negative.");
 
         var air = AirProperties.Calculate(temperatureC, relativeHumidity, atmosphericPressurePa);
-        var coefficient = definition.CalculateCoefficient(inputs);
+        double coefficient;
+        IReadOnlyList<string> rangeWarnings;
+        using (var rangeLog = TableRangeLog.Begin())
+        {
+            coefficient = definition.CalculateCoefficient(inputs);
+            rangeWarnings = rangeLog.Describe(definition, inputs);
+        }
         var velocityPressure = air.DensityKgPerM3 * referenceVelocityMPerS * referenceVelocityMPerS / 2.0;
         return new FittingCalculationResult(
             definition,
@@ -200,7 +215,8 @@ public static class FittingCalculator
             air,
             coefficient,
             velocityPressure,
-            coefficient * velocityPressure);
+            coefficient * velocityPressure,
+            RangeWarnings: rangeWarnings);
     }
 }
 
@@ -1100,6 +1116,7 @@ public static class FittingCatalog
     {
         if (rows.Length != A5_RaggedVelocity.Length)
             throw new InvalidOperationException("Invalid ragged junction table.");
+        TableRangeLog.Note(outerValue, A5_RaggedVelocity[0], A5_RaggedVelocity[^1]);
         outerValue = Math.Clamp(outerValue, A5_RaggedVelocity[0], A5_RaggedVelocity[^1]);
         var (lower, upper, fraction) = Bracket(A5_RaggedVelocity, outerValue);
         double At(int row)
@@ -1132,6 +1149,7 @@ public static class FittingCatalog
     {
         if (axis.Length != values.Length || axis.Length == 0)
             throw new InvalidOperationException("Invalid fitting lookup table.");
+        TableRangeLog.Note(x, axis[0], axis[^1]);
         if (x <= axis[0]) return values[0];
         if (x >= axis[^1]) return values[^1];
         var upper = Array.FindIndex(axis, a => a >= x);
@@ -1144,6 +1162,8 @@ public static class FittingCatalog
     {
         if (values.GetLength(0) != rows.Length || values.GetLength(1) != columns.Length)
             throw new InvalidOperationException("Invalid fitting lookup matrix.");
+        TableRangeLog.Note(rowValue, rows[0], rows[^1]);
+        TableRangeLog.Note(columnValue, columns[0], columns[^1]);
         rowValue = Math.Clamp(rowValue, rows[0], rows[^1]);
         columnValue = Math.Clamp(columnValue, columns[0], columns[^1]);
         var r1 = rowValue >= rows[^1] ? rows.Length - 1 : Math.Max(1, Array.FindIndex(rows, x => x >= rowValue));

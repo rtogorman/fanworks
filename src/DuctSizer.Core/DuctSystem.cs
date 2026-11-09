@@ -481,6 +481,21 @@ public sealed class SavedFitting
                 RelativeHumidity, AtmosphericPressurePa);
     }
 
+    /// <summary>
+    /// Calculates a junction fitting for a specific ASHRAE path (common-to-straight or common-to-branch), using the
+    /// stored leg airflows and geometry. A two-path junction has a different coefficient on each path, so a route
+    /// through the branch outlet must not be charged the straight-path loss. Non-junction fittings ignore
+    /// <paramref name="path"/>.
+    /// </summary>
+    public FittingCalculationResult CalculateForPath(JunctionPath path)
+    {
+        var definition = FittingCatalog.Find(FittingCode);
+        if (!definition.IsJunction || Junction is null)
+            return Calculate();
+        return FittingCalculator.Calculate(definition, Inputs, Junction with { Path = path }, TemperatureC,
+            RelativeHumidity, AtmosphericPressurePa);
+    }
+
     public static SavedFitting FromResult(int sequence, string description, FittingCalculationResult result,
         string airSystemType = "Supply Air", string branchId = "Main") => new()
     {
@@ -509,6 +524,8 @@ public static class DuctSystemStore
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
+        // Calculated pressures are NaN downstream of an item that cannot be calculated ("not available").
+        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
         Converters = { new JsonStringEnumConverter() }
     };
 

@@ -34,7 +34,15 @@ var tests = new (string Name, Action Run)[]
     ("ASHRAE junction paths, signed coefficients, and dropdown tables", TestJunctionCalculation),
     ("Local duct-system persistence", TestDuctSystemPersistence),
     ("Duct-system CSV round trip and PDF report", TestDuctSystemExchange),
-    ("Invalid inputs fail safely", TestInvalidInput)
+    ("Invalid inputs fail safely", TestInvalidInput),
+    ("Junction legs use the connected duct sizes", SystemTests.JunctionLegsUseConnectedDuctSizes),
+    ("Critical path charges each junction outlet its own coefficient", SystemTests.CriticalPathChargesEachOutletItsOwnCoefficient),
+    ("A failed item blocks the critical-path total", SystemTests.FailedItemBlocksCriticalPathTotal),
+    ("Project file round-trips the full model", SystemTests.ProjectFileRoundTripsTheFullModel),
+    ("Out-of-range table lookups are flagged", SystemTests.OutOfRangeTableLookupsAreFlagged),
+    ("Transitional flow uses the upper bound everywhere", SystemTests.TransitionalFlowUsesTheUpperBoundEverywhere),
+    ("Fan power rejects invalid inputs", SystemTests.FanPowerRejectsInvalidInputs),
+    ("Fan airflow comes from its own system", SystemTests.FanAirflowComesFromItsOwnSystem)
 };
 
 var failures = new List<string>();
