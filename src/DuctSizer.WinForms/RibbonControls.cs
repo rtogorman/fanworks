@@ -408,7 +408,7 @@ internal sealed class RibbonGroup : Panel
                  | ControlStyles.UserPaint, true);
         BackColor = RibbonPalette.Ribbon;
         Margin = Padding.Empty;
-        Padding = new Padding(4, 2, 6, CaptionHeight);
+        Padding = new Padding(1, 1, 3, CaptionHeight);
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Content = new FlowLayoutPanel
@@ -421,7 +421,7 @@ internal sealed class RibbonGroup : Panel
             Margin = Padding.Empty,
             Padding = Padding.Empty,
             BackColor = RibbonPalette.Ribbon,
-            Location = new Point(4, 2)
+            Location = new Point(1, 1)
         };
         Controls.Add(Content);
     }
@@ -460,8 +460,8 @@ internal sealed class RibbonButton : Button
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
         Font = new Font("Segoe UI", 8.5F);
-        Size = new Size(width, 76);
-        Margin = new Padding(1, 0, 1, 0);
+        Size = new Size(width, 74);
+        Margin = new Padding(0, 0, 1, 0);
         Cursor = Cursors.Hand;
         AccessibleName = text.Replace("\n", " ", StringComparison.Ordinal);
     }
@@ -523,10 +523,25 @@ internal sealed class RibbonButton : Button
         var accent = Enabled ? RibbonPalette.IconAccent : RibbonPalette.Disabled;
         const int iconSize = 28;
         RibbonIcons.Draw(graphics, IconKind, new Rectangle((Width - iconSize) / 2, 6, iconSize, iconSize), stroke, accent);
-        var text = Text + (DropDownMenu is null ? string.Empty : " ▾");
-        TextRenderer.DrawText(graphics, text, Font, new Rectangle(1, 38, Width - 2, Height - 39),
-            Enabled ? RibbonPalette.Ink : RibbonPalette.Disabled,
+        var textColor = Enabled ? RibbonPalette.Ink : RibbonPalette.Disabled;
+        var textBounds = new Rectangle(1, 37, Width - 2, Height - 38);
+        TextRenderer.DrawText(graphics, Text, Font, textBounds, textColor,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
+        if (DropDownMenu is not null)
+        {
+            // Drop-down arrow drawn as a shape so it never depends on a font having the glyph.
+            var lines = Text.Split('\n');
+            var last = lines[^1];
+            var lastSize = TextRenderer.MeasureText(graphics, last, Font, Size.Empty, TextFormatFlags.NoPadding);
+            var lineHeight = TextRenderer.MeasureText(graphics, "Ag", Font, Size.Empty, TextFormatFlags.NoPadding).Height;
+            var arrowX = (Width + lastSize.Width) / 2f + 3;
+            var arrowY = textBounds.Top + (lines.Length - 1) * lineHeight + lineHeight / 2f - 1;
+            using var arrow = new SolidBrush(textColor);
+            graphics.FillPolygon(arrow, new[]
+            {
+                new PointF(arrowX, arrowY - 1.5f), new PointF(arrowX + 6, arrowY - 1.5f), new PointF(arrowX + 3, arrowY + 2f)
+            });
+        }
         if (Focused && ShowFocusCues)
             ControlPaint.DrawFocusRectangle(graphics, new Rectangle(2, 2, Width - 4, Height - 4));
     }

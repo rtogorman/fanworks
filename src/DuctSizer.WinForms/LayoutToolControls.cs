@@ -90,7 +90,7 @@ internal sealed class LayoutToolCard : Control
         LayoutIconPainter.Draw(e.Graphics, _type,
             new Rectangle((Width - compactIcon) / 2, 2, compactIcon, compactIcon),
             Color.FromArgb(21, 83, 99), _fittingGroup);
-        using var font = new Font("Segoe UI", 7.5F);
+        using var font = new Font("Segoe UI", 7.25F);
         TextRenderer.DrawText(e.Graphics, _title, font, new Rectangle(0, Height - captionHeight - 1, Width, captionHeight),
             RibbonPalette.Ink, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.NoPadding
                                | TextFormatFlags.EndEllipsis);

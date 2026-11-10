@@ -74,7 +74,7 @@ internal sealed class MainRibbon
             Name = "MainRibbon",
             Dock = DockStyle.Fill,
             Margin = Padding.Empty,
-            Padding = new Padding(6, 4, 6, 1),
+            Padding = new Padding(4, 3, 4, 1),
             BackColor = RibbonPalette.Ribbon
         };
         _pages[TopTab.Project] = BuildProjectRibbon();
@@ -127,35 +127,35 @@ internal sealed class MainRibbon
 
         var project = AddGroup(page, "RibbonProjectGroup", "Project");
         AddButton(project, "RibbonNewProjectButton", "New\nProject", RibbonIcon.NewProject,
-            "Start a new project. You are asked before the current project is closed.", NewProject);
+            "Start a new project. You are asked before the current project is closed.", NewProject, 50);
         AddButton(project, "RibbonOpenButton", "Open", RibbonIcon.Open,
-            "Open a FanWorks project (.fanworks), or import a CSV schedule.", () => SystemScreen.OpenProject());
+            "Open a FanWorks project (.fanworks), or import a CSV schedule.", () => SystemScreen.OpenProject(), 44);
         AddButton(project, "RibbonSaveButton", "Save", RibbonIcon.Save,
-            "Save the project (.fanworks) with its PDF report and CSV schedule.", () => SystemScreen.ExportDuctSystem(), 52);
+            "Save the project (.fanworks) with its PDF report and CSV schedule.", () => SystemScreen.ExportDuctSystem(), 42);
         AddButton(project, "RibbonSaveAsButton", "Save As", RibbonIcon.SaveAs,
-            "Save the project under a new name or location.", SaveProjectAs, 56);
+            "Save the project under a new name or location.", SaveProjectAs, 48);
 
         var settings = AddGroup(page, "RibbonSettingsGroup", "Settings");
         AddButton(settings, "RibbonProjectSettingsButton", "Project\nSettings", RibbonIcon.ProjectSettings,
             "Project information, units (Imperial or Metric) and calculation settings.",
-            () => SystemScreen.EditProjectSettings());
+            () => SystemScreen.EditProjectSettings(), 52);
         AddButton(settings, "RibbonSizingCriteriaButton", "Sizing\nCriteria", RibbonIcon.SizingCriteria,
             "Automatic sizing inputs used by Auto Size for ducts and components.",
-            () => SystemScreen.EditAutomaticSizingInputs());
+            () => SystemScreen.EditAutomaticSizingInputs(), 52);
         _roundSizesButton = AddButton(settings, "RibbonRoundSizesButton", "Round\nSizes", RibbonIcon.RoundSizes,
-            "Round automatically sized ductwork to the nearest ½ in., 1 in. or 2 in.", () => { }, 64);
+            "Round automatically sized ductwork to the nearest ½ in., 1 in. or 2 in.", () => { }, 58);
         _roundSizesButton.DropDownMenu = BuildRoundSizesMenu();
 
         var edit = AddGroup(page, "RibbonEditGroup", "Edit");
         _selectButton = AddButton(edit, "RibbonSelectButton", "Select", RibbonIcon.Select,
-            "Select, connect and edit items on the grid.", () => Layout.UseLayoutSelectMode(), 52);
+            "Select, connect and edit items on the grid.", () => Layout.UseLayoutSelectMode(), 44);
         _moveButton = AddButton(edit, "RibbonMoveButton", "Move", RibbonIcon.Move,
             "Move mode: drag components to tidy the drawing. Connections and calculations do not change.",
             () =>
             {
                 Layout.ToggleLayoutRearrangeMode();
                 SynchronizeWithPage();
-            }, 52);
+            }, 44);
 
         AddComponentGroup(page, "RibbonSpacesGroup", "Spaces", new (LayoutNodeType, string, string, string?)[]
         {
@@ -184,7 +184,7 @@ internal sealed class MainRibbon
             (LayoutNodeType.Fitting, "Terminal", "Entries, exits, terminals and takeoffs", FittingCatalog.TerminalSelectionGroup),
             (LayoutNodeType.Grd, "GRD", "Grille, square diffuser, or linear diffuser", "GRDs")
         });
-        AddComponentGroup(page, "RibbonPointsGroup", "Calculation Points", new (LayoutNodeType, string, string, string?)[]
+        AddComponentGroup(page, "RibbonPointsGroup", "Points", new (LayoutNodeType, string, string, string?)[]
         {
             (LayoutNodeType.CalculationPoint, "Pressure", "Pressure calculation point", "Pressure"),
             (LayoutNodeType.CalculationPoint, "Temp", "Temperature calculation point", "Temperature"),
@@ -195,10 +195,10 @@ internal sealed class MainRibbon
         var sizing = AddGroup(page, "RibbonSizingGroup", "Sizing");
         AddButton(sizing, "RibbonAutoSizeButton", "Auto Size", RibbonIcon.AutoSize,
             "Size every undefined component from the Sizing Criteria, then re-size all connected ductwork from the current airflows.",
-            () => Layout.AutoSizeLayout());
+            () => Layout.AutoSizeLayout(), 54);
         AddButton(sizing, "RibbonCalculateButton", "Calculate", RibbonIcon.Calculate,
             "Calculate the system: size the fan to the critical path and highlight the critical path.",
-            () => SystemScreen.CalculateSystem());
+            () => SystemScreen.CalculateSystem(), 54);
 
         var view = AddGroup(page, "RibbonViewGroup", "View");
         _highlightButton = AddButton(view, "RibbonHighlightCriticalPathButton", "Highlight\nCritical Path",

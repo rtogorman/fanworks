@@ -654,8 +654,8 @@ internal sealed partial class LayoutDesignerScreen
         tool.Dock = DockStyle.None;
         tool.ShowCaption = true;
         tool.BackColor = RibbonPalette.Ribbon;
-        tool.Size = new Size(52, 37);
-        tool.Margin = new Padding(1, 0, 1, 1);
+        tool.Size = new Size(47, 36);
+        tool.Margin = new Padding(0, 0, 0, 1);
         return tool;
     }
 
