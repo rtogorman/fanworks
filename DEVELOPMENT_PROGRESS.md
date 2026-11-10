@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-09 (all ten steps done; v0.95.0 built and verified on the owner's laptop; history on GitHub)
+Last updated: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
 
 ## Where things live
 
@@ -286,3 +286,78 @@ step 10 refresh, release v0.95.0.
 None in progress. Open items needing people or documents: independent re-check of the table transcriptions,
 ASHRAE page citations and licensing (owner), code signing, and the reference project's fan airflow (1,000 cfm set
 vs 1,200 cfm served).
+
+
+## Interface redesign (v0.96) — owner spec 2026-11-09
+
+Reference picture: `docs/ui-reference.jpg` (a style template, not to copy exactly). Owner approved four stages;
+each stage ends with a Windows build on the laptop and a push. **Calculation code must not change**; the reference
+project must give identical results (golden results above). Layout Designer canvas behaviour must stay identical
+(grid, component icons, labels, arrows, drag and drop, PDF underlay, scroll-to-zoom, grid sizing).
+
+### Spec
+
+**Top tabs** (replace the Duct Calculator / Fitting Calculator / Duct System / Layout Designer buttons):
+Project · Analysis · Reports · Quick Calc. Ribbon content changes per tab.
+
+**Project tab ribbon**, left to right:
+- Project group: New Project, Open, Save, Save As (replace the Settings dropdown's project items, incl. open/import).
+- Project Settings (gear): a form with units (Imperial/Metric), project info (user name, project number, date,
+  company logo — as today), and Calculation Settings (auto-sizing increment, auto-size rounding, equivalent
+  diameter method, duct area calculation).
+- Sizing Criteria (gear-style icon): the automatic sizing inputs form, as today's form, all current inputs.
+- Round Sizes: dropdown — round auto-sized ductwork to nearest 0.5 in., 1 in. or 2 in.
+- Select, Move.
+- Components group: today's drag-and-drop toolbox (currently on the right of the Layout Designer) moved into the
+  ribbon, grouped by kind; drag from the ribbon onto the grid.
+- Auto Size: one button = today's "Size Undefined Components" + "Recalculate All Ductwork".
+- Calculate: replaces "go to Duct System tab, click Auto-size Fan" (auto-sizes the fan / solves; shows critical path).
+- Highlight Critical Path: toggle highlight on/off in the views.
+- No Libraries, no Reports group, no Analysis Results.
+
+**Project tab body**:
+- Centre: today's Layout Designer, unchanged. Its toolbar: Select/pan as today, zoom-in and zoom-out magnifier
+  buttons (scroll-wheel zoom stays), PDF import icon left of the grid icon, grid scale as a clean dropdown of
+  ft-per-cell values (keep the ft/cell concept, not architectural scales), checkboxes Labels / Flow / Sizes.
+- Left: Project Explorer. One system per file (no multi-system tree). Collapsible lists, collapsed by default:
+  Equipment (fans, VAVs, coils...), Sources, Sinks, Dampers, Fittings, Duct Segments. Search box. Clicking an
+  entry selects it and highlights it in the layout (like today's quick view row click).
+- Right: **Selection Inspector** (keep that name). Three tabs: **Description**, **Calculations**, **Notes**.
+  - Description: what the item is (duct: shape, material; fitting: type, ID, picture — click picture to enlarge),
+    then editable inputs (method, airflow, air temp, length, target static pressure, sizes, radius ...), then outputs.
+  - Calculations: the full existing worksheet for that item (duct calculator worksheet; fitting worksheet with all
+    parameters, sub-equations, ASHRAE selections, flow and geometry) unchanged, scrollable. Items with no
+    equations (e.g. a coil with manual static pressure drop): say "Manual entry" and show outputs.
+  - Notes: free-text notes per component, saved in the project file (schema 15).
+  - Works for every component type (ducts, fittings, diffusers/terminals, coils, fans, VAVs, dampers, ...).
+- Bottom panel tabs (style as the picture): **System Overview** (today's system quick view, rows click-to-highlight),
+  **Errors** (all errors in the project), **Validation** (QA/QC: ducts show friction/static-pressure sizing rate and
+  velocity; fittings show the loss across the fitting). No Schedules tab.
+
+**Analysis tab**: equivalent of today's Duct System tab. Top: system overview — airflow, critical-path pressure
+loss, items in the critical route; then the 10 highest pressure-drop components; then the full item table with a
+filter to isolate the critical path.
+
+**Reports tab**: ribbon has Print Report (PDF). Body: scrollable page-by-page preview of the report (like a PDF
+viewer).
+
+**Quick Calc tab**: ribbon buttons Duct Calculator and Fitting Calculator; body shows today's calculator screens.
+For quick one-off sizing without a project.
+
+**Style**: tab strip, ribbon and icon style similar to the picture (line icons, grouped captions); Selection
+Inspector tabs, collapsible section headers and label/value input rows like the picture; bottom tabs like the picture.
+Icons drawn in-house (no new packages).
+
+### Stages and status
+
+| Stage | Scope | Status |
+|---|---|---|
+| R1 | Window shell, top tabs, Project ribbon, canvas toolbar; screens re-hosted (Analysis = Duct System screen, Quick Calc = calculators) | Not started |
+| R2 | Selection Inspector (Description / Calculations / Notes), notes in file (schema 15) | Not started |
+| R3 | Project Explorer, bottom panel (System Overview / Errors / Validation) | Not started |
+| R4 | Analysis summary + top 10, Reports preview, Quick Calc polish; interface tests rewritten; v0.96.0 | Not started |
+
+### Resume notes (update as work proceeds)
+
+- Work in `/home/claude/fanworks` (git, origin = GitHub). Commit and push after every working sub-step so nothing
+  is lost; the laptop folder gets changed files copied at the end of each stage.
