@@ -150,8 +150,8 @@ internal sealed partial class DuctCalculatorScreen
         _equivalentMethodCombo.Enabled = true;
         _pressureBasisCombo.Enabled = true;
         _methodHintLabel.Text = rectangular
-            ? "Equivalent-diameter, pressure-loss basis, and autosize increment are controlled in Settings."
-            : "Project calculation defaults are controlled in Settings and apply automatically to new sizing calculations.";
+            ? "Equivalent-diameter, pressure-loss basis, and autosize increment are set in Project Settings > Calculation Settings."
+            : "Project calculation defaults are set in Project Settings and apply automatically to new sizing calculations.";
 
         UpdateMaterialStatus();
     }

@@ -352,12 +352,40 @@ Icons drawn in-house (no new packages).
 
 | Stage | Scope | Status |
 |---|---|---|
-| R1 | Window shell, top tabs, Project ribbon, canvas toolbar; screens re-hosted (Analysis = Duct System screen, Quick Calc = calculators) | Not started |
+| R1 | Window shell, top tabs, Project ribbon, canvas toolbar; screens re-hosted (Analysis = Duct System screen, Quick Calc = calculators) | Done in code (Linux: 63/63, UI 17/17 under Wine); Windows build pending |
 | R2 | Selection Inspector (Description / Calculations / Notes), notes in file (schema 15) | Not started |
 | R3 | Project Explorer, bottom panel (System Overview / Errors / Validation) | Not started |
 | R4 | Analysis summary + top 10, Reports preview, Quick Calc polish; interface tests rewritten; v0.96.0 | Not started |
+
+### R1 record
+
+- New: `RibbonControls.cs` (tab button, ribbon group, large ribbon button, toolbar icon button, GDI+ line icons),
+  `MainRibbon.cs` (tabs, ribbon rows per tab, page mapping, state sync). Version 0.96.0.
+- `DuctSystemScreen.InitializeTabsAndSystem`: shell = top bar 46 px + ribbon 100 px + pages. Old header (118 px),
+  navigation bar, Settings menu and Save button removed. Page 4 = Reports (placeholder text until R4). Opens on
+  the Project page. Window title shows the project name.
+- `ProjectSettingsDialog`: tabs Project Information / Units / Calculation Settings; `SolverSettingsDialog` deleted
+  (its fields moved). `EditProjectSettings(page)` applies identity, calculation settings and units.
+- `SetSizingIncrement` (Round Sizes) writes `DefaultSizingIncrementM` (same field as Calculation Settings);
+  a non-standard saved increment shows as "Custom" in the menu.
+- Layout page: blue header and right-hand toolbox removed; new `LayoutCanvasToolbar` (undo, redo, delete, zoom
+  out/in + %, centre, PDF, grid icon + `LayoutScaleSelector` dropdown, view mode, Labels/Flow/Sizes check boxes,
+  origin, source/sink editor). Move/Size Undefined/Recalculate/Highlight buttons are no longer on screen (objects kept
+  for state text); the ribbon calls `ToggleLayoutRearrangeMode`, `AutoSizeLayout` (new: undefined components then all
+  connected ducts, one undo step), `ToggleLayoutCriticalPathHighlight`. `UseLayoutSelectMode` (new).
+- `CalculateSystem` (new, DuctSystemScreen): `TryAutoSizeFan`, save, refresh, highlight critical path, status text.
+- Flow captions: `LayoutConnectionSizeCaption` returns size and/or airflow per the check boxes; canvas shows the
+  caption when either box is on.
+- Interface checks rewritten for the new frame; new group "Main tabs and Project ribbon commands" (17 groups).
+- Analysis page still shows its own title band and buttons (Isolate / Auto-size Fan / View Fan) — R4 redesigns it.
+  Quick Calc pages still have their blue title bands — R4.
+- Owner's laptop: `src/DuctSizer.WinForms/SolverSettingsDialog.cs` must be emptied (stub) because the remote-file
+  tool cannot delete; the interface check requires that class to be gone.
 
 ### Resume notes (update as work proceeds)
 
 - Work in `/home/claude/fanworks` (git, origin = GitHub). Commit and push after every working sub-step so nothing
   is lost; the laptop folder gets changed files copied at the end of each stage.
+- Next: R1 Windows build on the laptop (copy changed files, stub SolverSettingsDialog.cs, RunBuild.cmd), then R2
+  (Selection Inspector). Linux helpers: `/home/claude/shot.sh` (screenshot of the app under Wine),
+  `/home/claude/tour.sh` + `xclick.py` (click through tabs), `/home/claude/run-uitests.sh`.

@@ -49,7 +49,7 @@ internal sealed class AutomaticSizingInputsDialog : Form
                        JsonSerializer.Serialize(settings ?? new AutomaticSizingSettings(), jsonOptions), jsonOptions)
                    ?? new AutomaticSizingSettings();
 
-        Text = "Automatic Sizing Inputs";
+        Text = "Sizing Criteria";
         Name = "AutomaticSizingInputsDialog";
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
@@ -74,7 +74,7 @@ internal sealed class AutomaticSizingInputsDialog : Form
 
         var heading = new Label
         {
-            Text = "Automatic Sizing Inputs\r\nSelect the saved defaults used by Size Undefined Components.",
+            Text = "Sizing Criteria\r\nDefaults used by Auto Size for ducts and supported components.",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 13F),
             ForeColor = Color.FromArgb(28, 69, 108),

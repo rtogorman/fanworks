@@ -197,6 +197,24 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.96.0 (interface redesign — in progress)
+
+Calculations are unchanged; this release reorganises the window.
+
+- **Main tabs:** Project, Analysis, Reports and Quick Calc replace the Duct Calculator / Fitting Calculator /
+  Duct System / Layout Designer buttons. FanWorks opens on the Project tab (the Layout Designer).
+- **Project ribbon:** New Project, Open, Save, Save As; Project Settings; Sizing Criteria; Round Sizes (½, 1 or
+  2 in.); Select and Move; every drawing component, grouped as Spaces, Equipment, Fittings, Terminals and Points
+  (drag them onto the grid, or click then click the grid); Auto Size; Calculate; Highlight Critical Path.
+- **Auto Size** does what Size Undefined Components and Recalculate All Ductwork did, in one step (one undo).
+- **Calculate** sizes the fan to the critical path (as Auto-size Fan did) and highlights the critical path.
+- **Project Settings** is one form with Project Information, Units and Calculation Settings (autosize increment and
+  rounding, equivalent-diameter method, duct area method). The Settings menu is gone.
+- **Drawing toolbar:** undo/redo/delete, zoom out / in buttons (mouse-wheel zoom still works), centre view, PDF
+  underlay, grid scale as a dropdown of feet-per-cell values, view direction, and Labels / Flow / Sizes check boxes
+  (Flow shows each duct's airflow).
+- The window frame is a fixed height on any screen, so larger monitors give the drawing more room.
+
 ## What changed in 0.95.0
 
 - **Unsized connections block results.** A drawn connection with no sized duct is no longer counted as zero loss: the critical-path total shows "not available" and names it, Auto-size Fan refuses until it is sized, and pressures downstream show "—".

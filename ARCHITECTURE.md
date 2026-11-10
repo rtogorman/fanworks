@@ -100,6 +100,14 @@ exposes them as `CalculatorScreen`, `FittingScreen`, `DuctSystemScreen` and `Lay
 through these properties, so every dependency between tabs is visible in the code. Dialogs, the Designer canvas and
 drawing helpers are separate classes. Screens hold UI state only; calculations are delegated to Core.
 
+Window frame (v0.96): a dark top bar (brand, the main tabs Project / Analysis / Reports / Quick Calc, project
+identity) over a ribbon, over the page host `_mainTabs` (headers hidden). `MainRibbon` builds the tabs and one ribbon
+row per tab and only calls existing screen commands; `RibbonControls.cs` holds the reusable pieces (`AppTabButton`,
+`RibbonGroup`, `RibbonButton`, `ToolbarIconButton`) and `RibbonIcons`, line icons drawn with GDI+ (no image files).
+Page mapping: Project = Layout Designer, Analysis = Duct System, Reports = report page, Quick Calc = duct or fitting
+calculator. Page order in `_mainTabs` is kept (0 calculator, 1 fitting, 2 system, 3 layout, 4 reports). The Designer's
+component tools are created by `LayoutDesignerScreen.CreateRibbonLayoutTool` and placed in ribbon groups.
+
 `Program.cs` starts logging and installs the crash handlers. `AutomationOptions` holds test-only switches (dialog
 suppression, storage path); they are internal and reachable only by the interface test assembly.
 

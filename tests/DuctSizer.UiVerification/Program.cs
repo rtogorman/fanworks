@@ -3655,6 +3655,75 @@ internal static class Program
                             BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)! == greenSaveBasePath,
                     "Open Project should restore the full model and make later saves write back to the opened project.");
             }
+
+            // v0.96 ribbon commands: tabs, Round Sizes, Auto Size, Calculate, Highlight, New Project.
+            var mainRibbon = typeof(MainForm).GetProperty("Ribbon", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            string ActiveRibbonTab() => mainRibbon.GetType().GetProperty("ActiveTab", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(mainRibbon)!.ToString()!;
+            ClickButton(Find<Button>(form, "TopTabAnalysis"));
+            Application.DoEvents();
+            Require(tabs.SelectedTab?.Name == "DuctSystemTab" && ActiveRibbonTab() == "Analysis",
+                $"The Analysis tab should show the system table with the Analysis ribbon. Page={tabs.SelectedTab?.Name}, Ribbon={ActiveRibbonTab()}");
+            ClickButton(Find<Button>(form, "TopTabReports"));
+            Application.DoEvents();
+            Require(tabs.SelectedTab?.Name == "ReportsTab" && ActiveRibbonTab() == "Reports"
+                    && Find<Button>(form, "RibbonPrintReportButton").Text.Replace("\n", " ", StringComparison.Ordinal) == "Print Report",
+                "The Reports tab should show the report page with Print Report.");
+            ClickButton(Find<Button>(form, "RibbonFittingCalculatorButton"));
+            Application.DoEvents();
+            ClickButton(Find<Button>(form, "TopTabProject"));
+            Application.DoEvents();
+            ClickButton(Find<Button>(form, "TopTabQuickCalc"));
+            Application.DoEvents();
+            Require(tabs.SelectedTab?.Name == "FittingLossTab"
+                    && ((dynamic)Find<Button>(form, "RibbonFittingCalculatorButton")).Checked,
+                "Quick Calc should return to the calculator last used.");
+            ClickButton(Find<Button>(form, "TopTabProject"));
+            Application.DoEvents();
+            Require(tabs.SelectedTab?.Name == "LayoutDesignerTab", "The Project tab should show the Layout Designer.");
+
+            var ribbonModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            var roundSizesMenu = ((dynamic)Find<Button>(form, "RibbonRoundSizesButton")).DropDownMenu as ContextMenuStrip
+                                 ?? throw new InvalidOperationException("Round Sizes should open a menu.");
+            Require(roundSizesMenu.Items.OfType<ToolStripMenuItem>().Count(item => item.Tag is double) == 3,
+                "Round Sizes should offer ½ in., 1 in. and 2 in.");
+            roundSizesMenu.Items.OfType<ToolStripMenuItem>().Single(item => item.Tag is 2.0).PerformClick();
+            Application.DoEvents();
+            Require(Math.Abs(ribbonModel.DefaultSizingIncrementM - UnitConversions.InchesToM(2)) < 1e-12,
+                "Round Sizes should set the project's autosize increment.");
+            roundSizesMenu.Items.OfType<ToolStripMenuItem>().Single(item => item.Tag is 0.5).PerformClick();
+            Application.DoEvents();
+            Require(Math.Abs(ribbonModel.DefaultSizingIncrementM - UnitConversions.InchesToM(0.5)) < 1e-12,
+                "Round Sizes should switch back to ½ in.");
+
+            ClickButton(Find<Button>(form, "RibbonAutoSizeButton"));
+            Application.DoEvents();
+            var layoutStatus = Find<Label>(form, "LayoutDesignerStatus");
+            Require(layoutStatus.Text.StartsWith("Auto Size", StringComparison.Ordinal)
+                    || layoutStatus.Text.StartsWith("There are no", StringComparison.Ordinal),
+                $"Auto Size should report what it sized. Status={layoutStatus.Text}");
+            var highlightButton = Find<Button>(form, "RibbonHighlightCriticalPathButton");
+            if (((dynamic)highlightButton).Checked)
+                ClickButton(highlightButton);
+            var calculated = (bool)UiMember.Method("CalculateSystem", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(form, null)!;
+            Application.DoEvents();
+            Require(calculated
+                        ? (bool)UiMember.Field("_criticalPathCalculated", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!
+                          && ((dynamic)highlightButton).Checked
+                          && layoutStatus.Text.StartsWith("Calculated.", StringComparison.Ordinal)
+                        : layoutStatus.ForeColor == Color.DarkOrange && !((dynamic)highlightButton).Checked,
+                $"Calculate should size the fan and highlight the critical path, or explain why it cannot. Status={layoutStatus.Text}");
+
+            var userBeforeNew = ribbonModel.UserName;
+            ClickButton(Find<Button>(form, "RibbonNewProjectButton"));
+            Application.DoEvents();
+            var newModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            Require(!ReferenceEquals(newModel, ribbonModel) && newModel.LayoutNodes.Count == 0 && newModel.Ducts.Count == 0
+                    && newModel.Fittings.Count == 0 && newModel.UserName == userBeforeNew
+                    && string.IsNullOrEmpty(newModel.ProjectName)
+                    && tabs.SelectedTab?.Name == "LayoutDesignerTab",
+                "New Project should start an empty project, keep the user name, and show the Project tab.");
             Console.WriteLine("PASS  Responsive wide layout");
             Console.WriteLine("PASS  Responsive stacked layout");
             Console.WriteLine("PASS  Calculation method dropdowns remain enabled");
@@ -3671,7 +3740,8 @@ internal static class Program
             Console.WriteLine("PASS  Complete fitting images, visual gallery, and editable fitting IDs");
             Console.WriteLine("PASS  Snap-grid layout designer and system branch metadata");
             Console.WriteLine("PASS  Layout rewiring and delete-all workflows");
-            Console.WriteLine("16/16 UI verification checks passed.");
+            Console.WriteLine("PASS  Main tabs and Project ribbon commands");
+            Console.WriteLine("17/17 UI verification checks passed.");
             return 0;
         }
         catch (Exception ex)
