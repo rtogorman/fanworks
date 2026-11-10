@@ -352,8 +352,8 @@ Icons drawn in-house (no new packages).
 
 | Stage | Scope | Status |
 |---|---|---|
-| R1 | Window shell, top tabs, Project ribbon, canvas toolbar; screens re-hosted (Analysis = Duct System screen, Quick Calc = calculators) | Done in code (Linux: 63/63, UI 17/17 under Wine); Windows build pending |
-| R2 | Selection Inspector (Description / Calculations / Notes), notes in file (schema 15) | Not started |
+| R1 | Window shell, top tabs, Project ribbon, canvas toolbar; screens re-hosted (Analysis = Duct System screen, Quick Calc = calculators) | **Done** — laptop build 2026-11-09: 63/63, UI 17/17, 0 warnings, `outputs\FanWorks-win-x64-v0.96.0\FanWorks.exe`; GitHub CI green |
+| R2 | Selection Inspector (Description / Calculations / Notes), notes in file (schema 15) | In progress |
 | R3 | Project Explorer, bottom panel (System Overview / Errors / Validation) | Not started |
 | R4 | Analysis summary + top 10, Reports preview, Quick Calc polish; interface tests rewritten; v0.96.0 | Not started |
 
@@ -386,6 +386,5 @@ Icons drawn in-house (no new packages).
 
 - Work in `/home/claude/fanworks` (git, origin = GitHub). Commit and push after every working sub-step so nothing
   is lost; the laptop folder gets changed files copied at the end of each stage.
-- Next: R1 Windows build on the laptop (copy changed files, stub SolverSettingsDialog.cs, RunBuild.cmd), then R2
-  (Selection Inspector). Linux helpers: `/home/claude/shot.sh` (screenshot of the app under Wine),
+- R1 synced to the laptop at commit 1920f58 (SolverSettingsDialog.cs stubbed there). Next: R2 (Selection Inspector). Linux helpers: `/home/claude/shot.sh` (screenshot of the app under Wine),
   `/home/claude/tour.sh` + `xclick.py` (click through tabs), `/home/claude/run-uitests.sh`.
