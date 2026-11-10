@@ -353,7 +353,7 @@ Icons drawn in-house (no new packages).
 | Stage | Scope | Status |
 |---|---|---|
 | R1 | Window shell, top tabs, Project ribbon, canvas toolbar; screens re-hosted (Analysis = Duct System screen, Quick Calc = calculators) | **Done** — laptop build 2026-11-09: 63/63, UI 17/17, 0 warnings, `outputs\FanWorks-win-x64-v0.96.0\FanWorks.exe`; GitHub CI green |
-| R2 | Selection Inspector (Description / Calculations / Notes), notes in file (schema 15) | In progress |
+| R2 | Selection Inspector (Description / Calculations / Notes), notes in file (schema 15) | Done in code (65/65, UI 18/18 Wine); Windows build pending |
 | R3 | Project Explorer, bottom panel (System Overview / Errors / Validation) | Not started |
 | R4 | Analysis summary + top 10, Reports preview, Quick Calc polish; interface tests rewritten; v0.96.0 | Not started |
 
@@ -382,9 +382,29 @@ Icons drawn in-house (no new packages).
 - Owner's laptop: `src/DuctSizer.WinForms/SolverSettingsDialog.cs` must be emptied (stub) because the remote-file
   tool cannot delete; the interface check requires that class to be gone.
 
+### R2 record
+
+- `SelectionInspector.cs` (new): right column of the Project page (340 px, collapsible to a vertical tab). Header,
+  item icon/title/subtitle, tabs Description / Calculations / Notes.
+  - Content comes from `DuctSystemScreen.BuildDuctReportItem` / `BuildFittingReportItem` / `BuildNodeReportItem`
+    (split out of `BuildPdfReportItems`; report unchanged), so the inspector and the PDF always agree.
+  - Description: collapsible Details (type, ID, description, quick-check values, fitting picture with click to
+    enlarge via `FittingImageViewer`), Inputs (+ **Edit Inputs…**, which opens the item's existing editor — same as
+    double-click — so validation and connected-system rules stay in one place), Outputs.
+  - Calculations: report calculation sections; equation lines rendered with `EngineeringMathRichText` (blank under
+    Wine, which cannot draw RTF pictures — same as the calculators). No sections → "Manual entry" + outputs.
+  - Notes: `DuctSystemDocument.ItemNotes` (schema 15) keyed by `L:` for drawing items (stable when a fitting gets
+    defined), `D:` for connection ducts and off-drawing records, `F:` for off-drawing fittings. Saved 1.2 s after
+    typing / on leave; pruned on save; undo/redo keep current notes.
+  - Unsized connection: explains it blocks the total; Edit Inputs sizes it.
+  - Quick-view rows for records not on the drawing show via `ShowRecord`; `EditSystemRecord` opens them in their
+    calculator.
+- Decision to confirm with owner: inputs are shown read-only with an Edit Inputs button rather than edited inline.
+
 ### Resume notes (update as work proceeds)
 
 - Work in `/home/claude/fanworks` (git, origin = GitHub). Commit and push after every working sub-step so nothing
   is lost; the laptop folder gets changed files copied at the end of each stage.
-- R1 synced to the laptop at commit 1920f58 (SolverSettingsDialog.cs stubbed there). Next: R2 (Selection Inspector). Linux helpers: `/home/claude/shot.sh` (screenshot of the app under Wine),
+- R1 synced to the laptop at commit 1920f58 (SolverSettingsDialog.cs stubbed there). R2 committed dd0ad2c; next: laptop build of R2, then R3.
+- Sample project for screenshots: run the UI tests with `SAMPLE='Z:\tmp\sample.fanworks'`, copy it to the Wine prefix's `AppData/Local/DuctSizer/duct-system.json`. Linux helpers: `/home/claude/shot.sh` (screenshot of the app under Wine),
   `/home/claude/tour.sh` + `xclick.py` (click through tabs), `/home/claude/run-uitests.sh`.
