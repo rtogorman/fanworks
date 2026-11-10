@@ -382,10 +382,14 @@ public static class DuctSystemPdf
                 // A malformed optional schematic must not prevent the engineering report from exporting.
             }
         }
-        var calculationSheetCount = reports.Count(RequiresDedicatedCalculationSheet);
-        var pageCount = 1 + schematicImages.Count + tablePageCount + reports.Count + calculationSheetCount;
+        // Each component normally fills one sheet; one with more calculations than fit continues on the next.
+        var itemSheetCounts = reports.Select((item, index) => BuildItemSheets(subtitle, total, metadata, item,
+            referenceImages.GetValueOrDefault(index), 1, 1).Count).ToArray();
+        var pageCount = 1 + schematicImages.Count + tablePageCount + itemSheetCounts.Sum();
         var contents = new List<byte[]>();
-        contents.Add(Encoding.ASCII.GetBytes(BuildTitleSheet(title, subtitle, total, metadata, 1, pageCount)));
+        var reportContents = new ReportContents(schematicImages.Select(entry => entry.Schematic.Title).ToArray(),
+            reports, itemSheetCounts, tablePageCount);
+        contents.Add(Encoding.ASCII.GetBytes(BuildTitleSheet(title, subtitle, total, metadata, 1, pageCount, reportContents)));
         // Keep the graphical system views at the front of the report, immediately after the
         // project/fan-sizing cover, so reviewers can orient themselves before the calculations.
         foreach (var schematic in schematicImages)
@@ -394,14 +398,10 @@ public static class DuctSystemPdf
         // Component worksheets follow the graphical overview and retain connected-system order.
         for (var reportIndex = 0; reportIndex < reports.Count; reportIndex++)
         {
-            var reportItem = reports[reportIndex];
             referenceImages.TryGetValue(reportIndex, out var referenceImage);
-            var dedicatedCalculationSheet = RequiresDedicatedCalculationSheet(reportItem);
-            contents.Add(Encoding.ASCII.GetBytes(BuildItemSheet(subtitle, total, metadata, reportItem,
-                referenceImage, contents.Count + 1, pageCount, includeCalculations: !dedicatedCalculationSheet)));
-            if (dedicatedCalculationSheet)
-                contents.Add(Encoding.ASCII.GetBytes(BuildCalculationReviewSheet(subtitle, total, metadata,
-                    reportItem, contents.Count + 1, pageCount)));
+            foreach (var sheet in BuildItemSheets(subtitle, total, metadata, reports[reportIndex], referenceImage,
+                         contents.Count + 1, pageCount))
+                contents.Add(Encoding.ASCII.GetBytes(sheet));
         }
         for (var page = 0; page < tablePageCount; page++)
             contents.Add(Encoding.ASCII.GetBytes(BuildScheduleSheet(title, subtitle, headers,
@@ -410,51 +410,137 @@ public static class DuctSystemPdf
             embeddedImages);
     }
 
+    /// <summary>What the report holds, for the title sheet's contents list and system summary.</summary>
+    private sealed record ReportContents(IReadOnlyList<string> ViewTitles, IReadOnlyList<DuctSystemPdfReportItem> Items,
+        IReadOnlyList<int> ItemSheetCounts, int SchedulePageCount);
+
     private static string BuildTitleSheet(string title, string subtitle, string total,
-        DuctSystemPdfMetadata? metadata, int page, int pageCount)
+        DuctSystemPdfMetadata? metadata, int page, int pageCount, ReportContents contents)
     {
         var builder = new StringBuilder();
         DrawSheetChrome(builder, metadata, "Project Summary", page, pageCount);
+        const string accent = "0.16 0.43 0.58", ink = "0.06 0.20 0.31", muted = "0.36 0.42 0.47";
+        string Or(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value;
 
+        // Project block: name and number, then who, when and what.
         builder.Append("0.94 0.97 0.99 rg 0.72 0.80 0.87 RG 0.8 w ");
-        RoundedRectangle(builder, 40, 336, 712, 174, 10, fillAndStroke: true);
-        FittedText(builder, 62, 472, 650, 25, 15, string.IsNullOrWhiteSpace(metadata?.ProjectName)
-            ? "Untitled Project" : metadata.ProjectName, bold: true);
-        TextColor(builder, 62, 449, 11, string.IsNullOrWhiteSpace(metadata?.ProjectNumber)
-            ? "Project number not entered" : $"Project No. {metadata.ProjectNumber}", "0.16 0.43 0.58", bold: true);
-        Text(builder, 62, 416, 9, "DESIGNER", bold: true);
-        Text(builder, 62, 400, 12, string.IsNullOrWhiteSpace(metadata?.UserName) ? "Not entered" : metadata.UserName);
-        Text(builder, 312, 416, 9, "PROJECT DATE", bold: true);
-        Text(builder, 312, 400, 12, string.IsNullOrWhiteSpace(metadata?.ProjectDate) ? "Not entered" : metadata.ProjectDate);
-        Text(builder, 562, 416, 9, "REPORT", bold: true);
-        Text(builder, 562, 400, 12, title);
-        foreach (var (line, index) in WrapPdfText(subtitle, 105).Take(2).Select((value, index) => (value, index)))
-            Text(builder, 62, 365 - index * 13, 8.5, line);
+        RoundedRectangle(builder, 32, 410, 728, 118, 9, fillAndStroke: true);
+        builder.Append("0.12 0.66 0.72 rg 32 410 5 118 re f\n");
+        TextColor(builder, 52, 508, 7.2, "PROJECT", accent, bold: true);
+        FittedText(builder, 52, 482, 690, 24, 14, Or(metadata?.ProjectName, "Untitled Project"), bold: true, color: ink);
+        TextColor(builder, 52, 464, 11, string.IsNullOrWhiteSpace(metadata?.ProjectNumber)
+            ? "Project number not entered" : $"Project No. {metadata.ProjectNumber}", accent, bold: true);
+        builder.Append("0.72 0.80 0.87 RG 0.6 w 52 452 m 740 452 l S\n");
+        var info = new[]
+        {
+            ("DESIGNER", Or(metadata?.UserName, "Not entered")),
+            ("PROJECT DATE", Or(metadata?.ProjectDate, "Not entered")),
+            ("PRINTED", Or(metadata?.PrintedDate, DateTime.Now.ToString("MMMM d, yyyy", CultureInfo.CurrentCulture))),
+            ("REPORT", title)
+        };
+        for (var index = 0; index < info.Length; index++)
+        {
+            var x = 52 + index * 172;
+            TextColor(builder, x, 437, 6.6, info[index].Item1, accent, bold: true);
+            FittedText(builder, x, 423, 160, 10, 7, info[index].Item2, color: ink);
+        }
 
-        Text(builder, 40, 309, 14, "FAN SIZING", bold: true);
-        builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.8 w ");
-        RoundedRectangle(builder, 40, 136, 712, 158, 8, fillAndStroke: true);
+        // Fan selection: the numbers a reviewer looks for first.
+        TextColor(builder, 32, 391, 9.5, "FAN SELECTION", ink, bold: true);
+        builder.Append("0.12 0.66 0.72 rg 32 386 46 1.6 re f\n");
         var fanValues = new[]
         {
             ("FAN", metadata?.FanId), ("DESIGN AIRFLOW", metadata?.FanAirflow),
             ("SYSTEM STATIC PRESSURE", metadata?.FanStaticPressure), ("FAN EFFICIENCY", metadata?.FanEfficiency),
-            ("REQUIRED MOTOR POWER", metadata?.FanHorsepower), ("CRITICAL PATH", metadata?.CriticalPath)
+            ("REQUIRED MOTOR POWER", metadata?.FanHorsepower)
         };
+        const double tileGap = 10, tileTop = 376, tileHeight = 62;
+        var tileWidth = (728 - tileGap * (fanValues.Length - 1)) / fanValues.Length;
         for (var index = 0; index < fanValues.Length; index++)
         {
-            var column = index % 3;
-            var row = index / 3;
-            var x = 62 + column * 230;
-            var y = 258 - row * 70;
-            TextColor(builder, x, y, 7.5, fanValues[index].Item1, "0.16 0.43 0.58", bold: true);
-            foreach (var (line, lineIndex) in WrapPdfText(string.IsNullOrWhiteSpace(fanValues[index].Item2)
-                         ? "Not available" : fanValues[index].Item2!, 34).Take(3).Select((value, lineIndex) => (value, lineIndex)))
-                Text(builder, x, y - 19 - lineIndex * 11, 10.5, line, bold: lineIndex == 0);
+            var x = 32 + index * (tileWidth + tileGap);
+            builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
+            RoundedRectangle(builder, x, tileTop - tileHeight, tileWidth, tileHeight, 6, fillAndStroke: true);
+            builder.Append(FormattableString.Invariant($"0.12 0.30 0.47 rg {x + 6:0.##} {tileTop - 3:0.##} {tileWidth - 12:0.##} 2 re f\n"));
+            TextColor(builder, x + 10, tileTop - 18, 6.4, fanValues[index].Item1, accent, bold: true);
+            FittedText(builder, x + 10, tileTop - 42, tileWidth - 20, 15, 8, Or(fanValues[index].Item2, "Not available"),
+                bold: true, color: ink);
         }
-        TextColor(builder, 40, 112, 8.3,
-            "System static pressure shown above is the fan selection pressure. The critical-path total excludes fan positive static.",
-            "0.36 0.42 0.47");
-        Text(builder, 40, 91, 8.2, total, bold: true);
+        TextColor(builder, 32, 297, 6.6, "CRITICAL PATH", accent, bold: true);
+        foreach (var (line, index) in WrapPdfText(Or(metadata?.CriticalPath, "Not available"), 150).Take(2)
+                     .Select((value, index) => (value, index)))
+            Text(builder, 112, 297 - index * 10, 8.2, line, bold: index == 0);
+        TextColor(builder, 32, 276, 8.2, Fit(total, 150), ink, bold: true);
+        TextColor(builder, 32, 264, 7.2,
+            "System static pressure is the fan selection pressure. The critical-path total excludes fan positive static.", muted);
+
+        // Report contents (left) and system summary (right).
+        const double panelTop = 248, panelBottom = 62;
+        builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
+        RoundedRectangle(builder, 32, panelBottom, 452, panelTop - panelBottom, 7, fillAndStroke: true);
+        RoundedRectangle(builder, 496, panelBottom, 264, panelTop - panelBottom, 7, fillAndStroke: true);
+        TextColor(builder, 46, panelTop - 18, 8.4, "REPORT CONTENTS", ink, bold: true);
+        TextColor(builder, 418, panelTop - 18, 6.4, "PAGE", accent, bold: true);
+        var entries = new List<(string Name, string Detail, int First, int Last)> { ("Project summary", "Project, fan selection and contents", 1, 1) };
+        var next = 2;
+        if (contents.ViewTitles.Count > 0)
+        {
+            entries.Add(("System views", string.Join(", ", contents.ViewTitles.Select(view => view.Replace("Layout Designer - ", string.Empty, StringComparison.Ordinal))),
+                next, next + contents.ViewTitles.Count - 1));
+            next += contents.ViewTitles.Count;
+        }
+        static bool IsDuct(DuctSystemPdfReportItem item) => item.ItemType.Contains("DUCT", StringComparison.OrdinalIgnoreCase);
+        static bool IsFitting(DuctSystemPdfReportItem item) => item.ItemType.Equals("FITTING", StringComparison.OrdinalIgnoreCase);
+        static string Count(int count, string singular, string plural) => $"{count} {(count == 1 ? singular : plural)}";
+        if (contents.Items.Count > 0)
+        {
+            var componentCount = contents.Items.Count(item => !IsDuct(item) && !IsFitting(item));
+            entries.Add(("Item sheets, in system order",
+                $"{Count(componentCount, "component", "components")}, {Count(contents.Items.Count(IsDuct), "duct segment", "duct segments")}, "
+                + $"{Count(contents.Items.Count(IsFitting), "fitting", "fittings")}: inputs, outputs and calculations",
+                next, next + contents.ItemSheetCounts.Sum() - 1));
+        }
+        next += contents.ItemSheetCounts.Sum();
+        entries.Add(("Duct system schedule", "Every item with its size, airflow and pressures", next, next + contents.SchedulePageCount - 1));
+        var y = panelTop - 38;
+        foreach (var (entry, index) in entries.Select((value, index) => (value, index)))
+        {
+            if (y < panelBottom + 14)
+                break;
+            if (index % 2 == 1)
+            {
+                builder.Append("0.965 0.978 0.988 rg ");
+                builder.Append(FormattableString.Invariant($"40 {y - 8:0.##} 436 26 re f\n"));
+            }
+            Text(builder, 50, y + 6, 8.6, entry.Name, bold: true);
+            TextColor(builder, 50, y - 4, 6.6, Fit(entry.Detail, 92), muted);
+            Text(builder, 418, y + 1, 8.6, entry.First == entry.Last
+                ? entry.First.ToString(CultureInfo.InvariantCulture)
+                : $"{entry.First}-{entry.Last}", bold: true);
+            y -= 28;
+        }
+
+        TextColor(builder, 510, panelTop - 18, 8.4, "SYSTEM SUMMARY", ink, bold: true);
+        var counts = new[]
+        {
+            ("Components", contents.Items.Count(item => !IsDuct(item) && !IsFitting(item))),
+            ("Duct segments", contents.Items.Count(IsDuct)),
+            ("Fittings", contents.Items.Count(IsFitting)),
+            ("Report pages", pageCount)
+        };
+        for (var index = 0; index < counts.Length; index++)
+        {
+            var column = index % 2;
+            var row = index / 2;
+            var x = 510 + column * 124;
+            var top = panelTop - 46 - row * 58;
+            builder.Append("0.94 0.97 0.99 rg ");
+            RoundedRectangle(builder, x, top - 40, 114, 48, 5, fillAndStroke: false);
+            TextColor(builder, x + 8, top - 4, 6.4, counts[index].Item1.ToUpperInvariant(), accent, bold: true);
+            TextColor(builder, x + 8, top - 28, 17, counts[index].Item2.ToString(CultureInfo.InvariantCulture), ink, bold: true);
+        }
+        foreach (var (line, index) in WrapPdfText(subtitle, 62).Take(3).Select((value, index) => (value, index)))
+            TextColor(builder, 510, panelBottom + 34 - index * 9, 6.6, line, muted);
         return builder.ToString();
     }
 
@@ -477,52 +563,72 @@ public static class DuctSystemPdf
         var imageHeight = image.Height * scale;
         builder.Append(FormattableString.Invariant(
             $"q {imageWidth:0.##} 0 0 {imageHeight:0.##} {boxX + (boxWidth - imageWidth) / 2:0.##} {imageAreaY + (imageAreaHeight - imageHeight) / 2:0.##} cm /{image.Name} Do Q\n"));
-        DrawSchematicScaleLegend(builder, schematic, boxX + 16, boxY + 7, boxWidth - 32, scale);
+        DrawSchematicScaleLegend(builder, schematic, boxX, boxY, boxWidth, legendHeight, scale);
         return builder.ToString();
     }
 
+    /// <summary>
+    /// The scale strip along the foot of a view sheet, laid out like a drawing title strip: graphic scale bar,
+    /// grid spacing, and the approximate sheet scale, each in its own labelled cell.
+    /// </summary>
     private static void DrawSchematicScaleLegend(StringBuilder builder, DuctSystemPdfSchematic schematic,
-        double left, double bottom, double width, double imageScale)
+        double left, double bottom, double width, double height, double imageScale)
     {
+        const string ink = "0.10 0.29 0.43", accent = "0.16 0.43 0.58", muted = "0.36 0.42 0.47";
         var feetPerGridCell = Math.Max(0.01, schematic.FeetPerGridCell);
         var pointsPerFoot = Math.Max(0.001, imageScale * Math.Max(0.001, schematic.PixelsPerFoot));
-        var maximumBarWidth = Math.Min(210, width * 0.42);
+        var inchesPerFoot = pointsPerFoot / 72.0;
+
+        builder.Append("0.955 0.973 0.985 rg ");
+        builder.Append(FormattableString.Invariant($"{left:0.##} {bottom:0.##} {width:0.##} {height:0.##} re f\n"));
+        builder.Append("0.66 0.76 0.84 RG 0.7 w ");
+        builder.Append(FormattableString.Invariant($"{left:0.##} {bottom + height:0.##} m {left + width:0.##} {bottom + height:0.##} l S\n"));
+        var cellWidths = new[] { width * .44, width * .18, width * .22, width * .16 };
+        var cellLefts = new double[cellWidths.Length];
+        var x = left;
+        for (var index = 0; index < cellWidths.Length; index++)
+        {
+            cellLefts[index] = x;
+            if (index > 0)
+                builder.Append(FormattableString.Invariant($"0.72 0.80 0.87 RG 0.6 w {x:0.##} {bottom + 6:0.##} m {x:0.##} {bottom + height - 6:0.##} l S\n"));
+            x += cellWidths[index];
+        }
+        var labelY = bottom + height - 13;
+
+        // Graphic scale: a four-part bar with 0, half and full lengths in feet.
+        var barLeft = cellLefts[0] + 14;
+        var maximumBarWidth = cellWidths[0] - 40;
         var barFeet = NiceScaleLength(maximumBarWidth / pointsPerFoot);
         var barWidth = Math.Min(maximumBarWidth, barFeet * pointsPerFoot);
         const int segments = 4;
-        const double barHeight = 7;
-        var barBottom = bottom + 8;
+        const double barHeight = 6;
+        var barBottom = bottom + 14;
         var segmentWidth = barWidth / segments;
-
-        TextColor(builder, left, bottom + 31, 6.7, "GRAPHIC SCALE (FEET)", "0.10 0.29 0.43", bold: true);
+        TextColor(builder, barLeft, labelY, 6.4, "GRAPHIC SCALE (FEET)", accent, bold: true);
         for (var index = 0; index < segments; index++)
         {
             builder.Append(index % 2 == 0 ? "0.10 0.29 0.43 rg " : "1 1 1 rg ");
             builder.Append("0.10 0.29 0.43 RG 0.55 w ");
             builder.Append(FormattableString.Invariant(
-                $"{left + index * segmentWidth:0.##} {barBottom:0.##} {segmentWidth:0.##} {barHeight:0.##} re B\n"));
+                $"{barLeft + index * segmentWidth:0.##} {barBottom:0.##} {segmentWidth:0.##} {barHeight:0.##} re B\n"));
         }
-        for (var index = 0; index <= segments; index++)
-        {
-            var x = left + index * segmentWidth;
-            builder.Append("0.10 0.29 0.43 RG 0.65 w ");
-            builder.Append(FormattableString.Invariant(
-                $"{x:0.##} {barBottom - 2:0.##} m {x:0.##} {barBottom + barHeight + 2:0.##} l S\n"));
-        }
-        Text(builder, left - 1, bottom + 1, 5.8, "0");
-        CenteredTextColor(builder, left + barWidth / 2, bottom + 1, 5.8,
-            (barFeet / 2).ToString("0.###", CultureInfo.InvariantCulture), 14, "0.10 0.29 0.43");
-        CenteredTextColor(builder, left + barWidth, bottom + 1, 5.8,
-            barFeet.ToString("0.###", CultureInfo.InvariantCulture), 14, "0.10 0.29 0.43");
+        TextColor(builder, barLeft - 1.5, bottom + 5, 5.8, "0", ink);
+        CenteredTextColor(builder, barLeft + barWidth / 2, bottom + 5, 5.8,
+            (barFeet / 2).ToString("0.###", CultureInfo.InvariantCulture), 14, ink);
+        CenteredTextColor(builder, barLeft + barWidth, bottom + 5, 5.8,
+            barFeet.ToString("0.###", CultureInfo.InvariantCulture) + " ft", 18, ink);
 
-        var detailX = left + maximumBarWidth + 32;
-        TextColor(builder, detailX, bottom + 28, 6.4,
-            $"GRID SPACING: {feetPerGridCell.ToString("0.###", CultureInfo.InvariantCulture)} ft",
-            "0.10 0.29 0.43", bold: true);
-        TextColor(builder, detailX, bottom + 15, 6.1,
-            $"SHEET SCALE: ~{ArchitecturalScale(pointsPerFoot / 72.0)} in = 1 ft " +
-            $"({(pointsPerFoot / 72.0).ToString("0.###", CultureInfo.InvariantCulture)} in/ft)",
-            "0.36 0.42 0.47");
+        // Grid spacing and sheet scale.
+        TextColor(builder, cellLefts[1] + 12, labelY, 6.4, "GRID SPACING:", accent, bold: true);
+        TextColor(builder, cellLefts[1] + 12, bottom + 12, 11,
+            $"{feetPerGridCell.ToString("0.###", CultureInfo.InvariantCulture)} ft / cell", ink, bold: true);
+        TextColor(builder, cellLefts[2] + 12, labelY, 6.4, "SHEET SCALE:", accent, bold: true);
+        TextColor(builder, cellLefts[2] + 12, bottom + 12, 11, $"{ArchitecturalScale(inchesPerFoot)}\" = 1'-0\"", ink, bold: true);
+        TextColor(builder, cellLefts[2] + 12, bottom + 3.5, 5.6,
+            $"approx. {inchesPerFoot.ToString("0.###", CultureInfo.InvariantCulture)} in/ft on a letter sheet", muted);
+        TextColor(builder, cellLefts[3] + 12, labelY, 6.4, "VIEW", accent, bold: true);
+        FittedText(builder, cellLefts[3] + 12, bottom + 12, cellWidths[3] - 20, 8.5, 6,
+            schematic.Title.Replace("Layout Designer - ", string.Empty, StringComparison.Ordinal), bold: true, color: ink);
     }
 
     private static double NiceScaleLength(double maximumFeet)
@@ -629,81 +735,205 @@ public static class DuctSystemPdf
         }
     }
 
-    private static string BuildItemSheet(string subtitle, string total, DuctSystemPdfMetadata? metadata,
-        DuctSystemPdfReportItem item, EmbeddedImage? referenceImage, int page, int pageCount,
-        bool includeCalculations)
+    /// <summary>A line of the item sheet's left column: a heading, a labelled value, or a note.</summary>
+    private sealed record SideRow(SideRowKind Kind, string Label, string Value);
+
+    private enum SideRowKind { Heading, Field, Check, Note }
+
+    private const double ItemContentTop = 458, ItemContentBottom = 72;
+    private const double SideLeft = 32, SideWidth = 216, CalculationLeft = 262, CalculationWidth = 498;
+
+    /// <summary>
+    /// The sheet(s) of one component, duct or fitting: inputs, outputs, quick check and assumptions in the left
+    /// column, and the complete engineering worksheet (governing equations, substitutions and solved results) in
+    /// two columns on the right. Everything normally fits one sheet; anything that does not continues on a
+    /// following sheet, so no value or equation is ever left out.
+    /// </summary>
+    private static List<string> BuildItemSheets(string subtitle, string total, DuctSystemPdfMetadata? metadata,
+        DuctSystemPdfReportItem item, EmbeddedImage? referenceImage, int firstPage, int pageCount)
     {
-        var builder = new StringBuilder();
-        DrawSheetChrome(builder, metadata, $"{item.Id} - {item.ItemType}", page, pageCount);
-        builder.Append("0.12 0.30 0.47 rg ");
-        RoundedRectangle(builder, 32, 486, 728, 36, 6, fillAndStroke: false);
-        Text(builder, 46, 499, 12, item.Id, bold: true, white: true);
-        var descriptionLines = WrapPdfText(item.Description, 88).Take(2).ToArray();
-        for (var index = 0; index < descriptionLines.Length; index++)
-            Text(builder, 126, 503 - index * 10, 8.3, descriptionLines[index], bold: true, white: true);
-        Text(builder, 32, 470, 7.2, subtitle);
+        var sections = item.Calculations ?? Array.Empty<DuctSystemPdfCalculationSection>();
+        var assumptions = sections.FirstOrDefault(section => section.Heading.Equals("ASSUMPTIONS", StringComparison.OrdinalIgnoreCase));
+        // The worksheet ends with its assumptions; the input values are already listed in the left column.
+        var blocks = CalculationBlocks(sections
+            .Where(section => !section.Heading.Equals("ASSUMPTIONS", StringComparison.OrdinalIgnoreCase)
+                              && !section.Heading.Equals("INPUT VALUES", StringComparison.OrdinalIgnoreCase))
+            .Concat(assumptions is null ? Array.Empty<DuctSystemPdfCalculationSection>() : new[] { assumptions }));
 
-        const double leftX = 32, totalWidth = 728, summaryGap = 12, contentBottom = 68;
-        var summaryTop = 456d;
-        if (includeCalculations)
-        {
-            DrawCalculationReviewHeading(builder, leftX, summaryTop);
-            summaryTop -= 17;
-        }
-        var summaryWidth = (totalWidth - summaryGap) / 2;
-        var inputRows = CompactFieldRowLineCounts(item.Inputs, summaryWidth);
-        var outputRows = CompactFieldRowLineCounts(item.Outputs, summaryWidth);
-        var fieldLineHeight = Math.Min(6.6, Math.Max(5.5,
-            6.6 - Math.Max(inputRows.Sum(), outputRows.Sum()) * .045));
-        var inputBottom = DrawCompactFieldSection(builder, "INPUTS", item.Inputs, leftX, summaryTop,
-            summaryWidth, fieldLineHeight);
-        var outputBottom = DrawCompactFieldSection(builder, "CALCULATED OUTPUTS", item.Outputs,
-            leftX + summaryWidth + summaryGap, summaryTop, summaryWidth, fieldLineHeight);
-        var calculationTop = Math.Min(inputBottom, outputBottom) - 8;
+        var side = new List<SideRow> { new(SideRowKind.Heading, "INPUTS", string.Empty) };
+        side.AddRange(item.Inputs.Select(field => new SideRow(SideRowKind.Field, field.Label, field.Value)));
+        side.Add(new SideRow(SideRowKind.Heading, "CALCULATED OUTPUTS", string.Empty));
+        side.AddRange(item.Outputs.Select(field => new SideRow(SideRowKind.Field, field.Label, field.Value)));
         if (item.QuickCheck is { Count: > 0 })
-            calculationTop = DrawQuickCheckOverview(builder, item.QuickCheck, leftX, calculationTop, totalWidth);
+        {
+            side.Add(new SideRow(SideRowKind.Heading, "QA/QC QUICK CHECK", string.Empty));
+            side.AddRange(item.QuickCheck.Select(field => new SideRow(SideRowKind.Check, field.Label, field.Value)));
+        }
 
-        if (referenceImage is not null)
+        // Type sizes: as large as fits on one sheet, within readable limits.
+        var calculationTop = ItemContentTop - 16;
+        var columnWidth = (CalculationWidth - 12) / 2;
+        var capacity = 2 * (calculationTop - ItemContentBottom);
+        var calculationFont = 5.9;
+        var neededHeight = CalculationBlocksHeight(blocks, columnWidth, calculationFont);
+        if (neededHeight > capacity * .94)
+            calculationFont = Math.Max(5.0, calculationFont * capacity * .94 / neededHeight);
+        // Largest left-column line height (6.4 pt down to 5.0 pt) at which every row fits the sheet.
+        var sideLine = 6.4;
+        while (sideLine > 5.0 && SideRowsHeight(side, sideLine) > ItemContentTop - ItemContentBottom - 4)
+            sideLine = Math.Round(sideLine - 0.1, 2);
+
+        var sheets = new List<string>();
+        var nextBlock = 0;
+        var nextSide = 0;
+        do
         {
-            const double imageWidthLimit = 116, imageHeightLimit = 26;
-            var imageScale = Math.Min(imageWidthLimit / referenceImage.Width, imageHeightLimit / referenceImage.Height);
-            var imageWidth = referenceImage.Width * imageScale;
-            var imageHeight = referenceImage.Height * imageScale;
-            var imageX = 760 - imageWidth - 5;
-            var imageY = 491 + (26 - imageHeight) / 2;
-            builder.Append("1 1 1 rg 0.65 0.76 0.84 RG 0.45 w ");
-            builder.Append(FormattableString.Invariant($"{imageX - 2:0.##} {imageY - 2:0.##} {imageWidth + 4:0.##} {imageHeight + 4:0.##} re B\n"));
+            var continued = sheets.Count > 0;
+            var builder = new StringBuilder();
+            DrawSheetChrome(builder, metadata, continued ? $"{item.Id} - {item.ItemType} (continued)" : $"{item.Id} - {item.ItemType}",
+                firstPage + sheets.Count, pageCount);
+            builder.Append("0.12 0.30 0.47 rg ");
+            RoundedRectangle(builder, 32, 486, 728, 36, 6, fillAndStroke: false);
+            Text(builder, 46, 499, 12, item.Id, bold: true, white: true);
+            var descriptionLines = WrapPdfText(item.Description, 88).Take(2).ToArray();
+            for (var index = 0; index < descriptionLines.Length; index++)
+                Text(builder, 126, 503 - index * 10, 8.3, descriptionLines[index], bold: true, white: true);
+            if (referenceImage is not null && !continued)
+                DrawBandReferenceImage(builder, referenceImage);
+            Text(builder, 32, 470, 7.2, continued ? $"{subtitle} - continued from the previous sheet." : subtitle);
+
+            // Worksheet first (right), then the left column.
+            DrawCalculationReviewHeading(builder, CalculationLeft, ItemContentTop - 4);
+            if (nextBlock < blocks.Count)
+                nextBlock = DrawCalculationBlocks(builder, blocks, nextBlock, CalculationLeft, calculationTop,
+                    CalculationWidth, ItemContentBottom, 2, calculationFont);
+            else
+                TextColor(builder, CalculationLeft, calculationTop - 10, 6.4,
+                    blocks.Count == 0 ? "No calculation worksheet applies to this item; its values are entered or taken from the system."
+                                      : "Worksheet complete on the previous sheet.", "0.36 0.42 0.47");
+            builder.Append("0.80 0.86 0.90 RG 0.5 w ");
             builder.Append(FormattableString.Invariant(
-                $"q {imageWidth:0.##} 0 0 {imageHeight:0.##} {imageX:0.##} {imageY:0.##} cm /{referenceImage.Name} Do Q\n"));
-        }
-        if (includeCalculations)
-        {
-            DrawCalculationSections(builder, item.Calculations ?? Array.Empty<DuctSystemPdfCalculationSection>(),
-                leftX, calculationTop, totalWidth, contentBottom);
-        }
-        else
-        {
-            builder.Append("0.965 0.98 0.99 rg 0.72 0.80 0.87 RG 0.7 w ");
-            RoundedRectangle(builder, leftX, calculationTop - 132, totalWidth, 128, 7, fillAndStroke: true);
-            TextColor(builder, leftX + 16, calculationTop - 24, 10.5, "QA/QC CALCULATION WORKSHEET",
-                "0.10 0.29 0.43", bold: true);
-            Text(builder, leftX + 16, calculationTop - 43, 8.2,
-                "The complete governing equations, input substitutions, solved values, and review notes continue on the next sheet.");
-            var assumptions = (item.Calculations ?? Array.Empty<DuctSystemPdfCalculationSection>())
-                .FirstOrDefault(section => section.Heading.Equals("ASSUMPTIONS", StringComparison.OrdinalIgnoreCase));
-            if (assumptions is not null)
+                $"{CalculationLeft - 7:0.##} {ItemContentBottom:0.##} m {CalculationLeft - 7:0.##} {ItemContentTop + 2:0.##} l S\n"));
+            nextSide = DrawSideRows(builder, side, nextSide, sideLine, out var sideEnd);
+            // The published fitting figure, as large as the space left under the left column allows.
+            if (referenceImage is not null && !continued && nextSide >= side.Count && sideEnd - ItemContentBottom >= 70)
             {
-                TextColor(builder, leftX + 16, calculationTop - 68, 7.2, "CALCULATION ASSUMPTIONS",
-                    "0.16 0.43 0.58", bold: true);
-                var assumptionText = string.Join(" ", assumptions.Lines.Select(line =>
-                    string.Join(" ", new[] { line.Formula, line.HighlightValue }.Where(value => !string.IsNullOrWhiteSpace(value)))));
-                foreach (var (line, index) in WrapPdfText(assumptionText, 150).Take(4)
-                             .Select((value, index) => (value, index)))
-                    Text(builder, leftX + 16, calculationTop - 86 - index * 10, 7.2, line);
+                var room = sideEnd - ItemContentBottom - 18;
+                var imageScale = Math.Min((SideWidth - 4) / referenceImage.Width, room / referenceImage.Height);
+                var imageWidth = referenceImage.Width * imageScale;
+                var imageHeight = referenceImage.Height * imageScale;
+                TextColor(builder, SideLeft, sideEnd - 10, 7.2, "PUBLISHED FITTING REFERENCE", "0.16 0.43 0.58", bold: true);
+                var imageX = SideLeft + (SideWidth - imageWidth) / 2;
+                var imageY = sideEnd - 16 - imageHeight;
+                builder.Append("1 1 1 rg 0.65 0.76 0.84 RG 0.45 w ");
+                builder.Append(FormattableString.Invariant($"{imageX - 2:0.##} {imageY - 2:0.##} {imageWidth + 4:0.##} {imageHeight + 4:0.##} re B\n"));
+                builder.Append(FormattableString.Invariant(
+                    $"q {imageWidth:0.##} 0 0 {imageHeight:0.##} {imageX:0.##} {imageY:0.##} cm /{referenceImage.Name} Do Q\n"));
             }
+            TextColor(builder, 32, 64, 6.2, Fit(total, 186), "0.36 0.42 0.47");
+            sheets.Add(builder.ToString());
         }
-        TextColor(builder, 32, 64, 6.2, Fit(total, 186), "0.36 0.42 0.47");
-        return builder.ToString();
+        while ((nextBlock < blocks.Count || nextSide < side.Count) && sheets.Count < 20);
+        return sheets;
+    }
+
+    private static void DrawBandReferenceImage(StringBuilder builder, EmbeddedImage referenceImage)
+    {
+        const double imageWidthLimit = 116, imageHeightLimit = 26;
+        var imageScale = Math.Min(imageWidthLimit / referenceImage.Width, imageHeightLimit / referenceImage.Height);
+        var imageWidth = referenceImage.Width * imageScale;
+        var imageHeight = referenceImage.Height * imageScale;
+        var imageX = 760 - imageWidth - 5;
+        var imageY = 491 + (26 - imageHeight) / 2;
+        builder.Append("1 1 1 rg 0.65 0.76 0.84 RG 0.45 w ");
+        builder.Append(FormattableString.Invariant($"{imageX - 2:0.##} {imageY - 2:0.##} {imageWidth + 4:0.##} {imageHeight + 4:0.##} re B\n"));
+        builder.Append(FormattableString.Invariant(
+            $"q {imageWidth:0.##} 0 0 {imageHeight:0.##} {imageX:0.##} {imageY:0.##} cm /{referenceImage.Name} Do Q\n"));
+    }
+
+    private const double SideLabelShare = .45;
+
+    private static (string[] Label, string[] Value) SideRowLines(SideRow row)
+    {
+        if (row.Kind == SideRowKind.Note)
+            return (Array.Empty<string>(), WrapPdfText(row.Value, 62).ToArray());
+        var labelWidth = SideWidth * SideLabelShare - 8;
+        var valueWidth = SideWidth * (1 - SideLabelShare) - 6;
+        return (WrapPdfText(row.Label.ToUpperInvariant(), Math.Max(8, (int)(labelWidth / 2.9))).Take(2).ToArray(),
+            WrapPdfText(row.Value, Math.Max(8, (int)(valueWidth / (row.Kind == SideRowKind.Check ? 3.35 : 3.05)))).ToArray());
+    }
+
+    private static double SideRowHeight(SideRow row, double lineHeight)
+    {
+        if (row.Kind == SideRowKind.Heading)
+            return 14;
+        var (label, value) = SideRowLines(row);
+        return 3 + Math.Max(1, Math.Max(label.Length, value.Length)) * lineHeight;
+    }
+
+    private static double SideRowsHeight(IEnumerable<SideRow> rows, double lineHeight) =>
+        rows.Sum(row => SideRowHeight(row, lineHeight));
+
+    /// <summary>Draws the left column from <paramref name="start"/>; returns the first row that did not fit.</summary>
+    private static int DrawSideRows(StringBuilder builder, IReadOnlyList<SideRow> rows, int start, double lineHeight,
+        out double endY)
+    {
+        var y = ItemContentTop;
+        var index = start;
+        var labelX = SideLeft + 4;
+        var valueX = SideLeft + SideWidth * SideLabelShare;
+        var shade = false;
+        while (index < rows.Count)
+        {
+            var row = rows[index];
+            var height = SideRowHeight(row, lineHeight);
+            var keepWithNext = row.Kind == SideRowKind.Heading && index + 1 < rows.Count
+                ? SideRowHeight(rows[index + 1], lineHeight) : 0;
+            if (y - height - keepWithNext < ItemContentBottom && y < ItemContentTop)
+                break;
+            switch (row.Kind)
+            {
+                case SideRowKind.Heading:
+                    TextColor(builder, SideLeft, y - 10, 7.2, row.Label, "0.16 0.43 0.58", bold: true);
+                    builder.Append("0.16 0.43 0.58 RG 0.6 w ");
+                    builder.Append(FormattableString.Invariant($"{SideLeft:0.##} {y - 13:0.##} m {SideLeft + SideWidth:0.##} {y - 13:0.##} l S\n"));
+                    shade = false;
+                    break;
+                case SideRowKind.Note:
+                {
+                    var (_, value) = SideRowLines(row);
+                    for (var line = 0; line < value.Length; line++)
+                        Text(builder, SideLeft + 2, y - lineHeight - line * lineHeight + 1, Math.Min(5.8, lineHeight - .5), value[line]);
+                    break;
+                }
+                default:
+                {
+                    var (label, value) = SideRowLines(row);
+                    if (shade || row.Kind == SideRowKind.Check)
+                    {
+                        builder.Append(row.Kind == SideRowKind.Check ? "0.93 0.965 0.985 rg " : "0.965 0.978 0.988 rg ");
+                        builder.Append(FormattableString.Invariant($"{SideLeft:0.##} {y - height:0.##} {SideWidth:0.##} {height:0.##} re f\n"));
+                    }
+                    shade = !shade;
+                    var labelSize = Math.Clamp(lineHeight - 1.4, 4.6, 5.1);
+                    var valueSize = Math.Clamp(lineHeight - .8, 5.0, 5.7);
+                    for (var line = 0; line < label.Length; line++)
+                        TextColor(builder, labelX, y - lineHeight - line * lineHeight + 1.2, labelSize, label[line], "0.29 0.42 0.51", bold: true);
+                    for (var line = 0; line < value.Length; line++)
+                    {
+                        if (row.Kind == SideRowKind.Check)
+                            TextColor(builder, valueX, y - lineHeight - line * lineHeight + 1.2, valueSize + .3, value[line], "0.06 0.30 0.45", bold: true);
+                        else
+                            Text(builder, valueX, y - lineHeight - line * lineHeight + 1.2, valueSize, value[line]);
+                    }
+                    break;
+                }
+            }
+            y -= height;
+            index++;
+        }
+        endY = y;
+        return index;
     }
 
     private static double DrawQuickCheckOverview(StringBuilder builder,
@@ -747,37 +977,6 @@ public static class DuctSystemPdf
         }
 
         return boxBottom - 9;
-    }
-
-    private static bool RequiresDedicatedCalculationSheet(DuctSystemPdfReportItem item)
-    {
-        var sections = item.Calculations ?? Array.Empty<DuctSystemPdfCalculationSection>();
-        var lineCount = sections.Sum(section => section.Lines.Count);
-        var equationCount = sections.Sum(section => section.Lines.Count(line => line.IsEquation));
-        return lineCount >= 15 || equationCount >= 7;
-    }
-
-    private static string BuildCalculationReviewSheet(string subtitle, string total,
-        DuctSystemPdfMetadata? metadata, DuctSystemPdfReportItem item, int page, int pageCount)
-    {
-        var builder = new StringBuilder();
-        DrawSheetChrome(builder, metadata, $"{item.Id} - Calculation Review", page, pageCount);
-        builder.Append("0.12 0.30 0.47 rg ");
-        RoundedRectangle(builder, 32, 486, 728, 36, 6, fillAndStroke: false);
-        Text(builder, 46, 499, 12, item.Id, bold: true, white: true);
-        FittedText(builder, 126, 499, 614, 9.2, 6.6,
-            $"{item.Description} - ENGINEERING QA/QC WORKSHEET", bold: true, white: true);
-        FittedText(builder, 32, 470, 720, 7.2, 6.4,
-            $"{subtitle} - inputs and outputs are listed on the preceding component summary sheet.");
-        DrawCalculationReviewHeading(builder, 32, 451);
-        var detailSections = (item.Calculations ?? Array.Empty<DuctSystemPdfCalculationSection>())
-            .Where(section => !section.Heading.Equals("ASSUMPTIONS", StringComparison.OrdinalIgnoreCase)
-                              && !section.Heading.Equals("INPUT VALUES", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        DrawCalculationSections(builder, detailSections,
-            32, 437, 728, 68);
-        TextColor(builder, 32, 64, 6.2, Fit(total, 186), "0.36 0.42 0.47");
-        return builder.ToString();
     }
 
     private static void DrawCalculationReviewHeading(StringBuilder builder, double left, double top)
@@ -836,93 +1035,155 @@ public static class DuctSystemPdf
             Text(builder, x, y - lineHeight - index * lineHeight, valueFont, valueLines[index]);
     }
 
-    private static void DrawCalculationSections(StringBuilder builder,
-        IReadOnlyList<DuctSystemPdfCalculationSection> sections, double left, double top, double width, double bottom)
+    /// <summary>
+    /// One piece of a calculation worksheet: a section heading, one line, or two governing equations side by
+    /// side (equations listed without substitution or result, such as the required-equation summary).
+    /// </summary>
+    private sealed record CalculationBlock(bool Heading, string Text, DuctSystemPdfCalculationLine? Line,
+        DuctSystemPdfCalculationLine? Partner = null);
+
+    private static List<CalculationBlock> CalculationBlocks(IEnumerable<DuctSystemPdfCalculationSection> sections)
     {
-        const double columnGap = 14;
-        var columnWidth = (width - columnGap) / 2;
-        var availableHeight = Math.Max(80, top - bottom);
-        var blocks = new List<(bool Heading, DuctSystemPdfCalculationLine? Line, string Text)>();
+        static bool EquationOnly(DuctSystemPdfCalculationLine line) => line.IsEquation
+            && string.IsNullOrWhiteSpace(line.InputSubstitution) && string.IsNullOrWhiteSpace(line.HighlightValue);
+
+        var blocks = new List<CalculationBlock>();
         foreach (var section in sections)
         {
-            blocks.Add((true, null, PdfText(section.Heading)));
-            foreach (var line in section.Lines)
-                blocks.Add((false, line, string.Empty));
+            blocks.Add(new CalculationBlock(true, PdfText(section.Heading), null));
+            for (var index = 0; index < section.Lines.Count; index++)
+            {
+                var line = section.Lines[index];
+                if (EquationOnly(line) && index + 1 < section.Lines.Count && EquationOnly(section.Lines[index + 1]))
+                {
+                    blocks.Add(new CalculationBlock(false, string.Empty, line, section.Lines[index + 1]));
+                    index++;
+                    continue;
+                }
+                blocks.Add(new CalculationBlock(false, string.Empty, line));
+            }
         }
+        return blocks;
+    }
 
-        var fontSize = 5.7;
-        var estimatedHeight = blocks.Sum(block => CalculationBlockHeight(block.Heading, block.Line,
-            block.Text, columnWidth, fontSize));
-        if (estimatedHeight > availableHeight * 2)
-            fontSize = Math.Max(4.65, fontSize * availableHeight * 2 / estimatedHeight);
+    private const double CalculationHeadingGap = 3;
 
+    private static double CalculationBlockHeight(CalculationBlock block, double columnWidth, double fontSize)
+    {
+        if (block.Heading)
+            return Math.Max(11.25, fontSize * 1.82);
+        var height = CalculationBlockHeight(false, block.Line, string.Empty, columnWidth, fontSize);
+        return block.Partner is null
+            ? height
+            : Math.Max(height, CalculationBlockHeight(false, block.Partner, string.Empty, columnWidth, fontSize));
+    }
+
+    /// <summary>Total height of the blocks, as laid out in one column (used to choose the type size).</summary>
+    private static double CalculationBlocksHeight(IReadOnlyList<CalculationBlock> blocks, double columnWidth, double fontSize) =>
+        blocks.Sum(block => CalculationBlockHeight(block, columnWidth, fontSize) + (block.Heading ? CalculationHeadingGap : 0));
+
+    /// <summary>
+    /// Draws worksheet blocks from <paramref name="start"/> down the given columns and returns the index of the
+    /// first block that did not fit (blocks.Count when all were drawn). Nothing is ever cut off: the caller
+    /// continues the remaining blocks on another sheet. A heading is never left alone at the foot of a column.
+    /// </summary>
+    private static int DrawCalculationBlocks(StringBuilder builder, IReadOnlyList<CalculationBlock> blocks, int start,
+        double left, double top, double width, double bottom, int columns, double fontSize)
+    {
+        const double columnGap = 12;
+        var columnWidth = (width - columnGap * (columns - 1)) / columns;
         var column = 0;
         var y = top;
-        foreach (var block in blocks)
+        var index = start;
+        while (index < blocks.Count)
         {
-            var blockHeight = CalculationBlockHeight(block.Heading, block.Line, block.Text, columnWidth, fontSize);
-            if (y - blockHeight < bottom && column == 0)
+            var block = blocks[index];
+            var gap = block.Heading && y < top ? CalculationHeadingGap : 0;
+            var blockHeight = CalculationBlockHeight(block, columnWidth, fontSize);
+            var needed = gap + blockHeight;
+            if (block.Heading && index + 1 < blocks.Count)
+                needed += CalculationBlockHeight(blocks[index + 1], columnWidth, fontSize);
+            if (y - needed < bottom)
             {
-                column = 1;
-                y = top;
+                if (y == top)
+                {
+                    // Taller than a whole column: draw it anyway rather than lose it.
+                }
+                else
+                {
+                    column++;
+                    y = top;
+                    if (column >= columns)
+                        return index;
+                    continue;
+                }
             }
-            if (y - blockHeight < bottom)
-                break;
-
+            y -= gap;
             var x = left + column * (columnWidth + columnGap);
             if (block.Heading)
             {
                 builder.Append("0.91 0.95 0.98 rg ");
-                RoundedRectangle(builder, x, y - blockHeight + 1, columnWidth, blockHeight - 1, 2,
-                    fillAndStroke: false);
+                RoundedRectangle(builder, x, y - blockHeight + 1, columnWidth, blockHeight - 1, 2, fillAndStroke: false);
                 TextColor(builder, x + 5, y - blockHeight + fontSize + 2, Math.Max(5.2, fontSize),
                     Fit(block.Text, Math.Max(22, (int)(columnWidth / 3.2))), "0.10 0.29 0.43", bold: true);
-                y -= blockHeight;
-                continue;
             }
-
-            var line = block.Line!;
-            const double valueShare = .29;
-            var valueWidth = columnWidth * valueShare;
-            var formulaWidth = columnWidth - valueWidth - 12;
-            var valueX = x + columnWidth - valueWidth;
-            if (line.IsEquation)
+            else if (block.Partner is not null)
             {
-                var fraction = line.Formula.Contains("\\frac", StringComparison.Ordinal);
-                var root = line.Formula.Contains("\\sqrt", StringComparison.Ordinal);
-                var formulaBaseline = y - (fraction ? fontSize * 1.95 : root ? fontSize * 1.35 : fontSize * 1.18);
-                DrawMathEquation(builder, x + 5, formulaBaseline, fontSize, line.Formula, formulaWidth - 7);
-                var substitutionCount = 0;
-                if (!string.IsNullOrWhiteSpace(line.InputSubstitution))
-                {
-                    var substitutionLines = WrapPdfText(line.InputSubstitution,
-                        Math.Max(14, (int)((valueWidth - 6) / (fontSize * .48)))).Take(3).ToArray();
-                    substitutionCount = substitutionLines.Length;
-                    for (var index = 0; index < substitutionLines.Length; index++)
-                        TextColor(builder, valueX, y - fontSize - index * (fontSize * 1.22), fontSize,
-                            substitutionLines[index], "0.74 0.17 0.17", bold: true);
-                }
-                if (!string.IsNullOrWhiteSpace(line.HighlightValue))
-                {
-                    var color = line.HighlightAsInput ? "0.74 0.17 0.17" : "0.00 0.41 0.60";
-                    DrawCalculationResult(builder, line, valueX,
-                        y - fontSize - substitutionCount * (fontSize * 1.22), valueWidth - 6,
-                        fontSize, color, maximumLines: 4);
-                }
+                var half = columnWidth / 2;
+                DrawCalculationLine(builder, block.Line!, x, y, half, fontSize, equationOnly: true);
+                DrawCalculationLine(builder, block.Partner, x + half, y, half, fontSize, equationOnly: true);
             }
             else
             {
-                var formulaLines = WrapPdfText(line.Formula,
-                    Math.Max(22, (int)(formulaWidth / (fontSize * .48)))).ToArray();
-                for (var index = 0; index < formulaLines.Length; index++)
-                    Text(builder, x + 5, y - fontSize - index * (fontSize * 1.22), fontSize, formulaLines[index]);
-                var color = line.HighlightAsInput ? "0.74 0.17 0.17" : "0.00 0.41 0.60";
-                if (!string.IsNullOrWhiteSpace(line.HighlightValue))
-                    DrawCalculationResult(builder, line, valueX, y - fontSize, valueWidth - 5,
-                        fontSize, color);
+                DrawCalculationLine(builder, block.Line!, x, y, columnWidth, fontSize, equationOnly: false);
             }
             y -= blockHeight;
+            index++;
         }
+        return index;
+    }
+
+    private static void DrawCalculationLine(StringBuilder builder, DuctSystemPdfCalculationLine line, double x, double y,
+        double columnWidth, double fontSize, bool equationOnly)
+    {
+        const double valueShare = .29;
+        var valueWidth = columnWidth * valueShare;
+        var formulaWidth = equationOnly ? columnWidth - 6 : columnWidth - valueWidth - 12;
+        var valueX = x + columnWidth - valueWidth;
+        if (line.IsEquation)
+        {
+            var fraction = line.Formula.Contains("\\frac", StringComparison.Ordinal);
+            var root = line.Formula.Contains("\\sqrt", StringComparison.Ordinal);
+            var formulaBaseline = y - (fraction ? fontSize * 1.95 : root ? fontSize * 1.35 : fontSize * 1.18);
+            DrawMathEquation(builder, x + 5, formulaBaseline, fontSize, line.Formula, formulaWidth - 7);
+            if (equationOnly)
+                return;
+            var substitutionCount = 0;
+            if (!string.IsNullOrWhiteSpace(line.InputSubstitution))
+            {
+                var substitutionLines = WrapPdfText(line.InputSubstitution,
+                    Math.Max(14, (int)((valueWidth - 6) / (fontSize * .48)))).Take(3).ToArray();
+                substitutionCount = substitutionLines.Length;
+                for (var index = 0; index < substitutionLines.Length; index++)
+                    TextColor(builder, valueX, y - fontSize - index * (fontSize * 1.22), fontSize,
+                        substitutionLines[index], "0.74 0.17 0.17", bold: true);
+            }
+            if (!string.IsNullOrWhiteSpace(line.HighlightValue))
+            {
+                var color = line.HighlightAsInput ? "0.74 0.17 0.17" : "0.00 0.41 0.60";
+                DrawCalculationResult(builder, line, valueX,
+                    y - fontSize - substitutionCount * (fontSize * 1.22), valueWidth - 6,
+                    fontSize, color, maximumLines: 4);
+            }
+            return;
+        }
+        var formulaLines = WrapPdfText(line.Formula,
+            Math.Max(22, (int)(formulaWidth / (fontSize * .48)))).ToArray();
+        for (var index = 0; index < formulaLines.Length; index++)
+            Text(builder, x + 5, y - fontSize - index * (fontSize * 1.22), fontSize, formulaLines[index]);
+        if (!string.IsNullOrWhiteSpace(line.HighlightValue))
+            DrawCalculationResult(builder, line, valueX, y - fontSize, valueWidth - 5, fontSize,
+                line.HighlightAsInput ? "0.74 0.17 0.17" : "0.00 0.41 0.60");
     }
 
     private static double CalculationBlockHeight(bool heading, DuctSystemPdfCalculationLine? line,

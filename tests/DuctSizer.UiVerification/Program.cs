@@ -37,6 +37,17 @@ internal static class Program
                 openingPreview.Save(openingCapturePath);
             }
 
+            // Report-only run (Linux review aid): write the report of the loaded project and stop.
+            var reportOnlyPath = Environment.GetEnvironmentVariable("FANWORKS_REPORT_ONLY");
+            if (!string.IsNullOrWhiteSpace(reportOnlyPath))
+            {
+                if (Environment.GetEnvironmentVariable("FANWORKS_REPORT_PROJECT") is { Length: > 0 } reportProject)
+                    form.DuctSystemScreen.ReplaceCurrentSystem(DuctSystemStore.Load(reportProject));
+                form.DuctSystemScreen.WriteReportPdf(reportOnlyPath);
+                Console.WriteLine("Report written.");
+                return 0;
+            }
+
             var content = Find<TableLayoutPanel>(form, "ContentLayout");
             var ductCalculatorSplitter = Find<SplitContainer>(form, "DuctCalculatorSplitter");
             var fittingCalculatorSplitter = Find<SplitContainer>(form, "FittingCalculatorSplitter");
