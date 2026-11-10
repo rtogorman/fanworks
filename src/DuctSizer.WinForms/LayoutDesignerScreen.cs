@@ -35,7 +35,6 @@ internal sealed partial class LayoutDesignerScreen
     private readonly Button _layoutLabelsButton = new();
     private readonly Button _layoutDuctSizesButton = new();
     private readonly ToolbarIconButton _layoutCenterButton = new("LayoutCenterButton", RibbonIcon.ZoomFit, "Center view");
-    private readonly ToolbarIconButton _layoutCoordinateOriginButton = new("LayoutCoordinateOriginButton", RibbonIcon.Origin, "Set coordinate origin");
     private readonly ToolbarIconButton _layoutSourceSinkEditorButton = new("LayoutSourceSinkEditorButton", RibbonIcon.SourceSink, "Source/Sink Editor");
     private readonly Button _layoutSizeUndefinedButton = new();
     private readonly Button _layoutRecalculateDuctworkButton = new();
@@ -162,7 +161,6 @@ internal sealed partial class LayoutDesignerScreen
             if (node is not null)
                 _inspector?.ShowNode(node);
             _layoutDeleteButton.Enabled = node is not null;
-            _layoutCoordinateOriginButton.Enabled = node is not null && node.Type != LayoutNodeType.CalculationPoint;
             SyncLayoutSummarySelection(node);
             if (node is not null)
                 _layoutStatusLabel.Text = $"Selected {node.Id}. Press Delete or use the Delete button to remove it.";
@@ -216,7 +214,8 @@ internal sealed partial class LayoutDesignerScreen
         _layoutWorkspaceSplitter.VisibleChanged += (_, _) => InitializeLayoutSummarySplitter();
         void InitializeLayoutSummarySplitter()
         {
-            if (!_layoutWorkspaceSplitter.Visible || _layoutWorkspaceSplitter.Height < DpiScaling.Scale(320))
+            if (!_layoutWorkspaceSplitter.Visible || _layoutWorkspaceSplitter.FindForm() is not { Visible: true }
+                || _layoutWorkspaceSplitter.Height < DpiScaling.Scale(320))
                 return;
             _updatingLayoutSummarySplitter = true;
             try
@@ -397,6 +396,8 @@ internal sealed partial class LayoutDesignerScreen
 
         _layoutToolTips.SetToolTip(_layoutPdfButton, "Import or manage the PDF drawing underlay");
         _layoutPdfButton.Click += (_, _) => ManageLayoutPdfBackground();
+        _layoutPdfButton.Caption = "Insert PDF Underlay";
+        _layoutPdfButton.Margin = new Padding(1, 0, 6, 0);
         toolbar.Controls.Add(_layoutPdfButton);
         var gridIcon = new ToolbarIconButton("LayoutGridIcon", RibbonIcon.Grid, "Grid scale") { Enabled = true, TabStop = false };
         gridIcon.Click += (_, _) => _layoutScaleSelector.DroppedDown = true;
@@ -447,12 +448,9 @@ internal sealed partial class LayoutDesignerScreen
         toolbar.Controls.Add(_layoutShowSizesCheck);
         Separator();
 
-        _layoutToolTips.SetToolTip(_layoutCoordinateOriginButton, "Make the selected component the coordinate origin (0, 0, 0)");
         _layoutToolTips.SetToolTip(_layoutSourceSinkEditorButton, "Source/Sink Editor: airflow balance of every space");
-        _layoutCoordinateOriginButton.Enabled = false;
-        _layoutCoordinateOriginButton.Click += (_, _) => ChangeLayoutCoordinateOrigin();
+        _layoutSourceSinkEditorButton.Caption = "Source / Sink Editor";
         _layoutSourceSinkEditorButton.Click += (_, _) => OpenSourceSinkEditor();
-        toolbar.Controls.Add(_layoutCoordinateOriginButton);
         toolbar.Controls.Add(_layoutSourceSinkEditorButton);
 
         // These commands now live in the main ribbon. The buttons stay (unparented) so their state text keeps
@@ -1047,6 +1045,10 @@ internal sealed partial class LayoutDesignerScreen
         var background = _host.DuctSystemScreen._ductSystem.LayoutPdfBackground;
         _layoutPdfButton.Text = background is null ? "Upload PDF"
             : background.Visible ? "PDF Background" : "PDF Hidden";
+        // The caption says what the button does; with a PDF loaded it opens the underlay menu.
+        _layoutPdfButton.Caption = background is null ? "Insert PDF Underlay"
+            : background.Visible ? "PDF Underlay" : "PDF Underlay (hidden)";
+        _layoutPdfButton.ShowDropArrow = background is not null;
         // The icon button shows as "on" while a visible PDF underlay is loaded; its text names the state.
         _layoutPdfButton.Checked = background is { Visible: true };
         _layoutToolTips.SetToolTip(_layoutPdfButton, background is null
@@ -1100,34 +1102,6 @@ internal sealed partial class LayoutDesignerScreen
             _layoutStatusLabel.Text = start is null
                 ? "Centered the empty Designer workspace."
                 : $"Centered the Designer on system start {start.Id}.";
-    }
-
-    private void ChangeLayoutCoordinateOrigin()
-    {
-        var selected = _layoutCanvas?.SelectedNode;
-        if (selected is null || selected.Type == LayoutNodeType.CalculationPoint)
-        {
-            MessageBox.Show(_host, "Select a component on the graph, then click Origin.",
-                "Select Coordinate Origin", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        var coordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
-        coordinates.TryGetValue(selected.Sequence, out var current);
-        using var dialog = new LayoutCoordinateOriginDialog(selected.Id, current, _host._currentUnits);
-        if (dialog.ShowDialog(_host) != DialogResult.OK)
-            return;
-        var historyState = CaptureLayoutHistoryState();
-        _host.DuctSystemScreen._ductSystem.CoordinateOriginNodeId = selected.Id;
-        _host.DuctSystemScreen._ductSystem.CoordinateOriginXM = dialog.Coordinate.XM;
-        _host.DuctSystemScreen._ductSystem.CoordinateOriginYM = dialog.Coordinate.YM;
-        _host.DuctSystemScreen._ductSystem.CoordinateOriginZM = dialog.Coordinate.ZM;
-        CommitLayoutHistoryState(historyState);
-        _host.DuctSystemScreen.SaveDuctSystem();
-        _host.DuctSystemScreen.RefreshDuctSystemGrid();
-        RefreshLayoutDesigner();
-        _layoutCanvas?.SelectNode(selected);
-        _layoutStatusLabel.Text = $"{selected.Id} is now the coordinate origin/reference point.";
-        _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
     internal void ClearLayoutHistory()

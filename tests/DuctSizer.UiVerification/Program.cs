@@ -92,7 +92,6 @@ internal static class Program
             var layoutDuctSizes = Find<CheckBox>(form, "LayoutShowSizesCheck");
             var layoutFlow = Find<CheckBox>(form, "LayoutShowFlowCheck");
             var layoutCenter = Find<Button>(form, "LayoutCenterButton");
-            var layoutCoordinateOrigin = Find<Button>(form, "LayoutCoordinateOriginButton");
             var sourceSpaceTool = Find<Control>(form, "LayoutToolSpaceSource");
             var sinkSpaceTool = Find<Control>(form, "LayoutToolSpaceSink");
             var calculationPointTools = new[]
@@ -1334,10 +1333,13 @@ internal static class Program
             var zoomIn = Find<Button>(form, "LayoutZoomInButton");
             var zoomOut = Find<Button>(form, "LayoutZoomOutButton");
             Require(new Control[] { layoutUndo, layoutRedo, layoutDelete, zoomOut, zoomIn, layoutCenter, layoutPdfBackground,
-                            layoutScale, layoutViewMode, layoutLabels, layoutFlow, layoutDuctSizes, layoutCoordinateOrigin,
+                            layoutScale, layoutViewMode, layoutLabels, layoutFlow, layoutDuctSizes,
                             layoutSourceSinkEditor }
                         .All(control => control.Parent == canvasToolbar)
                     && canvasToolbar.Controls.IndexOf(layoutPdfBackground) < canvasToolbar.Controls.IndexOf(Find<Control>(form, "LayoutGridIcon"))
+                    && form.Controls.Find("LayoutCoordinateOriginButton", true).Length == 0
+                    && ((string?)layoutPdfBackground.GetType().GetProperty("Caption", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(layoutPdfBackground))!.Contains("PDF", StringComparison.Ordinal)
+                    && ((string?)layoutSourceSinkEditor.GetType().GetProperty("Caption", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(layoutSourceSinkEditor))!.Contains("Source", StringComparison.Ordinal)
                     && canvasToolbar.Controls.IndexOf(Find<Control>(form, "LayoutGridIcon")) < canvasToolbar.Controls.IndexOf(layoutScale)
                     && layoutLabels.Text == "Labels" && layoutFlow.Text == "Flow" && layoutDuctSizes.Text == "Sizes"
                     && layoutLabels.Checked && !layoutFlow.Checked && !layoutDuctSizes.Checked

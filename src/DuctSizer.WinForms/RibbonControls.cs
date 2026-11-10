@@ -805,6 +805,50 @@ internal sealed class ToolbarIconButton : Button
 
     internal RibbonIcon IconKind { get; }
 
+    private string? _caption;
+    private bool _showDropArrow;
+
+    /// <summary>
+    /// Text drawn beside the icon (null = icon only). A captioned button sizes itself to its text so it reads
+    /// clearly as a command, for example "PDF Underlay ▾".
+    /// </summary>
+    internal string? Caption
+    {
+        get => _caption;
+        set { _caption = value; FitToCaption(); Invalidate(); }
+    }
+
+    /// <summary>Draws a small arrow after the caption: the button opens a menu.</summary>
+    internal bool ShowDropArrow
+    {
+        get => _showDropArrow;
+        set { _showDropArrow = value; FitToCaption(); Invalidate(); }
+    }
+
+    private Font CaptionFont => _captionFont ??= new Font("Segoe UI Semibold", 8.5F);
+    private Font? _captionFont;
+
+    private void FitToCaption()
+    {
+        if (_caption is null)
+            return;
+        var textWidth = TextRenderer.MeasureText(_caption, CaptionFont, Size.Empty, TextFormatFlags.NoPadding).Width;
+        Width = DpiScaling.Scale(8 + 18 + 6) + textWidth + (_showDropArrow ? DpiScaling.Scale(14) : 0) + DpiScaling.Scale(8);
+    }
+
+    protected override void ScaleControl(SizeF factor, BoundsSpecified specified)
+    {
+        base.ScaleControl(factor, specified);
+        FitToCaption(); // the caption width already follows the display scale
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            _captionFont?.Dispose();
+        base.Dispose(disposing);
+    }
+
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     internal bool Checked
@@ -834,8 +878,28 @@ internal sealed class ToolbarIconButton : Button
             }
         }
         var iconSize = DpiScaling.Scale(18);
-        RibbonIcons.Draw(graphics, IconKind, new Rectangle((Width - iconSize) / 2, (Height - iconSize) / 2, iconSize, iconSize),
+        var iconLeft = _caption is null ? (Width - iconSize) / 2 : DpiScaling.Scale(8);
+        RibbonIcons.Draw(graphics, IconKind, new Rectangle(iconLeft, (Height - iconSize) / 2, iconSize, iconSize),
             Enabled ? RibbonPalette.Icon : RibbonPalette.Disabled, Enabled ? RibbonPalette.IconAccent : RibbonPalette.Disabled);
+        if (_caption is not null)
+        {
+            var textColor = Enabled ? RibbonPalette.Ink : RibbonPalette.Disabled;
+            var textLeft = iconLeft + iconSize + DpiScaling.Scale(6);
+            var textSize = TextRenderer.MeasureText(_caption, CaptionFont, Size.Empty, TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(graphics, _caption, CaptionFont, new Rectangle(textLeft, 0, textSize.Width + 2, Height), textColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+            if (_showDropArrow)
+            {
+                var arrowX = textLeft + textSize.Width + DpiScaling.Scale(6f);
+                var half = DpiScaling.Scale(3.5f);
+                var cy = Height / 2f;
+                using var arrow = new SolidBrush(textColor);
+                graphics.FillPolygon(arrow, new[]
+                {
+                    new PointF(arrowX, cy - half / 2), new PointF(arrowX + 2 * half, cy - half / 2), new PointF(arrowX + half, cy + half * 0.7f)
+                });
+            }
+        }
         if (Focused && ShowFocusCues)
             ControlPaint.DrawFocusRectangle(graphics, new Rectangle(2, 2, Width - 4, Height - 4));
     }

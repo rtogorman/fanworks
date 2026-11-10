@@ -1089,6 +1089,7 @@ internal sealed class SelectionInspector : Panel
                     InspectorStack nested => nested.MeasureHeight(childWidth),
                     WrappingLabel label => label.MeasureHeight(childWidth),
                     InspectorStatusHost status => status.MeasureHeight(childWidth),
+                    InspectorEditRow row => row.MeasureHeight(childWidth),
                     _ => child.Height
                 };
                 child.SetBounds(Padding.Left + child.Margin.Left, y + child.Margin.Top, childWidth, height);
@@ -1112,6 +1113,7 @@ internal sealed class SelectionInspector : Panel
                     InspectorStack nested => nested.MeasureHeight(childWidth),
                     WrappingLabel label => label.MeasureHeight(childWidth),
                     InspectorStatusHost status => status.MeasureHeight(childWidth),
+                    InspectorEditRow row => row.MeasureHeight(childWidth),
                     _ => child.Height
                 };
             }
@@ -1252,6 +1254,15 @@ internal sealed class SelectionInspector : Panel
         }
 
         internal Control Input { get; }
+
+        /// <summary>Tall enough for the control and for a caption that wraps onto two lines.</summary>
+        internal int MeasureHeight(int width)
+        {
+            var captionWidth = Math.Max(1, (int)(width * 0.46) - DpiScaling.Scale(8));
+            var captionHeight = TextRenderer.MeasureText(_caption.Text, _caption.Font, new Size(captionWidth, 0),
+                TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height + DpiScaling.Scale(6);
+            return Math.Max(Height, captionHeight);
+        }
 
         private static void Style(Control input)
         {

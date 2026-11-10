@@ -109,15 +109,20 @@ internal static class InlineText
         var bracket = caption.IndexOf('(', StringComparison.Ordinal);
         var head = bracket >= 0 ? caption[..bracket] : caption;
         var tail = bracket >= 0 ? caption[bracket..] : string.Empty;
-        var shouting = head.Any(char.IsLetter) && head.Where(char.IsLetter).All(char.IsUpper);
+        var shouting = head.Split(' ').Where(word => !word.Any(char.IsDigit)).SelectMany(word => word.Where(char.IsLetter))
+            .All(char.IsUpper);
         var words = head.Split(' ');
         for (var index = 0; index < words.Length; index++)
         {
             var word = words[index];
             if (word.Length == 0)
                 continue;
-            var acronym = !shouting && word.Length > 1 && word.Where(char.IsLetter).All(char.IsUpper);
-            if (acronym)
+            // Item IDs (Fan-001) and short acronyms (GRD, SP) stay as written.
+            if (word.Any(char.IsDigit))
+                continue;
+            var letters = word.Where(char.IsLetter).ToArray();
+            var acronym = !shouting && letters.Length is > 1 and <= 3 && letters.All(char.IsUpper);
+            if (acronym || letters.Length == 0)
                 continue;
             var lower = word.ToLowerInvariant();
             words[index] = index == 0 ? char.ToUpperInvariant(lower[0]) + lower[1..] : lower;
