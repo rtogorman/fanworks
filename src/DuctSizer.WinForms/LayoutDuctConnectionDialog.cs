@@ -7,7 +7,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutDuctConnectionDialog : DpiScaledForm
+internal sealed class LayoutDuctConnectionDialog : DpiScaledForm, IInlineEditable
 {
     private readonly ComboBox _airSystem = new();
     internal string SelectedAirSystemType => Convert.ToString(_airSystem.SelectedItem, CultureInfo.CurrentCulture) ?? "Supply Air";
@@ -80,6 +80,22 @@ internal sealed class LayoutDuctConnectionDialog : DpiScaledForm
         AcceptButton = open;
         CancelButton = cancel;
     }
+
+    public IReadOnlyList<InlineEditRow> InlineRows => new[] { new InlineEditRow("Air system", _airSystem) };
+
+    public event Action? InlineRowsChanged
+    {
+        add { }
+        remove { }
+    }
+
+    public Control? InlineStatus => null;
+
+    public void UseInline(IWin32Window messageOwner)
+    {
+    }
+
+    public bool TryAcceptInline() => true;
 
     private static void AddRow(TableLayoutPanel table, int row, string labelText, Control input)
     {

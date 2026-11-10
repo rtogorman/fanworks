@@ -2041,45 +2041,10 @@ internal sealed partial class LayoutDesignerScreen
                 }
                 return;
             }
-            var boundaryAirflows = node.Type == LayoutNodeType.Reservoir
-                ? LayoutBoundaryNodes().ToDictionary(boundary => boundary.Sequence, boundary => boundary.AirflowM3PerS)
-                : new Dictionary<int, double>();
-            var previousAirflow = node.AirflowM3PerS;
-            UpdateCalculatedLayoutValues();
-            var resolvedCoordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
-            using var dialog = resolvedCoordinates.TryGetValue(node.Sequence, out var absoluteCoordinate)
-                ? new LayoutEquipmentDialog(node, _host.DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption, absoluteCoordinate,
-                    EditableAxesForNode(node), PositionReferenceFor(node, resolvedCoordinates))
-                : new LayoutEquipmentDialog(node, _host.DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption);
+            var edit = BeginEquipmentEdit(node);
+            using var dialog = edit.Dialog;
             if (dialog.ShowDialog(_host) == DialogResult.OK)
-            {
-                var selectedParent = node.Type == LayoutNodeType.Reservoir && IsSpaceSourceRole(node.SpaceRole)
-                    ? string.Empty
-                    : dialog.SelectedParentNodeId;
-                if (!RewireLayoutNode(node, selectedParent, reposition: true))
-                    return;
-                if (resolvedCoordinates.ContainsKey(node.Sequence))
-                    ApplyAbsoluteCoordinateEdit(node, absoluteCoordinate, dialog.DesiredAbsoluteCoordinate);
-                node.AirSystemType = dialog.SelectedAirSystemType;
-                node.IsDefined = true;
-                if (!EnsureConnectedCoordinateDeltas(node))
-                {
-                    node.IsDefined = false;
-                    return;
-                }
-                if (node.Type == LayoutNodeType.Reservoir
-                    && Math.Abs(node.AirflowM3PerS - previousAirflow) > 1e-9)
-                    ReconcileBoundaryAirflowAfterDirectEdit(node, boundaryAirflows);
-                UpdateCalculatedLayoutValues();
-                SyncConnectionDuctGeometry(node);
-                SyncLinkedItemMetadata(node);
-                if (node.Type == LayoutNodeType.Fan)
-                    _host.DuctSystemScreen._ductSystem.DefaultAirSystemType = node.AirSystemType;
-                CommitLayoutHistoryState(historyState);
-                _host.DuctSystemScreen.SaveDuctSystem();
-                RefreshLayoutDesigner();
-                _host.DuctSystemScreen.RefreshDuctSystemGrid();
-            }
+                ApplyEquipmentEdit(node, edit, historyState);
             return;
         }
 
@@ -2089,23 +2054,10 @@ internal sealed partial class LayoutDesignerScreen
             if (duct is not null)
             {
                 var historyState = CaptureLayoutHistoryState();
-                using var editor = new LayoutDuctEditDialog(CloneDuct(duct), _host._currentUnits,
-                    _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM, _host.DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection);
+                using var editor = NewDuctEditor(CloneDuct(duct));
                 if (editor.ShowDialog(_host) != DialogResult.OK || editor.Result is not SavedDuct edited)
                     return;
-                if (!_host.DuctSystemScreen.ConfirmAirflowOverride(node, edited.AirflowM3PerS, duct.Id))
-                    return;
-                CopyDuctValues(edited, duct);
-                duct.RequiresResizing = false;
-                node.AirflowM3PerS = duct.AirflowM3PerS;
-                node.TemperatureC = duct.TemperatureC;
-                SyncLinkedItemMetadata(node);
-                CommitLayoutHistoryState(historyState);
-                _host.DuctSystemScreen.SaveDuctSystem();
-                _host.DuctSystemScreen.RefreshDuctSystemGrid();
-                RefreshLayoutDesigner();
-                _layoutStatusLabel.Text = $"Updated {duct.Id} without leaving Layout Designer.";
-                _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+                ApplyLinkedDuctEdit(node, duct, edited, historyState);
                 return;
             }
         }
@@ -2113,30 +2065,35 @@ internal sealed partial class LayoutDesignerScreen
         if (node.Type == LayoutNodeType.Fitting)
         {
             var historyState = CaptureLayoutHistoryState();
-            var linkedFitting = node.LinkedFittingSequence is int sequence
-                ? _host.DuctSystemScreen._ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence)
-                : null;
-            var resolvedCoordinates = LayoutCoordinateResolver.Resolve(_host.DuctSystemScreen._ductSystem);
-            LayoutCoordinate? absoluteCoordinate = resolvedCoordinates.TryGetValue(node.Sequence, out var resolved)
-                ? resolved : null;
-            using var dialog = new LayoutFittingNodeDialog(node, _host.DuctSystemScreen._ductSystem.LayoutNodes, LayoutNodeCaption,
-                linkedFitting, absoluteCoordinate, EditableAxesForNode(node),
-                PositionReferenceFor(node, resolvedCoordinates));
+            var edit = BeginFittingEdit(node);
+            using var dialog = edit.NodeDialog;
             if (dialog.ShowDialog(_host) != DialogResult.OK)
                 return;
-            var draft = linkedFitting is null
-                ? CreateLayoutFittingDraft(node)
-                : CloneFitting(linkedFitting);
-            using var editor = new LayoutFittingEditDialog(draft, node.FittingGroup, _host._currentUnits);
+            using var editor = NewFittingEditor(edit.LinkedFitting, node);
             if (editor.ShowDialog(_host) != DialogResult.OK || editor.Result is not SavedFitting edited)
                 return;
+            ApplyFittingEdit(node, edit, edited, historyState);
+        }
+    }
+
+    /// <summary>
+    /// Applies an accepted fitting edit (layout inputs from <paramref name="edit"/>, fitting data in
+    /// <paramref name="edited"/>): the same steps whether the edit came from the editor windows or the inspector.
+    /// False when the user declined a confirmation or the new wiring was rejected.
+    /// </summary>
+    private bool ApplyFittingEdit(SavedLayoutNode node, FittingEdit edit, SavedFitting edited, string historyState)
+    {
+        {
+            var dialog = edit.NodeDialog;
+            var linkedFitting = edit.LinkedFitting;
+            var absoluteCoordinate = edit.AbsoluteCoordinate;
             if (!_host.DuctSystemScreen.ConfirmAirflowOverride(node, edited.AirflowM3PerS,
                     linkedFitting?.Id ?? node.Id))
-                return;
+                return false;
             if (!ConfirmAndApplyJunctionFlows(node, edited, linkedFitting?.Id ?? node.Id))
-                return;
+                return false;
             if (!RewireLayoutNode(node, dialog.SelectedParentNodeId, reposition: true))
-                return;
+                return false;
             node.AirSystemType = dialog.SelectedAirSystemType;
             if (absoluteCoordinate is LayoutCoordinate originalCoordinate)
                 ApplyAbsoluteCoordinateEdit(node, originalCoordinate, dialog.DesiredAbsoluteCoordinate);
@@ -2159,7 +2116,7 @@ internal sealed partial class LayoutDesignerScreen
             if (!EnsureConnectedCoordinateDeltas(node))
             {
                 node.IsDefined = false;
-                return;
+                return false;
             }
             if (linkedFitting is null)
             {
@@ -2184,6 +2141,7 @@ internal sealed partial class LayoutDesignerScreen
             _host.DuctSystemScreen.RefreshDuctSystemGrid();
             _layoutStatusLabel.Text = $"Updated {linkedFitting.Id} without leaving Layout Designer.";
             _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+            return true;
         }
     }
 
@@ -2345,41 +2303,87 @@ internal sealed partial class LayoutDesignerScreen
                 return;
             if (connectionDialog.ReverseRequested)
             {
-                var reverseFlowHistoryState = CaptureLayoutHistoryState();
-                if (connection.Secondary)
-                    downstream.SecondaryConnectionFlowReversed = !downstream.SecondaryConnectionFlowReversed;
-                else
-                    downstream.ConnectionFlowReversed = !downstream.ConnectionFlowReversed;
-                CommitLayoutHistoryState(reverseFlowHistoryState);
-                _host.DuctSystemScreen.SaveDuctSystem();
-                _host.DuctSystemScreen.RefreshDuctSystemGrid();
-                RefreshLayoutDesigner();
-                var direction = LayoutConnectionFlowReversed(connection)
-                    ? $"{downstream.Id} to {parentId}"
-                    : $"{parentId} to {downstream.Id}";
-                _layoutStatusLabel.Text = $"Flow direction changed to {direction}.";
-                _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+                ReverseConnectionFlow(connection);
                 return;
             }
-            downstream.AirSystemType = connectionDialog.SelectedAirSystemType;
-            if (linkedDuct is not null)
-                linkedDuct.AirSystemType = downstream.AirSystemType;
+            ApplyConnectionAirSystem(connection, connectionDialog.SelectedAirSystemType);
             _host.DuctSystemScreen.SaveDuctSystem();
             _host.DuctSystemScreen.RefreshDuctSystemGrid();
             RefreshLayoutDesigner();
         }
         var historyState = CaptureLayoutHistoryState();
-        var upstream = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
-        var draft = linkedDuct is null
-            ? CreateLayoutDuctDraftForConnection(upstream, downstream, connection.Secondary)
-            : CloneDuct(linkedDuct);
-        using var editor = new LayoutDuctEditDialog(draft, _host._currentUnits,
-            _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM, _host.DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection);
+        using var editor = NewDuctEditor(ConnectionDuctDraft(connection));
         if (editor.ShowDialog(_host) != DialogResult.OK || editor.Result is not SavedDuct edited)
             return;
+        ApplyConnectionDuctEdit(connection, edited, historyState);
+    }
+
+    /// <summary>Reverses the flow direction of a drawn connection (an undoable edit).</summary>
+    internal void ReverseConnectionFlow(LayoutConnectionRef connection)
+    {
+        var downstream = connection.Downstream;
+        var parentId = connection.Secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
+        var reverseFlowHistoryState = CaptureLayoutHistoryState();
+        if (connection.Secondary)
+            downstream.SecondaryConnectionFlowReversed = !downstream.SecondaryConnectionFlowReversed;
+        else
+            downstream.ConnectionFlowReversed = !downstream.ConnectionFlowReversed;
+        CommitLayoutHistoryState(reverseFlowHistoryState);
+        _host.DuctSystemScreen.SaveDuctSystem();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
+        RefreshLayoutDesigner();
+        var direction = LayoutConnectionFlowReversed(connection)
+            ? $"{downstream.Id} to {parentId}"
+            : $"{parentId} to {downstream.Id}";
+        _layoutStatusLabel.Text = $"Flow direction changed to {direction}.";
+        _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+    }
+
+    /// <summary>Sets the air system of a connection and of its saved duct.</summary>
+    private void ApplyConnectionAirSystem(LayoutConnectionRef connection, string airSystemType)
+    {
+        connection.Downstream.AirSystemType = airSystemType;
+        if (LinkedConnectionDuct(connection) is { } linkedDuct)
+            linkedDuct.AirSystemType = connection.Downstream.AirSystemType;
+    }
+
+    private SavedDuct? LinkedConnectionDuct(LayoutConnectionRef connection)
+    {
+        var linkedDuctSequence = connection.Secondary
+            ? connection.Downstream.SecondaryConnectionDuctSequence
+            : connection.Downstream.ConnectionDuctSequence;
+        return linkedDuctSequence is int existingSequence
+            ? _host.DuctSystemScreen._ductSystem.Ducts.FirstOrDefault(x => x.Sequence == existingSequence)
+            : null;
+    }
+
+    /// <summary>The duct to edit for a connection: a copy of its saved duct, or a new sized draft.</summary>
+    private SavedDuct ConnectionDuctDraft(LayoutConnectionRef connection)
+    {
+        var downstream = connection.Downstream;
+        var parentId = connection.Secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
+        var linkedDuct = LinkedConnectionDuct(connection);
+        var upstream = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == parentId);
+        return linkedDuct is null
+            ? CreateLayoutDuctDraftForConnection(upstream, downstream, connection.Secondary)
+            : CloneDuct(linkedDuct);
+    }
+
+    private LayoutDuctEditDialog NewDuctEditor(SavedDuct draft) => new(draft, _host._currentUnits,
+        _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM, _host.DuctSystemScreen._ductSystem.DefaultSizeRoundingDirection);
+
+    /// <summary>
+    /// Applies an accepted duct for a drawn connection (new or re-sized). False when the user declined the airflow
+    /// override confirmation.
+    /// </summary>
+    private bool ApplyConnectionDuctEdit(LayoutConnectionRef connection, SavedDuct edited, string historyState)
+    {
+        var downstream = connection.Downstream;
+        var parentId = connection.Secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
+        var linkedDuct = LinkedConnectionDuct(connection);
         if (!_host.DuctSystemScreen.ConfirmConnectionAirflowOverride(connection, edited.AirflowM3PerS,
                 linkedDuct?.Id ?? $"duct {parentId} to {downstream.Id}"))
-            return;
+            return false;
 
         if (linkedDuct is null)
         {
@@ -2413,6 +2417,7 @@ internal sealed partial class LayoutDesignerScreen
         RefreshLayoutDesigner();
         _layoutStatusLabel.Text = $"Updated {savedDuct.Id} without leaving Layout Designer.";
         _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+        return true;
     }
 
     private SavedDuct CreateLayoutDuctDraft(SavedLayoutNode? upstream, SavedLayoutNode downstream) =>

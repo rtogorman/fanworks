@@ -7,8 +7,10 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutFittingNodeDialog : DpiScaledForm
+internal sealed class LayoutFittingNodeDialog : DpiScaledForm, IInlineEditable
 {
+    private readonly List<InlineEditRow> _inlineRows = new();
+    private IWin32Window? _messageOwner;
     private readonly ComboBox _upstream = new();
     private readonly ComboBox _airSystem = new();
     private readonly TextBox _deltaX = new();
@@ -121,7 +123,16 @@ internal sealed class LayoutFittingNodeDialog : DpiScaledForm
         AddDialogRow(table, row++, _absoluteLocation ? LayoutPositionReference.CaptionFor(_reference) : "RELATIVE DELTA (ft)",
             LayoutDialogControls.CreateLocationEditor(_deltaX, _deltaY, _deltaZ), 42);
         if (table.GetControlFromPosition(0, row - 1) is Label locationCaption)
+        {
             locationCaption.Name = "LayoutLocationCaption";
+            _inlineRows.AddRange(new[]
+            {
+                new InlineEditRow("Air system", _airSystem),
+                new InlineEditRow("Upstream item", _upstream),
+                new InlineEditRow("Downstream item(s)", downstream),
+                new InlineEditRow(InlineText.SentenceCase(locationCaption.Text), table.GetControlFromPosition(1, row - 1)!)
+            });
+        }
 
         var note = new Label
         {
@@ -174,6 +185,27 @@ internal sealed class LayoutFittingNodeDialog : DpiScaledForm
         CancelButton = cancel;
     }
 
+    public IReadOnlyList<InlineEditRow> InlineRows => _inlineRows;
+
+    public event Action? InlineRowsChanged
+    {
+        add { }
+        remove { }
+    }
+
+    private readonly Label _inlineStatus = new() { Name = "LayoutFittingNodeInlineStatus", ForeColor = Color.Firebrick };
+
+    public Control? InlineStatus => _inlineStatus;
+
+    public void UseInline(IWin32Window messageOwner) => _messageOwner = messageOwner;
+
+    /// <summary>The Edit button's check: a valid location.</summary>
+    public bool TryAcceptInline()
+    {
+        _inlineStatus.Text = string.Empty;
+        return !_absoluteLocation || TryReadLocation(out _desiredAbsoluteCoordinate);
+    }
+
     private static double ReadDelta(TextBox input, double fallbackMeters) =>
         double.TryParse(input.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value)
         && double.IsFinite(value) && Math.Abs(value) <= 100_000
@@ -198,8 +230,11 @@ internal sealed class LayoutFittingNodeDialog : DpiScaledForm
         if (double.TryParse(input.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out value)
             && double.IsFinite(value) && Math.Abs(value) <= 100_000)
             return true;
-        MessageBox.Show(this, $"Enter a finite {name} coordinate between -100,000 ft and 100,000 ft.",
-            "Invalid Coordinate", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        if (_messageOwner is not null)
+            _inlineStatus.Text = $"Enter a finite {name} coordinate between -100,000 ft and 100,000 ft.";
+        else
+            MessageBox.Show(this, $"Enter a finite {name} coordinate between -100,000 ft and 100,000 ft.",
+                "Invalid Coordinate", MessageBoxButtons.OK, MessageBoxIcon.Information);
         return false;
     }
 

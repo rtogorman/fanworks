@@ -7,8 +7,10 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutDuctEditDialog : DpiScaledForm
+internal sealed class LayoutDuctEditDialog : DpiScaledForm, IInlineEditable
 {
+    private readonly List<InlineEditRow> _inlineRows = new();
+    private bool _inline;
     private readonly UnitSystem _units;
     private readonly SavedDuct _original;
     private readonly double _sizingIncrementM;
@@ -114,6 +116,25 @@ internal sealed class LayoutDuctEditDialog : DpiScaledForm
         AddRow(table, 9, units == UnitSystem.Imperial ? "Target SP (in. w.g./100 ft)" : "Target SP (Pa/m)", _targetFriction);
         AddRow(table, 10, units == UnitSystem.Imperial ? "Maximum Velocity (fpm)" : "Maximum Velocity (m/s)", _maximumVelocity);
         AddRow(table, 11, "Duct Material", _material);
+        var checking = () => SelectedMode == CalculationMode.CheckEnteredSize;
+        var round = () => _shape.SelectedItem is DuctShape.Round;
+        _inlineRows.AddRange(new[]
+        {
+            new InlineEditRow("Calculation method", _mode),
+            new InlineEditRow($"Airflow ({flowUnit})", _airflow),
+            new InlineEditRow($"Air temperature ({temperatureUnit})", _temperature),
+            new InlineEditRow($"Duct length ({lengthUnit})", _length),
+            new InlineEditRow("Duct shape", _shape),
+            new InlineEditRow($"Diameter ({sizeUnit})", _diameter, () => checking() && round()),
+            new InlineEditRow($"Width ({sizeUnit})", _width, () => checking() && !round()),
+            new InlineEditRow($"Height ({sizeUnit})", _height, () => checking() && !round()),
+            new InlineEditRow("Width / height ratio", _aspectRatio, () => !checking() && !round()),
+            new InlineEditRow(units == UnitSystem.Imperial ? "Target SP (in. w.c./100 ft)" : "Target SP (Pa/m)", _targetFriction,
+                () => SelectedMode == CalculationMode.SizeByTargetFriction),
+            new InlineEditRow(units == UnitSystem.Imperial ? "Maximum velocity (fpm)" : "Maximum velocity (m/s)", _maximumVelocity,
+                () => SelectedMode == CalculationMode.SizeByMaximumVelocity),
+            new InlineEditRow("Duct material", _material)
+        });
         _result.Dock = DockStyle.Fill;
         _result.ForeColor = Color.FromArgb(28, 69, 108);
         _result.Font = new Font("Segoe UI Semibold", 9F);
@@ -181,14 +202,36 @@ internal sealed class LayoutDuctEditDialog : DpiScaledForm
         _aspectRatio.Enabled = !checking && !round;
         _targetFriction.Enabled = SelectedMode == CalculationMode.SizeByTargetFriction;
         _maximumVelocity.Enabled = SelectedMode == CalculationMode.SizeByMaximumVelocity;
+        InlineRowsChanged?.Invoke();
     }
 
     private void InvalidateCalculation()
     {
         Result = null;
         _updateButton.Enabled = false;
-        _result.Text = "Inputs changed — click Calculate to size the duct before updating.";
+        _result.Text = _inline
+            ? string.Empty
+            : "Inputs changed — click Calculate to size the duct before updating.";
         _result.ForeColor = Color.FromArgb(92, 76, 42);
+    }
+
+    public IReadOnlyList<InlineEditRow> InlineRows => _inlineRows;
+
+    public event Action? InlineRowsChanged;
+
+    public Control? InlineStatus => _result;
+
+    public void UseInline(IWin32Window messageOwner)
+    {
+        _inline = true;
+        InvalidateCalculation();
+    }
+
+    /// <summary>Calculates the duct exactly as the Calculate button does; accepted when the calculation succeeds.</summary>
+    public bool TryAcceptInline()
+    {
+        CalculatePreview();
+        return Result is not null;
     }
 
     private void CalculatePreview()

@@ -7,8 +7,14 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutFittingEditDialog : DpiScaledForm
+internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
 {
+    private readonly List<InlineEditRow> _baseInlineRows = new();
+    private readonly List<InlineEditRow> _junctionInlineRows = new();
+    private readonly List<InlineEditRow> _parameterInlineRows = new();
+    private readonly TableLayoutPanel _definitionHost;
+    private readonly Button _galleryButton;
+    private bool _inline;
     private static readonly HashSet<string> JunctionDerivedKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "path", "qbqc", "qsqc", "qbqs", "abac", "asac", "abas", "vbvc", "vsvc", "vbvs", "vcfpm"
@@ -66,7 +72,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm
         _definition.SelectedItem = definitions.FirstOrDefault(x =>
             string.Equals(x.Code, fitting.FittingCode, StringComparison.OrdinalIgnoreCase)) ?? definitions[0];
         _definition.SelectedIndexChanged += (_, _) => DefinitionChanged();
-        var definitionHost = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        var definitionHost = _definitionHost = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         definitionHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         definitionHost.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
         var browseGallery = new Button
@@ -79,11 +85,12 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm
             BackColor = Color.White,
             ForeColor = Color.FromArgb(28, 69, 108)
         };
+        _galleryButton = browseGallery;
         UiPolish.RoundButton(browseGallery, 6);
         browseGallery.Click += (_, _) =>
         {
             using var gallery = new FittingGalleryDialog(FittingCatalog.All, SelectedDefinition.Code);
-            if (gallery.ShowDialog(this) == DialogResult.OK && gallery.SelectedDefinition is not null)
+            if (gallery.ShowDialog(browseGallery.FindForm() ?? this) == DialogResult.OK && gallery.SelectedDefinition is not null)
                 _definition.SelectedItem = _definition.Items.Cast<FittingDefinition>().First(x =>
                     string.Equals(x.Code, gallery.SelectedDefinition.Code, StringComparison.OrdinalIgnoreCase));
         };
@@ -148,6 +155,15 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm
                 label.Text = label.Text switch { "X" => "Dia", "Y" => "W", _ => "H" };
         AddRow(basics, 5, $"Duct Size ({sizeUnit})", sizePanel, 46);
         root.Controls.Add(basics, 0, 0);
+        _baseInlineRows.AddRange(new[]
+        {
+            new InlineEditRow("Fitting number", definitionHost),
+            new InlineEditRow("Fitting", _description),
+            new InlineEditRow($"Airflow ({flowUnit})", _airflow),
+            new InlineEditRow($"Air temperature ({temperatureUnit})", _temperature),
+            new InlineEditRow("Reference duct shape", _shape),
+            new InlineEditRow($"Duct size ({sizeUnit})", sizePanel)
+        });
 
         var parameterGroup = new GroupBox { Text = "Fitting Inputs", Dock = DockStyle.Fill, Padding = new Padding(10) };
         _parameters.Dock = DockStyle.Fill;
@@ -167,6 +183,14 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm
         AddCompact(junction, 1, $"Common ({flowUnit})", _commonFlow);
         AddCompact(junction, 2, $"Straight ({flowUnit})", _straightFlow);
         AddCompact(junction, 3, $"Branch ({flowUnit})", _branchFlow);
+        var isJunction = () => _definition.SelectedItem is FittingDefinition { IsJunction: true };
+        _junctionInlineRows.AddRange(new[]
+        {
+            new InlineEditRow("Loss path", _junctionPath, isJunction),
+            new InlineEditRow($"Common airflow ({flowUnit})", _commonFlow, isJunction),
+            new InlineEditRow($"Straight airflow ({flowUnit})", _straightFlow, isJunction),
+            new InlineEditRow($"Branch airflow ({flowUnit})", _branchFlow, isJunction)
+        });
         _junctionGroup.Controls.Add(junction);
         root.Controls.Add(_junctionGroup, 0, 2);
 
@@ -234,6 +258,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm
         _airflow.Enabled = !converging;
         _commonFlow.Enabled = !converging;
         _inputControls.Clear();
+        _parameterInlineRows.Clear();
         _parameters.Controls.Clear();
         _parameters.RowStyles.Clear();
         var visibleInputs = definition.Inputs.Where(x => !definition.IsJunction || !JunctionDerivedKeys.Contains(x.Key)).ToArray();
@@ -275,6 +300,8 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm
                 control = input;
             }
             _inputControls[spec.Key] = control;
+            _parameterInlineRows.Add(new InlineEditRow(
+                string.IsNullOrWhiteSpace(spec.Unit) ? spec.Label : $"{spec.Label} ({spec.Unit})", control));
             _parameters.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
             _parameters.Controls.Add(new Label
             {
@@ -289,6 +316,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm
         UpdateVavRowChoices();
         if (!_initializing)
             HandleJunctionFlowChanged(converging ? _straightFlow : _commonFlow);
+        InlineRowsChanged?.Invoke();
     }
 
     private void UpdateVavRowChoices()
@@ -331,8 +359,32 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm
             return;
         Result = null;
         _updateButton.Enabled = false;
-        _result.Text = "Inputs changed — click Calculate before updating the fitting.";
+        _result.Text = _inline ? string.Empty : "Inputs changed — click Calculate before updating the fitting.";
         _result.ForeColor = Color.FromArgb(92, 76, 42);
+    }
+
+    public IReadOnlyList<InlineEditRow> InlineRows =>
+        _baseInlineRows.Concat(_parameterInlineRows).Concat(_junctionInlineRows).ToArray();
+
+    public event Action? InlineRowsChanged;
+
+    public Control? InlineStatus => _result;
+
+    public void UseInline(IWin32Window messageOwner)
+    {
+        _inline = true;
+        // The gallery button keeps a short caption beside the fitting list in the narrow inspector.
+        _galleryButton.Text = "Gallery…";
+        _definitionHost.ColumnStyles[1] = new ColumnStyle(SizeType.Absolute, DpiScaling.Scale(74));
+        _galleryButton.Margin = new Padding(DpiScaling.Scale(4), 0, 0, 0);
+        _result.Text = string.Empty;
+    }
+
+    /// <summary>Calculates the fitting exactly as the Calculate button does; accepted when it succeeds.</summary>
+    public bool TryAcceptInline()
+    {
+        CalculatePreview();
+        return Result is not null;
     }
 
     private void HandleJunctionFlowChanged(TextBox changed)

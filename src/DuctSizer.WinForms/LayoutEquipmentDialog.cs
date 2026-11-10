@@ -7,8 +7,10 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutEquipmentDialog : DpiScaledForm
+internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
 {
+    private readonly List<InlineEditRow> _inlineRows = new();
+    private IWin32Window? _messageOwner;
     private readonly SavedLayoutNode _node;
     private readonly TextBox _componentDescription = new();
     private readonly TextBox _airflow = new();
@@ -232,6 +234,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
             AddRow(table, row++, "GRD Type", _grdType);
             AddRow(table, row++, "Airflow (cfm)", _airflow);
             AddRow(table, row++, "Published Selection", BuildGrdPerformancePanel(), 232);
+            AddGrdInlineRows();
             AddRow(table, row++, "Pressure Drop (in. w.g.)", _pressureDrop);
             AddRow(table, row++, "Air System Type", _airSystem);
         }
@@ -316,7 +319,9 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
         _grdPerformanceResult.MaximumSize = new Size(260, 0);
         _grdPerformanceResult.ForeColor = Color.FromArgb(28, 69, 108);
         _grdPerformanceResult.Font = new Font("Segoe UI Semibold", 8F);
-        _pressureDrop.ReadOnly = IsPublishedGrd();
+        // Only a GRD with a published selection takes its pressure drop from the catalog; every other component
+        // (coil, filter, custom, fan static pressure, source pressure) keeps the box editable.
+        _pressureDrop.ReadOnly = node.Type == LayoutNodeType.Grd && IsPublishedGrd();
         if (_pressureDrop.ReadOnly)
             _pressureDrop.BackColor = Color.FromArgb(235, 241, 246);
         _grdType.SelectedIndexChanged += (_, _) => UpdateGrdPerformancePreview();
@@ -338,6 +343,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
     {
         var panel = new TableLayoutPanel
         {
+            Name = "LayoutGrdPerformancePanel",
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 7,
@@ -402,6 +408,67 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
         }
     }
 
+    /// <summary>The published-selection inputs as separate inspector rows, each shown for its GRD type only.</summary>
+    private void AddGrdInlineRows()
+    {
+        string Type() => Convert.ToString(_grdType.SelectedItem, CultureInfo.CurrentCulture) ?? string.Empty;
+        bool Is(string type) => string.Equals(Type(), type, StringComparison.OrdinalIgnoreCase);
+        _inlineRows.AddRange(new[]
+        {
+            new InlineEditRow("350R duct size (in)", _grdTitus350RSize, () => Is("Grille")),
+            new InlineEditRow("Face size (in)", _grdFaceSize, () => Is("Diffuser")),
+            new InlineEditRow("Neck diameter (in)", _grdNeckDiameter, () => Is("Diffuser")),
+            new InlineEditRow("Length (ft)", _grdLength, () => Is("Linear Diffuser TBD-80 D")),
+            new InlineEditRow("Slot size", _grdSlotWidth, () => Is("Linear Diffuser TBD-80 D")),
+            new InlineEditRow("Number of slots", _grdSlotCount, () => Is("Linear Diffuser TBD-80 D")),
+            new InlineEditRow("Selected result", _grdPerformanceResult, IsPublishedGrd)
+        });
+        _grdType.SelectedIndexChanged += (_, _) => InlineRowsChanged?.Invoke();
+    }
+
+    public IReadOnlyList<InlineEditRow> InlineRows => _inlineRows;
+
+    public event Action? InlineRowsChanged;
+
+    private readonly Label _inlineStatus = new() { Name = "LayoutEquipmentInlineStatus", ForeColor = Color.Firebrick };
+
+    public Control? InlineStatus => _inlineStatus;
+
+    public void UseInline(IWin32Window messageOwner) => _messageOwner = messageOwner;
+
+    /// <summary>A refused input: a message box in the window, a red line under the inputs in the inspector.</summary>
+    private void ShowInputProblem(string message, string caption)
+    {
+        if (_messageOwner is not null)
+        {
+            _inlineStatus.Text = message;
+            return;
+        }
+        MessageBox.Show(this, message, caption, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    /// <summary>
+    /// Runs the Save button's checks. The checks write to the component as they go, so a failed check puts every
+    /// value back as it was: an edit that is not accepted leaves the component unchanged.
+    /// </summary>
+    public bool TryAcceptInline()
+    {
+        _inlineStatus.Text = string.Empty;
+        var before = System.Text.Json.JsonSerializer.Serialize(_node);
+        if (TrySaveInputs())
+            return true;
+        var original = System.Text.Json.JsonSerializer.Deserialize<SavedLayoutNode>(before);
+        if (original is not null)
+        {
+            foreach (var property in typeof(SavedLayoutNode).GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public))
+            {
+                if (property.CanRead && property.CanWrite && property.GetIndexParameters().Length == 0)
+                    property.SetValue(_node, property.GetValue(original));
+            }
+        }
+        return false;
+    }
+
     private bool IsPublishedGrd()
     {
         var type = Convert.ToString(_grdType.SelectedItem, CultureInfo.CurrentCulture);
@@ -461,8 +528,11 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
         }
     }
 
-    private static void AddRow(TableLayoutPanel table, int row, string label, Control input, int rowHeight = 40)
+    private void AddRow(TableLayoutPanel table, int row, string label, Control input, int rowHeight = 40)
     {
+        // Row 0 is the heading; the GRD performance panel is offered row by row below (see AddGrdInlineRows).
+        if (row > 0 && input is not TableLayoutPanel { Name: "LayoutGrdPerformancePanel" })
+            _inlineRows.Add(new InlineEditRow(InlineText.SentenceCase(label), input));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, row == 0 ? 48 : rowHeight));
         table.Controls.Add(new Label
         {
@@ -479,6 +549,14 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
 
     private void SaveInputs()
     {
+        if (!TrySaveInputs())
+            return;
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    private bool TrySaveInputs()
+    {
         var temperatureF = 70.0;
         var sourceSpace = _node.Type == LayoutNodeType.Reservoir
                           && (string.Equals(_node.SpaceRole, "Space Source", StringComparison.OrdinalIgnoreCase)
@@ -489,9 +567,8 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
             && (!double.TryParse(_temperature.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out temperatureF)
                 || temperatureF < -100 || temperatureF > 300))
         {
-            MessageBox.Show(this, "Enter a temperature between -100°F and 300°F.", "Invalid Temperature",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            ShowInputProblem("Enter a temperature between -100°F and 300°F.", "Invalid Temperature");
+            return false;
         }
         if (_node.Type is not (LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CalculationPoint or LayoutNodeType.CustomComponent) && !sinkSpace)
             _node.TemperatureC = UnitConversions.FahrenheitToCelsius(temperatureF);
@@ -499,9 +576,8 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
         {
             if (!double.TryParse(_airflow.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var cfm) || cfm <= 0)
             {
-                MessageBox.Show(this, "Enter a positive airflow in cfm.", "Invalid Airflow",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                ShowInputProblem("Enter a positive airflow in cfm.", "Invalid Airflow");
+                return false;
             }
             _node.AirflowM3PerS = UnitConversions.CfmToM3PerS(cfm);
             _node.AirflowUserSpecified = true;
@@ -511,18 +587,16 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
             if (!double.TryParse(_pressureDrop.Text, NumberStyles.Float, CultureInfo.CurrentCulture,
                     out var fanStaticPressure) || !double.IsFinite(fanStaticPressure) || fanStaticPressure < 0)
             {
-                MessageBox.Show(this, "Enter a nonnegative fan system static pressure in in. w.c.",
-                    "Invalid Fan Static Pressure", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                ShowInputProblem("Enter a nonnegative fan system static pressure in in. w.c.", "Invalid Fan Static Pressure");
+                return false;
             }
             _node.FanStaticPressurePa = UnitConversions.InchesWaterToPa(fanStaticPressure);
             if (!double.TryParse(_fanEfficiency.Text, NumberStyles.Float, CultureInfo.CurrentCulture,
                     out var fanEfficiency) || !double.IsFinite(fanEfficiency)
                 || fanEfficiency <= 0.0 || fanEfficiency > 100.0)
             {
-                MessageBox.Show(this, "Enter a fan efficiency greater than 0% and no more than 100%.",
-                    "Invalid Fan Efficiency", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                ShowInputProblem("Enter a fan efficiency greater than 0% and no more than 100%.", "Invalid Fan Efficiency");
+                return false;
             }
             _node.FanEfficiencyPercent = fanEfficiency;
         }
@@ -534,18 +608,16 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
                 if (!double.TryParse(_pressureDrop.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var sourcePressure)
                     || !double.IsFinite(sourcePressure))
                 {
-                    MessageBox.Show(this, "Enter a valid source pressure in in. w.g.", "Invalid Source Pressure",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
+                    ShowInputProblem("Enter a valid source pressure in in. w.g.", "Invalid Source Pressure");
+                    return false;
                 }
                 _node.PressurePa = UnitConversions.InchesWaterToPa(sourcePressure);
             }
             else if (_node.Type != LayoutNodeType.Reservoir && _node.Type != LayoutNodeType.CalculationPoint
                 && (!double.TryParse(_pressureDrop.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out drop) || drop < 0))
             {
-                MessageBox.Show(this, "Enter a nonnegative pressure drop in in. w.g.", "Invalid Pressure Drop",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                ShowInputProblem("Enter a nonnegative pressure drop in in. w.g.", "Invalid Pressure Drop");
+                return false;
             }
             if (!sourceSpace && _node.Type != LayoutNodeType.CalculationPoint)
                 _node.PressureDropPa = UnitConversions.InchesWaterToPa(drop);
@@ -555,7 +627,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
             if (!TryReadDelta(_deltaX, "ΔX", out var deltaX)
                 || !TryReadDelta(_deltaY, "ΔY", out var deltaY)
                 || !TryReadDelta(_deltaZ, "ΔZ", out var deltaZ))
-                return;
+                return false;
             _node.DeltaXM = UnitConversions.FeetToM(deltaX);
             _node.DeltaYM = UnitConversions.FeetToM(deltaY);
             _node.DeltaZM = UnitConversions.FeetToM(deltaZ);
@@ -566,7 +638,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
             if (!TryReadDelta(_deltaX, $"{kind} X", out var absoluteX)
                 || !TryReadDelta(_deltaY, $"{kind} Y", out var absoluteY)
                 || !TryReadDelta(_deltaZ, $"{kind} Z", out var absoluteZ))
-                return;
+                return false;
             _desiredAbsoluteCoordinate = LayoutPositionReference.FromDisplay(new LayoutCoordinate(
                 UnitConversions.FeetToM(absoluteX), UnitConversions.FeetToM(absoluteY),
                 UnitConversions.FeetToM(absoluteZ)), _reference);
@@ -601,9 +673,8 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
                 }
                 catch (ArgumentException ex)
                 {
-                    MessageBox.Show(this, ex.Message, "GRD Performance Selection",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
+                    ShowInputProblem(ex.Message, "GRD Performance Selection");
+                    return false;
                 }
             }
             else
@@ -618,16 +689,14 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
             _node.Description = _componentDescription.Text.Trim();
             if (string.IsNullOrWhiteSpace(_node.Description))
             {
-                MessageBox.Show(this, "Enter a component description.", "Missing Description",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                ShowInputProblem("Enter a component description.", "Missing Description");
+                return false;
             }
         }
         if (_node.Type == LayoutNodeType.Reservoir)
             _node.SpaceRole = Convert.ToString(_spaceRole.SelectedItem, CultureInfo.CurrentCulture) ?? "Space Sink";
         _node.AirSystemType = SelectedAirSystemType;
-        DialogResult = DialogResult.OK;
-        Close();
+        return true;
     }
 
     private bool TryReadDelta(TextBox input, string name, out double value)
@@ -635,8 +704,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm
         if (double.TryParse(input.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out value)
             && double.IsFinite(value) && Math.Abs(value) <= 100_000)
             return true;
-        MessageBox.Show(this, $"Enter a finite {name} distance between -100,000 ft and 100,000 ft.",
-            "Invalid Coordinate Delta", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        ShowInputProblem($"Enter a finite {name} distance between -100,000 ft and 100,000 ft.", "Invalid Coordinate Delta");
         return false;
     }
 

@@ -1245,9 +1245,10 @@ internal static class Program
             var inspectorDescription = Find<Control>(form, "InspectorDescriptionPage");
             Require(Descendants<Control>(inspectorDescription).Any(control => control.Name == "InspectorInputsSection")
                     && Descendants<Control>(inspectorDescription).Any(control => control.Name == "InspectorOutputsSection")
-                    && Descendants<Control>(inspectorDescription).Any(control => control.Name == "InspectorEditButton")
-                    && Descendants<TextBox>(inspectorDescription).Any(box => box.Text == fanNode.Id),
-                "The Description tab should list the item's details, inputs (with Edit Inputs) and outputs.");
+                    && Descendants<Control>(inspectorDescription).Any(control => control.Name == "InspectorUpdateButton")
+                    && Descendants<Label>(inspectorDescription).Any(label => label.Name == "InspectorValue" && label.Text == fanNode.Id)
+                    && !Descendants<TextBox>(inspectorDescription).Any(box => box.Text == fanNode.Id),
+                "The Description tab should show fixed values as text, editable inputs in place, Update, and the outputs.");
             ClickButton(Find<Button>(form, "InspectorCalculationsTab"));
             Application.DoEvents();
             Require(Find<RichTextBox>(form, "InspectorCalculations").Text.Length > 20,
@@ -3858,6 +3859,54 @@ internal static class Program
             ClickButton(Find<Button>(form, "TopTabProject"));
             Application.DoEvents();
 
+            // In-place editing in the Selection Inspector (polish round). Run last on this project because an applied
+            // edit confirms positions, which the drawing checks above do not expect.
+            var editedComponent = ribbonModel.LayoutNodes.FirstOrDefault(node => node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.CustomComponent)
+                                  ?? ribbonModel.LayoutNodes.First(node => node.Type == LayoutNodeType.Fan);
+            double ComponentDropPa() => editedComponent.Type == LayoutNodeType.Fan ? editedComponent.FanStaticPressurePa : editedComponent.PressureDropPa;
+            form.LayoutScreen.SelectLayoutItemById(editedComponent.Id);
+            Application.DoEvents();
+            TextBox InspectorBox(string name) => Descendants<TextBox>(Find<Control>(form, "InspectorDescriptionPage")).Single(box => box.Name == name);
+            Require(Find<Label>(form, "InspectorTitle").Text.StartsWith(editedComponent.Id, StringComparison.Ordinal)
+                    && !InspectorBox("LayoutEquipmentPressureDropText").ReadOnly
+                    && Descendants<Label>(Find<Control>(form, "InspectorDescriptionPage")).Any(label => label.Name == "InspectorValue" && label.Text == editedComponent.Id)
+                    && !Descendants<TextBox>(Find<Control>(form, "InspectorDescriptionPage")).Any(box => box.Text == editedComponent.Id),
+                "The inspector should show fixed values as text and the component's pressure drop as an editable box.");
+            var dropBefore = ComponentDropPa();
+            InspectorBox("LayoutEquipmentPressureDropText").Text = "0.37";
+            Application.DoEvents();
+            var inspectorPanel = Find<Control>(form, "SelectionInspector");
+            Require((bool)inspectorPanel.GetType().GetField("_sessionDirty", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(inspectorPanel)!
+                    && Math.Abs(ComponentDropPa() - dropBefore) < 1e-9,
+                "Typing in the inspector should mark the edit as not yet applied and leave the project unchanged.");
+            ClickButton(Find<Button>(form, "InspectorUpdateButton"));
+            Application.DoEvents();
+            Require(Math.Abs(ComponentDropPa() - UnitConversions.InchesWaterToPa(0.37)) < 1e-6
+                    && Find<Label>(form, "InspectorTitle").Text.StartsWith(editedComponent.Id, StringComparison.Ordinal)
+                    && Find<Button>(form, "LayoutUndoButton").Enabled,
+                "Update in the inspector should apply the edit through the component editor, keep the item shown, and be undoable.");
+            InspectorBox("LayoutEquipmentPressureDropText").Text = "-1";
+            Application.DoEvents();
+            ClickButton(Find<Button>(form, "InspectorUpdateButton"));
+            Application.DoEvents();
+            Require(Math.Abs(ComponentDropPa() - UnitConversions.InchesWaterToPa(0.37)) < 1e-6
+                    && Find<Label>(form, "LayoutEquipmentInlineStatus").Text.Contains("nonnegative", StringComparison.OrdinalIgnoreCase),
+                "An invalid value in the inspector should be refused (with the reason shown) and leave the project unchanged.");
+            ClickButton(Find<Button>(form, "InspectorCancelButton"));
+            Application.DoEvents();
+            Require(InspectorBox("LayoutEquipmentPressureDropText").Text == "0.37",
+                "Cancel should discard unapplied inspector edits.");
+            var inlineDuct = ribbonModel.LayoutNodes.FirstOrDefault(node => !string.IsNullOrWhiteSpace(node.ParentNodeId) && node.ConnectionDuctSequence is not null);
+            if (inlineDuct is not null)
+            {
+                form.LayoutScreen.SelectLayoutItemById(ribbonModel.Ducts.Single(duct => duct.Sequence == inlineDuct.ConnectionDuctSequence).Id);
+                Application.DoEvents();
+                Require(Find<Button>(form, "InspectorUpdateButton").Text == "Update Duct"
+                        && Descendants<ComboBox>(Find<Control>(form, "InspectorDescriptionPage")).Any(combo => combo.Name == "LayoutDuctSizingMethodCombo")
+                        && form.Controls.Find("InspectorReverseFlowButton", true).Length == 1,
+                    "A duct should be editable in the inspector with the duct editor's own inputs (and Reverse Flow Direction).");
+            }
+
             var userBeforeNew = ribbonModel.UserName;
             ClickButton(Find<Button>(form, "RibbonNewProjectButton"));
             Application.DoEvents();
@@ -3887,7 +3936,8 @@ internal static class Program
             Console.WriteLine("PASS  Selection Inspector: description, calculations, notes");
             Console.WriteLine("PASS  Project Explorer, Errors and Validation lists");
             Console.WriteLine("PASS  Analysis summary, report preview and Print Report");
-            Console.WriteLine("20/20 UI verification checks passed.");
+            Console.WriteLine("PASS  Display scaling, resizable panels and in-place editing in the inspector");
+            Console.WriteLine("21/21 UI verification checks passed.");
             return 0;
         }
         catch (Exception ex)
