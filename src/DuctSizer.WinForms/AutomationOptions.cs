@@ -34,6 +34,9 @@ internal static class AutomationOptions
     /// <summary>When set, Open Project loads this file instead of showing an Open dialog.</summary>
     public static string? OpenProjectPath { get; set; }
 
+    /// <summary>When set, Print Report writes the PDF here instead of showing a Save dialog (and does not open it).</summary>
+    public static string? ReportPdfPath { get; set; }
+
     /// <summary>Restores every switch to its interactive default.</summary>
     public static void Reset()
     {
@@ -43,5 +46,6 @@ internal static class AutomationOptions
         DuctInsertionChoice = null;
         ExportBasePath = null;
         OpenProjectPath = null;
+        ReportPdfPath = null;
     }
 }

@@ -397,54 +397,17 @@ internal sealed partial class DuctSystemScreen
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 4,
             BackColor = _host.BackColor,
             Padding = new Padding(14)
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 80F));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82F));
+        // Analysis tab: summary (overview + top ten pressure drops), table actions, the full table, status.
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 262F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
 
-        var header = new SectionTitlePanel
-        {
-            Name = "SystemSectionHeader",
-            Dock = DockStyle.Fill,
-            BackColor = UiPalette.Blue
-        };
-        header.Controls.Add(new Label
-        {
-            Text = "Duct System",
-            Dock = DockStyle.Top,
-            Height = 46,
-            Padding = new Padding(28, 4, 0, 0),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 18F),
-            TextAlign = ContentAlignment.MiddleLeft,
-            BackColor = Color.Transparent
-        });
-        header.Controls.Add(new Label
-        {
-            Text = "Saved components, airflow paths, and critical-route total pressure loss",
-            Dock = DockStyle.Bottom,
-            Height = 30,
-            Padding = new Padding(31, 0, 0, 7),
-            ForeColor = Color.FromArgb(215, 229, 242),
-            Font = new Font("Segoe UI", 9.2F),
-            BackColor = Color.Transparent
-        });
-
-        var summaryHost = new RoundedPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.White,
-            CornerRadius = 11,
-            BorderColor = UiPalette.CardBorder,
-            Padding = new Padding(14, 7, 14, 7),
-            Margin = new Padding(0, 6, 0, 0)
-        };
         var summary = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -476,7 +439,7 @@ internal sealed partial class DuctSystemScreen
         summary.Controls.Add(_systemTotalLabel, 0, 0);
         summary.Controls.Add(_systemCriticalLabel, 1, 0);
         summary.Controls.Add(_systemCountLabel, 2, 0);
-        summaryHost.Controls.Add(summary);
+        var analysisSummary = BuildAnalysisSummary(summary);
 
         var actions = new TableLayoutPanel
         {
@@ -541,11 +504,10 @@ internal sealed partial class DuctSystemScreen
         _systemStorageStatusLabel.AutoEllipsis = true;
         _systemStorageStatusLabel.Text = "Saved automatically on this computer. No database or network connection is used.";
 
-        root.Controls.Add(header, 0, 0);
-        root.Controls.Add(summaryHost, 0, 1);
-        root.Controls.Add(actions, 0, 2);
-        root.Controls.Add(_ductGrid, 0, 3);
-        root.Controls.Add(_systemStorageStatusLabel, 0, 4);
+        root.Controls.Add(analysisSummary, 0, 0);
+        root.Controls.Add(actions, 0, 1);
+        root.Controls.Add(_ductGrid, 0, 2);
+        root.Controls.Add(_systemStorageStatusLabel, 0, 3);
         return root;
     }
 
@@ -1155,6 +1117,12 @@ internal sealed partial class DuctSystemScreen
 
     internal void RefreshDuctSystemGrid()
     {
+        RefreshDuctSystemGridCore();
+        RefreshAnalysisSummary();
+    }
+
+    private void RefreshDuctSystemGridCore()
+{
         if (_ductGrid.Columns.Count == 0)
             return;
 
@@ -2508,6 +2476,64 @@ internal sealed partial class DuctSystemScreen
         }
     }
 
+    /// <summary>
+    /// Writes the project report (the PDF that Save produces next to the project file) to <paramref name="pdfPath"/>.
+    /// Used by Save, Print Report and the Reports tab preview, so all three show the same document.
+    /// </summary>
+    internal void WriteReportPdf(string pdfPath)
+    {
+        RefreshDuctSystemGrid();
+        var headers = new[]
+        {
+            _host._currentUnits == UnitSystem.Imperial ? "Airflow (cfm)" : "Airflow (L/s)",
+            _host._currentUnits == UnitSystem.Imperial ? "Static Pressure In (in. w.c.)" : "Static Pressure In (Pa)",
+            _host._currentUnits == UnitSystem.Imperial ? "Static Pressure Out (in. w.c.)" : "Static Pressure Out (Pa)",
+            "Air System", _host._currentUnits == UnitSystem.Imperial ? "Temperature (deg F)" : "Temperature (deg C)",
+            _host._currentUnits == UnitSystem.Imperial ? "Pressure Rate (in. w.c./100 ft)" : "Pressure Rate (Pa/m)",
+            _host._currentUnits == UnitSystem.Imperial ? "Velocity (fpm)" : "Velocity (m/s)",
+            _host._currentUnits == UnitSystem.Imperial ? "Length (ft)" : "Length (m)", "Duct Size"
+        };
+        headers = new[] { "Item ID", "Description" }.Concat(headers).ToArray();
+        var rows = _ductGrid.Rows.Cast<DataGridViewRow>()
+            .Select(row => (IReadOnlyList<string>)new[]
+            {
+                Cell(row, "Id"), Cell(row, "Description"), Cell(row, "Airflow"), Cell(row, "PressureIn"),
+                Cell(row, "PressureOut"), Cell(row, "AirSystem"), Cell(row, "Temperature"),
+                Cell(row, "PressureRate"), Cell(row, "Velocity"), Cell(row, "Length"), Cell(row, "Size")
+            }).ToArray();
+        var projectDate = DateTime.TryParse(_ductSystem.ProjectDate, CultureInfo.InvariantCulture,
+            DateTimeStyles.AllowWhiteSpaces, out var parsedDate)
+            ? parsedDate.ToString("MMMM d, yyyy", CultureInfo.CurrentCulture)
+            : string.IsNullOrWhiteSpace(_ductSystem.ProjectDate)
+                ? DateTime.Today.ToString("MMMM d, yyyy", CultureInfo.CurrentCulture)
+                : _ductSystem.ProjectDate;
+        var logo = BuildReportLogo();
+        var fan = _ductSystem.LayoutNodes.SingleOrDefault(x => x.Type == LayoutNodeType.Fan);
+        var fanHorsepower = fan is null ? 0.0 : TryBrakeHorsepower(fan.AirflowM3PerS,
+            fan.FanStaticPressurePa, fan.FanEfficiencyPercent);
+        var metadata = new DuctSystemPdfMetadata(_ductSystem.UserName, _ductSystem.ProjectName,
+            _ductSystem.ProjectNumber, projectDate, logo.Base64, logo.Width, logo.Height,
+            DateTime.Now.ToString("MMMM d, yyyy h:mm tt", CultureInfo.CurrentCulture),
+            fan?.Id ?? "No fan added", fan is null ? "Not available" : FormatSystemAirflow(fan.AirflowM3PerS),
+            fan is null ? "Not available" : FormatSystemTotal(fan.FanStaticPressurePa),
+            fan is null ? "Not available" : $"{fan.FanEfficiencyPercent:0.#}%",
+            fan is null ? "Not available" : FormatHorsepower(fanHorsepower),
+            !_criticalPathCalculated
+                ? "Not calculated"
+                : _criticalPathIssues.Count > 0
+                    ? $"Not available. {CriticalPathIssueSummary()}."
+                    : $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss)"
+                      + LayoutGeometryNote(". ")
+                      + (LayoutReviewMessages() is { Count: > 0 } review
+                          ? ": " + string.Join(" ", review.Take(6))
+                          : string.Empty));
+        DuctSystemPdf.Export(pdfPath, "Duct System Schedule",
+            $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_host._currentUnits} units", headers, rows,
+            _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)
+                .Replace("\n", " — ", StringComparison.Ordinal),
+            metadata, BuildPdfLayout(), BuildPdfReportItems(), BuildPdfSchematics());
+    }
+
     internal void ExportDuctSystem()
     {
         var automatedExportPath = AutomationOptions.ExportBasePath;
@@ -2572,56 +2598,7 @@ internal sealed partial class DuctSystemScreen
             _systemStorageStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
             Application.DoEvents();
 
-            RefreshDuctSystemGrid();
-            var headers = new[]
-            {
-                _host._currentUnits == UnitSystem.Imperial ? "Airflow (cfm)" : "Airflow (L/s)",
-                _host._currentUnits == UnitSystem.Imperial ? "Static Pressure In (in. w.c.)" : "Static Pressure In (Pa)",
-                _host._currentUnits == UnitSystem.Imperial ? "Static Pressure Out (in. w.c.)" : "Static Pressure Out (Pa)",
-                "Air System", _host._currentUnits == UnitSystem.Imperial ? "Temperature (deg F)" : "Temperature (deg C)",
-                _host._currentUnits == UnitSystem.Imperial ? "Pressure Rate (in. w.c./100 ft)" : "Pressure Rate (Pa/m)",
-                _host._currentUnits == UnitSystem.Imperial ? "Velocity (fpm)" : "Velocity (m/s)",
-                _host._currentUnits == UnitSystem.Imperial ? "Length (ft)" : "Length (m)", "Duct Size"
-            };
-            headers = new[] { "Item ID", "Description" }.Concat(headers).ToArray();
-            var rows = _ductGrid.Rows.Cast<DataGridViewRow>()
-                .Select(row => (IReadOnlyList<string>)new[]
-                {
-                    Cell(row, "Id"), Cell(row, "Description"), Cell(row, "Airflow"), Cell(row, "PressureIn"),
-                    Cell(row, "PressureOut"), Cell(row, "AirSystem"), Cell(row, "Temperature"),
-                    Cell(row, "PressureRate"), Cell(row, "Velocity"), Cell(row, "Length"), Cell(row, "Size")
-                }).ToArray();
-            var projectDate = DateTime.TryParse(_ductSystem.ProjectDate, CultureInfo.InvariantCulture,
-                DateTimeStyles.AllowWhiteSpaces, out var parsedDate)
-                ? parsedDate.ToString("MMMM d, yyyy", CultureInfo.CurrentCulture)
-                : string.IsNullOrWhiteSpace(_ductSystem.ProjectDate)
-                    ? DateTime.Today.ToString("MMMM d, yyyy", CultureInfo.CurrentCulture)
-                    : _ductSystem.ProjectDate;
-            var logo = BuildReportLogo();
-            var fan = _ductSystem.LayoutNodes.SingleOrDefault(x => x.Type == LayoutNodeType.Fan);
-            var fanHorsepower = fan is null ? 0.0 : TryBrakeHorsepower(fan.AirflowM3PerS,
-                fan.FanStaticPressurePa, fan.FanEfficiencyPercent);
-            var metadata = new DuctSystemPdfMetadata(_ductSystem.UserName, _ductSystem.ProjectName,
-                _ductSystem.ProjectNumber, projectDate, logo.Base64, logo.Width, logo.Height,
-                DateTime.Now.ToString("MMMM d, yyyy h:mm tt", CultureInfo.CurrentCulture),
-                fan?.Id ?? "No fan added", fan is null ? "Not available" : FormatSystemAirflow(fan.AirflowM3PerS),
-                fan is null ? "Not available" : FormatSystemTotal(fan.FanStaticPressurePa),
-                fan is null ? "Not available" : $"{fan.FanEfficiencyPercent:0.#}%",
-                fan is null ? "Not available" : FormatHorsepower(fanHorsepower),
-                !_criticalPathCalculated
-                    ? "Not calculated"
-                    : _criticalPathIssues.Count > 0
-                        ? $"Not available. {CriticalPathIssueSummary()}."
-                        : $"{_criticalPathRoute} ({FormatSystemTotal(_criticalPathPressureLossPa)} total loss)"
-                          + LayoutGeometryNote(". ")
-                          + (LayoutReviewMessages() is { Count: > 0 } review
-                              ? ": " + string.Join(" ", review.Take(6))
-                              : string.Empty));
-            DuctSystemPdf.Export(temporaryPdfPath, "Duct System Schedule",
-                $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_host._currentUnits} units", headers, rows,
-                _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)
-                    .Replace("\n", " — ", StringComparison.Ordinal),
-                metadata, BuildPdfLayout(), BuildPdfReportItems(), BuildPdfSchematics());
+            WriteReportPdf(temporaryPdfPath);
             DuctSystemCsv.Export(temporaryCsvPath, _ductSystem);
             File.Move(temporaryPdfPath, pdfPath, overwrite: true);
             File.Move(temporaryCsvPath, csvPath, overwrite: true);

@@ -258,7 +258,9 @@ internal sealed class MainRibbon
         var page = NewRibbonPage("RibbonReportsPage");
         var report = AddGroup(page, "RibbonReportGroup", "Report");
         AddButton(report, "RibbonPrintReportButton", "Print\nReport", RibbonIcon.PrintReport,
-            "Create the PDF report (saved with the project and its CSV schedule).", () => SystemScreen.ExportDuctSystem());
+            "Save the project report as a PDF and open it for printing.", () => _reportPreview?.PrintReport());
+        AddButton(report, "RibbonRefreshPreviewButton", "Refresh\nPreview", RibbonIcon.Reports,
+            "Rebuild the report preview from the current project.", () => _reportPreview?.RefreshPreview());
         return page;
     }
 
@@ -275,32 +277,12 @@ internal sealed class MainRibbon
         return page;
     }
 
-    /// <summary>The Reports page. Stage 4 replaces this with a page-by-page preview of the report.</summary>
-    internal Control BuildReportsPage()
-    {
-        var page = new Panel { Name = "ReportsPage", Dock = DockStyle.Fill, BackColor = _host.BackColor, Padding = new Padding(24) };
-        var card = new RoundedPanel
-        {
-            Name = "ReportsInformationCard",
-            Dock = DockStyle.Top,
-            Height = 150,
-            CornerRadius = 10,
-            BackColor = Color.White,
-            Padding = new Padding(22, 18, 22, 18)
-        };
-        card.Controls.Add(new Label
-        {
-            Name = "ReportsInformationText",
-            Dock = DockStyle.Fill,
-            ForeColor = RibbonPalette.Ink,
-            Font = new Font("Segoe UI", 10F),
-            Text = "Project report\r\n\r\nPrint Report creates the PDF report: project information, the duct system schedule, "
-                   + "the critical path, the layout drawing and the calculation sheets for each item. It is saved next to "
-                   + "the project file together with the CSV schedule.\r\n\r\nA page-by-page preview of the report will appear here."
-        });
-        page.Controls.Add(card);
-        return page;
-    }
+    private ReportPreview? _reportPreview;
+
+    /// <summary>The Reports page: a page-by-page preview of the project report.</summary>
+    internal Control BuildReportsPage() => _reportPreview = new ReportPreview(_host);
+
+    internal ReportPreview? Reports => _reportPreview;
 
     private ContextMenuStrip BuildRoundSizesMenu()
     {
@@ -361,7 +343,9 @@ internal sealed class MainRibbon
                 break;
             case TopTab.Reports:
                 SystemScreen._mainTabs.SelectedTab = SystemScreen._reportsTab;
-                break;
+                SynchronizeWithPage();
+                _reportPreview?.RefreshPreview();
+                return;
             case TopTab.QuickCalc:
                 ShowQuickCalc(_lastQuickCalcPage ?? SystemScreen._calculatorTab, clearEditing: false);
                 break;

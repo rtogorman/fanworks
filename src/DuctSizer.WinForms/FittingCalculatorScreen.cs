@@ -166,7 +166,8 @@ internal sealed partial class FittingCalculatorScreen
             BackColor = _host.BackColor
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+        // A slim title band: the main tabs and ribbon already say where you are (v0.96).
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
 
@@ -180,10 +181,10 @@ internal sealed partial class FittingCalculatorScreen
         {
             Text = "Fitting Calculator",
             Dock = DockStyle.Top,
-            Height = 50,
-            Padding = new Padding(28, 4, 0, 0),
+            Height = 30,
+            Padding = new Padding(20, 2, 0, 0),
             ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 18F),
+            Font = new Font("Segoe UI Semibold", 13F),
             TextAlign = ContentAlignment.MiddleLeft,
             BackColor = Color.Transparent
         });
@@ -191,10 +192,10 @@ internal sealed partial class FittingCalculatorScreen
         {
             Text = "ASHRAE fittings • manufacturer GRD performance • airflow • pressure loss",
             Dock = DockStyle.Bottom,
-            Height = 34,
-            Padding = new Padding(31, 0, 0, 7),
+            Height = 22,
+            Padding = new Padding(22, 0, 0, 6),
             ForeColor = Color.FromArgb(215, 229, 242),
-            Font = new Font("Segoe UI", 9.2F),
+            Font = new Font("Segoe UI", 8.5F),
             BackColor = Color.Transparent
         });
 

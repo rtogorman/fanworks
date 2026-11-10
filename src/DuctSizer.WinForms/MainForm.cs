@@ -183,7 +183,8 @@ public sealed partial class MainForm : Form
             BackColor = BackColor
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88F));
+        // A slim title band: the main tabs and ribbon already say where you are (v0.96).
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));
 
@@ -198,11 +199,11 @@ public sealed partial class MainForm : Form
             Name = "CalculatorPageTitle",
             Text = "Duct Calculator",
             AutoSize = false,
-            Size = new Size(360, 50),
+            Size = new Size(360, 30),
             ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 20F),
+            Font = new Font("Segoe UI Semibold", 13F),
             TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(28, 0),
+            Location = new Point(20, 2),
             BackColor = Color.Transparent
         };
         var subtitle = new Label
@@ -210,11 +211,11 @@ public sealed partial class MainForm : Form
             Name = "CalculatorPageSubtitle",
             Text = "HVAC duct sizing • ASHRAE fitting calculations • system pressure loss",
             AutoSize = false,
-            Size = new Size(780, 28),
+            Size = new Size(780, 18),
             ForeColor = Color.FromArgb(215, 229, 242),
-            Font = new Font("Segoe UI", 9.5F),
+            Font = new Font("Segoe UI", 8.5F),
             TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(31, 51),
+            Location = new Point(22, 32),
             BackColor = Color.Transparent
         };
         var version = new Label
@@ -227,7 +228,7 @@ public sealed partial class MainForm : Form
             BackColor = Color.FromArgb(44, 98, 146),
             Font = new Font("Segoe UI Semibold", 8F),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            Location = new Point(Width - 103, 29)
+            Location = new Point(Width - 103, 13)
         };
         titlePanel.Resize += (_, _) =>
         {
