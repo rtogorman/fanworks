@@ -5,7 +5,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class FanInformationDialog : Form
+internal sealed class FanInformationDialog : DpiScaledForm
 {
     internal FanInformationDialog(string information)
     {

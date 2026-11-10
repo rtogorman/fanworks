@@ -7,7 +7,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutBranchChoiceDialog : Form
+internal sealed class LayoutBranchChoiceDialog : DpiScaledForm
 {
     private readonly RadioButton _mainPath = new();
     private readonly RadioButton _newBranch = new();

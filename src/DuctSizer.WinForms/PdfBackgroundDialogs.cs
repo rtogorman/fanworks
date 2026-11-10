@@ -4,7 +4,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class PdfBackgroundImportDialog : Form
+internal sealed class PdfBackgroundImportDialog : DpiScaledForm
 {
     private readonly string _path;
     private readonly PdfPageRenderSession _session;
@@ -329,7 +329,7 @@ internal sealed class PdfBackgroundImportDialog : Form
     }
 }
 
-internal sealed class PdfBackgroundPropertiesDialog : Form
+internal sealed class PdfBackgroundPropertiesDialog : DpiScaledForm
 {
     private readonly TextBox _paperInches;
     private readonly TextBox _drawingFeet;

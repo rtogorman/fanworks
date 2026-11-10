@@ -469,7 +469,9 @@ internal static class Program
                         .GetValue(layoutCanvas) is null,
                 "Escape cancellation should clear the selected toolbox component and canvas placement mode.");
             Require(layoutSummaryGrid.Columns.Cast<DataGridViewColumn>().Select(x => x.Name).SequenceEqual(
-                        new[] { "Id", "StaticDrop", "Airflow", "Upstream", "Downstream", "AbsoluteX", "AbsoluteY", "AbsoluteZ" })
+                        new[] { "Id", "Description", "Branch", "Size", "Airflow", "Velocity", "PressureRate", "StaticDrop", "PressureIn",
+                            "PressureOut", "Length", "Upstream", "Downstream", "AbsoluteX", "AbsoluteY", "AbsoluteZ" })
+                    && layoutSummaryGrid.AutoSizeColumnsMode == DataGridViewAutoSizeColumnsMode.Fill
                     && layoutSummarySplitter.Orientation == Orientation.Horizontal
                     && !layoutSummarySplitter.Panel2Collapsed
                     && IsDescendantOf(layoutSummaryGrid, layoutSummarySplitter.Panel2)

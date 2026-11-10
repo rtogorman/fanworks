@@ -7,7 +7,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class SourceSinkEditorDialog : Form
+internal sealed class SourceSinkEditorDialog : DpiScaledForm
 {
     private readonly IReadOnlyList<SavedLayoutNode> _boundaries;
     private readonly Dictionary<int, TextBox> _airflowInputs = new();

@@ -161,8 +161,8 @@ internal sealed partial class DuctSystemScreen
             ColumnCount = 5,
             RowCount = 1
         };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 380));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -171,7 +171,7 @@ internal sealed partial class DuctSystemScreen
         _projectHeaderAppIcon.Name = "ProjectHeaderAppIcon";
         _projectHeaderAppIcon.Dock = DockStyle.Fill;
         _projectHeaderAppIcon.SizeMode = PictureBoxSizeMode.Zoom;
-        _projectHeaderAppIcon.Margin = new Padding(0, 8, 4, 8);
+        _projectHeaderAppIcon.Margin = new Padding(0, 4, 4, 4);
         _projectHeaderAppIcon.BackColor = Color.Transparent;
         using (var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream(
                    "DuctSizer.WinForms.Assets.DuctSizerCentrifugalIcon.png"))
@@ -179,12 +179,14 @@ internal sealed partial class DuctSystemScreen
             _projectHeaderAppIcon.Image = sourceIcon is null ? _host.Icon?.ToBitmap() : new Bitmap(sourceIcon);
 
         _projectHeaderBrand.Name = "ProjectHeaderBrand";
-        _projectHeaderBrand.Dock = DockStyle.Fill;
+        // Sized to its text so the name is never cut off at any display scale.
+        _projectHeaderBrand.AutoSize = true;
+        _projectHeaderBrand.Anchor = AnchorStyles.Left;
         _projectHeaderBrand.Text = "FanWorks";
         _projectHeaderBrand.ForeColor = Color.White;
-        _projectHeaderBrand.Font = new Font("Segoe UI Semibold", 14F);
+        _projectHeaderBrand.Font = new Font("Segoe UI Semibold", 15F);
         _projectHeaderBrand.TextAlign = ContentAlignment.MiddleLeft;
-        _projectHeaderBrand.Margin = Padding.Empty;
+        _projectHeaderBrand.Margin = new Padding(2, 0, 18, 0);
         _projectHeaderBrand.BackColor = Color.Transparent;
 
         _projectHeaderLogo.Name = "ProjectHeaderLogo";

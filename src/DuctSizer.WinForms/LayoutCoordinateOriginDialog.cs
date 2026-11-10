@@ -7,7 +7,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutCoordinateOriginDialog : Form
+internal sealed class LayoutCoordinateOriginDialog : DpiScaledForm
 {
     private readonly UnitSystem _units;
     private readonly TextBox _x = new();

@@ -7,7 +7,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutFittingEditDialog : Form
+internal sealed class LayoutFittingEditDialog : DpiScaledForm
 {
     private static readonly HashSet<string> JunctionDerivedKeys = new(StringComparer.OrdinalIgnoreCase)
     {

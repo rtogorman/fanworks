@@ -87,20 +87,9 @@ internal sealed class MainRibbon
         return ribbon;
     }
 
-    private FlowLayoutPanel NewRibbonPage(string name) => new()
-    {
-        Name = name,
-        Dock = DockStyle.Fill,
-        FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = false,
-        AutoScroll = true,
-        Margin = Padding.Empty,
-        Padding = Padding.Empty,
-        BackColor = RibbonPalette.Ribbon,
-        Visible = false
-    };
+    private static RibbonPage NewRibbonPage(string name) => new(name);
 
-    private RibbonGroup AddGroup(FlowLayoutPanel page, string name, string caption)
+    private static RibbonGroup AddGroup(RibbonPage page, string name, string caption)
     {
         var group = new RibbonGroup(name, caption);
         page.Controls.Add(group);
@@ -124,6 +113,7 @@ internal sealed class MainRibbon
     private Control BuildProjectRibbon()
     {
         var page = NewRibbonPage("RibbonProjectPage");
+        page.FillWidth = true;
 
         var project = AddGroup(page, "RibbonProjectGroup", "Project");
         AddButton(project, "RibbonNewProjectButton", "New\nProject", RibbonIcon.NewProject,
@@ -207,28 +197,16 @@ internal sealed class MainRibbon
         return page;
     }
 
-    private void AddComponentGroup(FlowLayoutPanel page, string name, string caption,
+    private void AddComponentGroup(RibbonPage page, string name, string caption,
         IReadOnlyList<(LayoutNodeType Type, string Title, string Detail, string? Group)> tools)
     {
         var group = AddGroup(page, name, caption);
-        var columns = (tools.Count + 1) / 2;
-        var grid = new TableLayoutPanel
+        var grid = new RibbonToolGrid(name + "Tools");
+        foreach (var (type, title, detail, fittingGroup) in tools)
         {
-            Name = name + "Tools",
-            ColumnCount = columns,
-            RowCount = 2,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = Padding.Empty,
-            Padding = Padding.Empty,
-            BackColor = RibbonPalette.Ribbon
-        };
-        for (var index = 0; index < tools.Count; index++)
-        {
-            var (type, title, detail, fittingGroup) = tools[index];
             var tool = Layout.CreateRibbonLayoutTool(type, title, detail, fittingGroup);
             tool.Click += (_, _) => ShowTab(TopTab.Project);
-            grid.Controls.Add(tool, index / 2, index % 2);
+            grid.Controls.Add(tool);
         }
         group.Content.Controls.Add(grid);
     }

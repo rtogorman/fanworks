@@ -5,7 +5,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class AutomaticSizingInputsDialog : Form
+internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
 {
     private sealed record SizingChoice<T>(string Label, T Value)
     {

@@ -7,7 +7,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutComponentPlacementDialog : Form
+internal sealed class LayoutComponentPlacementDialog : DpiScaledForm
 {
     private readonly SavedLayoutNode _node;
     private readonly TextBox _deltaX = new();

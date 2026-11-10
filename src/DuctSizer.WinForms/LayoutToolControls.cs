@@ -62,6 +62,9 @@ internal sealed class LayoutToolCard : Control
 
     internal string Title => _title;
 
+    /// <summary>Caption font of ribbon tools (shared; also used to measure column widths).</summary>
+    internal static Font CaptionFont { get; } = new("Segoe UI", 7.5F);
+
     private bool _hover;
 
     protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -85,13 +88,12 @@ internal sealed class LayoutToolCard : Control
             using var fill = new SolidBrush(RibbonPalette.Hover);
             e.Graphics.FillPath(fill, hover);
         }
-        const int captionHeight = 13;
-        var compactIcon = Math.Max(16, Math.Min(24, Height - captionHeight - 3));
+        var captionHeight = TextRenderer.MeasureText("Ag", CaptionFont, Size.Empty, TextFormatFlags.NoPadding).Height + 1;
+        var compactIcon = Math.Max(DpiScaling.Scale(14), Math.Min(DpiScaling.Scale(22), Height - captionHeight - DpiScaling.Scale(4)));
         LayoutIconPainter.Draw(e.Graphics, _type,
-            new Rectangle((Width - compactIcon) / 2, 2, compactIcon, compactIcon),
+            new Rectangle((Width - compactIcon) / 2, DpiScaling.Scale(2), compactIcon, compactIcon),
             Color.FromArgb(21, 83, 99), _fittingGroup);
-        using var font = new Font("Segoe UI", 7.25F);
-        TextRenderer.DrawText(e.Graphics, _title, font, new Rectangle(0, Height - captionHeight - 1, Width, captionHeight),
+        TextRenderer.DrawText(e.Graphics, _title, CaptionFont, new Rectangle(0, Height - captionHeight - 1, Width, captionHeight),
             RibbonPalette.Ink, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.NoPadding
                                | TextFormatFlags.EndEllipsis);
     }

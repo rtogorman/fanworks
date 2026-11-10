@@ -7,7 +7,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutFittingNodeDialog : Form
+internal sealed class LayoutFittingNodeDialog : DpiScaledForm
 {
     private readonly ComboBox _upstream = new();
     private readonly ComboBox _airSystem = new();

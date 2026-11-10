@@ -83,6 +83,9 @@ internal sealed partial class LayoutDesignerScreen
         Converters = { new JsonStringEnumConverter() }
     };
 
+    /// <summary>Width of the drag bars beside the Project Explorer and Selection Inspector (96-DPI pixels).</summary>
+    private const int PanelSplitterWidth = 8;
+
     internal Control BuildLayoutDesignerPage()
     {
         // The Project tab's centre. Commands that used to sit in a header and button row now live in the main
@@ -92,13 +95,16 @@ internal sealed partial class LayoutDesignerScreen
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 3,
+            ColumnCount = 5,
             RowCount = 3,
             Padding = new Padding(8, 6, 8, 4),
             BackColor = _host.BackColor
         };
+        // Explorer | drag bar | drawing | drag bar | inspector. The side panels are resized with the drag bars.
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ProjectExplorer.ExpandedWidth));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, PanelSplitterWidth));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, PanelSplitterWidth));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, SelectionInspector.ExpandedWidth));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -201,23 +207,26 @@ internal sealed partial class LayoutDesignerScreen
             Name = "LayoutWorkspaceSplitter",
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterWidth = 6,
+            SplitterWidth = 8,
             FixedPanel = FixedPanel.Panel2,
             BackColor = Color.FromArgb(215, 224, 231)
         };
-        _layoutWorkspaceSplitter.SizeChanged += (_, _) =>
+        _layoutWorkspaceSplitter.SizeChanged += (_, _) => InitializeLayoutSummarySplitter();
+        // Set up once the page is on screen, i.e. after the window has been scaled to the display.
+        _layoutWorkspaceSplitter.VisibleChanged += (_, _) => InitializeLayoutSummarySplitter();
+        void InitializeLayoutSummarySplitter()
         {
-            if (_layoutWorkspaceSplitter.Height < 320)
+            if (!_layoutWorkspaceSplitter.Visible || _layoutWorkspaceSplitter.Height < DpiScaling.Scale(320))
                 return;
             _updatingLayoutSummarySplitter = true;
             try
             {
-                _layoutWorkspaceSplitter.Panel1MinSize = 160;
-                _layoutWorkspaceSplitter.Panel2MinSize = 110;
+                _layoutWorkspaceSplitter.Panel1MinSize = DpiScaling.Scale(160);
+                _layoutWorkspaceSplitter.Panel2MinSize = DpiScaling.Scale(110);
                 if (!_layoutWorkspaceSplitter.Panel2Collapsed && !_layoutSummaryInitialized)
                 {
-                    _layoutWorkspaceSplitter.SplitterDistance = Math.Max(160,
-                        _layoutWorkspaceSplitter.Height - _layoutSummaryWidth - _layoutWorkspaceSplitter.SplitterWidth);
+                    _layoutWorkspaceSplitter.SplitterDistance = Math.Max(DpiScaling.Scale(160),
+                        _layoutWorkspaceSplitter.Height - DpiScaling.Scale(_layoutSummaryWidth) - _layoutWorkspaceSplitter.SplitterWidth);
                     _layoutSummaryInitialized = true;
                 }
             }
@@ -225,11 +234,24 @@ internal sealed partial class LayoutDesignerScreen
             {
                 _updatingLayoutSummarySplitter = false;
             }
+        }
+        _layoutWorkspaceSplitter.Paint += (_, args) =>
+        {
+            // Grip dots so it is obvious the bottom panel can be dragged up and down.
+            var bar = _layoutWorkspaceSplitter.SplitterRectangle;
+            if (_layoutWorkspaceSplitter.Panel2Collapsed || bar.Height <= 0)
+                return;
+            args.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var dot = new SolidBrush(Color.FromArgb(120, 140, 158));
+            var size = DpiScaling.Scale(3F);
+            var spacing = DpiScaling.Scale(6F);
+            for (var index = -1; index <= 1; index++)
+                args.Graphics.FillEllipse(dot, bar.Left + bar.Width / 2F + index * spacing - size / 2, bar.Top + bar.Height / 2F - size / 2, size, size);
         };
         _layoutWorkspaceSplitter.SplitterMoved += (_, _) =>
         {
             if (_layoutSummaryInitialized && !_updatingLayoutSummarySplitter && !_layoutWorkspaceSplitter.Panel2Collapsed)
-                _layoutSummaryWidth = Math.Max(110, _layoutWorkspaceSplitter.Height - _layoutWorkspaceSplitter.SplitterDistance
+                _layoutSummaryWidth = Math.Max(DpiScaling.Scale(110), _layoutWorkspaceSplitter.Height - _layoutWorkspaceSplitter.SplitterDistance
                                                     - _layoutWorkspaceSplitter.SplitterWidth);
         };
         var canvasArea = new Panel
@@ -263,20 +285,46 @@ internal sealed partial class LayoutDesignerScreen
         _layoutStatusLabel.AutoEllipsis = true;
 
         root.Controls.Add(toolbar, 0, 0);
-        root.SetColumnSpan(toolbar, 3);
+        root.SetColumnSpan(toolbar, 5);
         _explorer = new ProjectExplorer(_host);
-        _explorer.CollapsedChanged += collapsed =>
-            root.ColumnStyles[0].Width = collapsed ? ProjectExplorer.CollapsedWidth : ProjectExplorer.ExpandedWidth;
+        var explorerSplitter = new PanelSplitter("ProjectExplorerSplitter", root, 0, columnIsLeft: true, ProjectExplorer.ExpandedWidth)
+        {
+            MinimumWidth = 170
+        };
+        _explorer.CollapsedChanged += collapsed => SetSidePanelCollapsed(explorerSplitter, 0, collapsed, ProjectExplorer.CollapsedWidth);
         root.Controls.Add(_explorer, 0, 1);
         root.SetRowSpan(_explorer, 2);
-        root.Controls.Add(_layoutWorkspaceSplitter, 1, 1);
-        root.Controls.Add(_layoutStatusLabel, 1, 2);
+        root.Controls.Add(explorerSplitter, 1, 1);
+        root.SetRowSpan(explorerSplitter, 2);
+        root.Controls.Add(_layoutWorkspaceSplitter, 2, 1);
+        root.Controls.Add(_layoutStatusLabel, 2, 2);
         _inspector = new SelectionInspector(_host);
-        _inspector.CollapsedChanged += collapsed =>
-            root.ColumnStyles[2].Width = collapsed ? SelectionInspector.CollapsedWidth : SelectionInspector.ExpandedWidth;
-        root.Controls.Add(_inspector, 2, 1);
+        var inspectorSplitter = new PanelSplitter("InspectorSplitter", root, 4, columnIsLeft: false, SelectionInspector.ExpandedWidth)
+        {
+            MinimumWidth = 260
+        };
+        _inspector.CollapsedChanged += collapsed => SetSidePanelCollapsed(inspectorSplitter, 4, collapsed, SelectionInspector.CollapsedWidth);
+        root.Controls.Add(inspectorSplitter, 3, 1);
+        root.SetRowSpan(inspectorSplitter, 2);
+        root.Controls.Add(_inspector, 4, 1);
         root.SetRowSpan(_inspector, 2);
         return root;
+
+        void SetSidePanelCollapsed(PanelSplitter splitter, int column, bool collapsed, int collapsedWidth)
+        {
+            if (collapsed)
+            {
+                splitter.ExpandedWidth = root.ColumnStyles[column].Width;
+                root.ColumnStyles[column].Width = DpiScaling.Scale(collapsedWidth);
+            }
+            else
+            {
+                splitter.SetColumnWidth(splitter.ExpandedWidth > 0 ? splitter.ExpandedWidth : DpiScaling.Scale(splitter.DesignedWidth));
+            }
+            splitter.Enabled = !collapsed;
+            splitter.Cursor = collapsed ? Cursors.Default : Cursors.VSplit;
+            splitter.Invalidate();
+        }
     }
 
     /// <summary>
@@ -458,41 +506,61 @@ internal sealed partial class LayoutDesignerScreen
         _layoutSystemSummaryGrid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(20, 49, 69);
         _layoutSystemSummaryGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(247, 250, 252);
         _layoutSystemSummaryGrid.SelectionChanged += (_, _) => SelectLayoutItemFromSummary();
-        AddColumn("Id", "Item ID", 72);
-        AddColumn("StaticDrop", "SP Drop", 72);
-        AddColumn("Airflow", "Airflow", 70);
-        AddColumn("Upstream", "Upstream", 76);
-        AddColumn("Downstream", "Downstream", 82);
-        AddColumn("AbsoluteX", "Abs X", 56);
-        AddColumn("AbsoluteY", "Abs Y", 56);
-        AddColumn("AbsoluteZ", "Abs Z", 56);
-        return _layoutSystemSummaryGrid;
-
-        void AddColumn(string name, string headerText, int width)
+        // The columns share the full width of the panel (each at least its minimum; narrower windows scroll).
+        _layoutSystemSummaryGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _layoutSystemSummaryGrid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
+        _layoutSystemSummaryGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+        foreach (var column in SystemOverviewColumns)
         {
             _layoutSystemSummaryGrid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                Name = name,
-                HeaderText = headerText,
-                Width = width,
+                Name = column.Name,
+                HeaderText = column.Header,
+                MinimumWidth = column.Width,
+                FillWeight = column.Width,
                 SortMode = DataGridViewColumnSortMode.NotSortable
             });
         }
+        return _layoutSystemSummaryGrid;
     }
+
+    /// <summary>
+    /// System Overview columns: name, the System table column the value is copied from, short header (the unit
+    /// line is taken from the System table so both always agree), and minimum width in 96-DPI pixels.
+    /// </summary>
+    private static readonly (string Name, string Source, string Header, int Width)[] SystemOverviewColumns =
+    {
+        ("Id", "Id", "Item ID", 66),
+        ("Description", "Description", "Description", 140),
+        ("Branch", "BranchId", "Branch", 60),
+        ("Size", "Size", "Duct size", 86),
+        ("Airflow", "Airflow", "Airflow", 62),
+        ("Velocity", "Velocity", "Velocity", 62),
+        ("PressureRate", "PressureRate", "SP rate", 84),
+        ("StaticDrop", "StaticDrop", "SP drop", 66),
+        ("PressureIn", "PressureIn", "SP in", 66),
+        ("PressureOut", "PressureOut", "SP out", 66),
+        ("Length", "Length", "Length", 56),
+        ("Upstream", "UpstreamId", "Upstream", 72),
+        ("Downstream", "DownstreamId", "Downstream", 80),
+        ("AbsoluteX", "AbsoluteX", "X", 48),
+        ("AbsoluteY", "AbsoluteY", "Y", 48),
+        ("AbsoluteZ", "AbsoluteZ", "Z", 48)
+    };
 
     private void SetLayoutSummaryCollapsed(bool collapsed)
     {
         if (_layoutWorkspaceSplitter is null)
             return;
         if (collapsed && !_layoutWorkspaceSplitter.Panel2Collapsed)
-            _layoutSummaryWidth = Math.Max(110, _layoutWorkspaceSplitter.Height - _layoutWorkspaceSplitter.SplitterDistance
+            _layoutSummaryWidth = Math.Max(DpiScaling.Scale(110), _layoutWorkspaceSplitter.Height - _layoutWorkspaceSplitter.SplitterDistance
                                                 - _layoutWorkspaceSplitter.SplitterWidth);
         _updatingLayoutSummarySplitter = true;
         try
         {
             _layoutWorkspaceSplitter.Panel2Collapsed = collapsed;
-            if (!collapsed && _layoutWorkspaceSplitter.Height >= 320)
-                _layoutWorkspaceSplitter.SplitterDistance = Math.Max(160,
+            if (!collapsed && _layoutWorkspaceSplitter.Height >= DpiScaling.Scale(320))
+                _layoutWorkspaceSplitter.SplitterDistance = Math.Max(DpiScaling.Scale(160),
                     _layoutWorkspaceSplitter.Height - _layoutSummaryWidth - _layoutWorkspaceSplitter.SplitterWidth);
         }
         finally
@@ -508,19 +576,20 @@ internal sealed partial class LayoutDesignerScreen
         if (_layoutSystemSummaryGrid.Columns.Count == 0 || _host.DuctSystemScreen._ductGrid.Columns.Count == 0)
             return;
         _layoutSystemSummaryGrid.Rows.Clear();
-        foreach (DataGridViewRow source in _host.DuctSystemScreen._ductGrid.Rows)
+        var sourceGrid = _host.DuctSystemScreen._ductGrid;
+        foreach (var column in SystemOverviewColumns)
+        {
+            // Unit line ("(in. w.c.)") follows the System table header for the current units.
+            var sourceHeader = sourceGrid.Columns[column.Source]?.HeaderText ?? string.Empty;
+            var unitLine = sourceHeader.Contains('\n', StringComparison.Ordinal) ? sourceHeader[(sourceHeader.IndexOf('\n', StringComparison.Ordinal) + 1)..] : null;
+            _layoutSystemSummaryGrid.Columns[column.Name]!.HeaderText = unitLine is null ? column.Header : $"{column.Header}\n{unitLine}";
+        }
+        foreach (DataGridViewRow source in sourceGrid.Rows)
         {
             if (source.IsNewRow)
                 continue;
-            var rowIndex = _layoutSystemSummaryGrid.Rows.Add(
-                source.Cells["Id"].Value,
-                source.Cells["StaticDrop"].Value,
-                source.Cells["Airflow"].Value,
-                source.Cells["UpstreamId"].Value,
-                source.Cells["DownstreamId"].Value,
-                source.Cells["AbsoluteX"].Value,
-                source.Cells["AbsoluteY"].Value,
-                source.Cells["AbsoluteZ"].Value);
+            var rowIndex = _layoutSystemSummaryGrid.Rows.Add(SystemOverviewColumns
+                .Select(column => source.Cells[column.Source].Value).ToArray());
             _layoutSystemSummaryGrid.Rows[rowIndex].Tag = source.Tag;
             if (source.DefaultCellStyle.BackColor == Color.FromArgb(255, 237, 213))
             {

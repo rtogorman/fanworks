@@ -7,7 +7,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class LayoutDuctConnectionDialog : Form
+internal sealed class LayoutDuctConnectionDialog : DpiScaledForm
 {
     private readonly ComboBox _airSystem = new();
     internal string SelectedAirSystemType => Convert.ToString(_airSystem.SelectedItem, CultureInfo.CurrentCulture) ?? "Supply Air";

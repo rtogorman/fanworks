@@ -5,7 +5,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-public sealed partial class MainForm : Form
+public sealed partial class MainForm : DpiScaledForm
 {
     private DuctCalculatorScreen? _calculatorScreen;
     internal DuctCalculatorScreen CalculatorScreen => _calculatorScreen ??= new DuctCalculatorScreen(this);
@@ -30,6 +30,13 @@ public sealed partial class MainForm : Form
         base.OnLoad(e);
         var workingArea = Screen.FromControl(this).WorkingArea;
         var fitted = OpeningSize(Size, workingArea);
+        // A design tool wants the whole screen: open maximized whenever the designed window does not fit
+        // (interface checks keep the plain window so its size is predictable).
+        if (fitted != Size && !AutomationOptions.SuppressDialogs)
+        {
+            WindowState = FormWindowState.Maximized;
+            return;
+        }
         if (fitted != Size)
         {
             Size = fitted;
@@ -72,7 +79,7 @@ public sealed partial class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9F);
         BackColor = UiPalette.Canvas;
-        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleMode = AutoScaleMode.None; // scaled by DpiScaledForm (see DpiScaling)
         using (var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream(
                    "DuctSizer.WinForms.Assets.DuctSizerCentrifugalIcon.ico"))
         {

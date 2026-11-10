@@ -3,7 +3,7 @@ using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
-internal sealed class ProjectSettingsDialog : Form
+internal sealed class ProjectSettingsDialog : DpiScaledForm
 {
     private readonly TextBox _userName = new() { Name = "SettingsUserNameText" };
     private readonly TextBox _projectName = new() { Name = "SettingsProjectNameText" };

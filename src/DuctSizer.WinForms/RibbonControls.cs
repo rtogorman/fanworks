@@ -71,8 +71,21 @@ internal static class RibbonIcons
                 graphics.DrawLine(pen, 8, 14.5f, 16, 14.5f);
                 graphics.DrawLine(pen, 8, 18, 13, 18);
                 break;
-            case RibbonIcon.QuickCalc:
             case RibbonIcon.DuctCalculator:
+                // A length of rectangular duct seen in perspective, with a joint seam and the airflow arrow.
+                using (var front = new GraphicsPath())
+                {
+                    front.AddRectangle(new RectangleF(2.5f, 9.5f, 8, 10));
+                    graphics.FillPath(accentFill, front);
+                    graphics.DrawPath(pen, front);
+                }
+                graphics.DrawLines(pen, new[] { new PointF(2.5f, 9.5f), new PointF(13.5f, 4), new PointF(21.5f, 4), new PointF(10.5f, 9.5f) });
+                graphics.DrawLines(pen, new[] { new PointF(21.5f, 4), new PointF(21.5f, 14), new PointF(10.5f, 19.5f) });
+                graphics.DrawLines(pen, new[] { new PointF(15f, 7f), new PointF(15f, 16.8f) });
+                graphics.DrawLine(accentPen, 4.5f, 14.5f, 8.5f, 14.5f);
+                graphics.DrawLines(accentPen, new[] { new PointF(7, 13), new PointF(8.5f, 14.5f), new PointF(7, 16) });
+                break;
+            case RibbonIcon.QuickCalc:
                 graphics.DrawRectangle(pen, 5, 2.5f, 14, 19);
                 graphics.FillRectangle(accentFill, 7.5f, 5, 9, 4);
                 graphics.DrawRectangle(pen, 7.5f, 5, 9, 4);
@@ -357,9 +370,21 @@ internal sealed class AppTabButton : Button
         Font = new Font("Segoe UI Semibold", 10.5F);
         Cursor = Cursors.Hand;
         Margin = new Padding(0, 6, 2, 0);
-        Size = new Size(TextRenderer.MeasureText(text, Font).Width + 56, 38);
+        Size = DesignedSize();
         TabStop = true;
         AccessibleRole = AccessibleRole.PageTab;
+    }
+
+    /// <summary>The caption width at the current display scale plus room for the icon.</summary>
+    private Size DesignedSize() =>
+        new(TextRenderer.MeasureText(Text, Font).Width + DpiScaling.Scale(58), DpiScaling.Scale(38));
+
+    protected override void ScaleControl(SizeF factor, BoundsSpecified specified)
+    {
+        // The width comes from the measured caption, which already follows the display scale; only the
+        // margin needs scaling.
+        base.ScaleControl(factor, specified);
+        Size = DesignedSize();
     }
 
     internal RibbonIcon IconKind { get; }
@@ -396,23 +421,81 @@ internal sealed class AppTabButton : Button
         }
         var textColor = _selected ? RibbonPalette.Ink : RibbonPalette.TopBarText;
         var iconColor = _selected ? RibbonPalette.Icon : RibbonPalette.TopBarText;
-        var iconSize = 20;
-        RibbonIcons.Draw(graphics, IconKind, new Rectangle(14, (Height - iconSize) / 2, iconSize, iconSize), iconColor,
+        var iconSize = DpiScaling.Scale(20);
+        RibbonIcons.Draw(graphics, IconKind, new Rectangle(DpiScaling.Scale(14), (Height - iconSize) / 2, iconSize, iconSize), iconColor,
             _selected ? RibbonPalette.IconAccent : Color.FromArgb(140, 190, 230));
-        TextRenderer.DrawText(graphics, Text, Font, new Rectangle(40, 0, Width - 44, Height), textColor,
+        var textLeft = DpiScaling.Scale(40);
+        TextRenderer.DrawText(graphics, Text, Font, new Rectangle(textLeft, 0, Width - textLeft - DpiScaling.Scale(4), Height), textColor,
             TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
         if (Focused && ShowFocusCues)
             ControlPaint.DrawFocusRectangle(graphics, new Rectangle(4, 4, Width - 8, Height - 8));
     }
 }
 
+/// <summary>A ribbon item whose width the group can widen to fill the ribbon.</summary>
+internal interface IRibbonItem
+{
+    /// <summary>Width the item needs at the current display scale so no caption is cut off.</summary>
+    int NaturalWidth { get; }
+
+    /// <summary>How much wider the item may grow when the ribbon has room to spare.</summary>
+    int MaxStretch { get; }
+}
+
 /// <summary>
-/// A ribbon group: its controls sit on top and its caption along the bottom, with a thin separator on the right,
-/// as in Office-style ribbons. Add controls to <see cref="Content"/>.
+/// One ribbon page (the commands of one main tab). Groups are laid out left to right at the width they need;
+/// when <see cref="FillWidth"/> is set, spare width is shared among the groups in proportion to their size so
+/// the commands spread across the whole ribbon instead of crowding at the left. A page that does not fit scrolls.
+/// </summary>
+internal sealed class RibbonPage : Panel
+{
+    internal RibbonPage(string name)
+    {
+        Name = name;
+        Dock = DockStyle.Fill;
+        Margin = Padding.Empty;
+        Padding = Padding.Empty;
+        BackColor = RibbonPalette.Ribbon;
+        Visible = false;
+    }
+
+    internal bool FillWidth { get; set; }
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        var groups = Controls.OfType<RibbonGroup>().Where(group => group.Visible).ToList();
+        if (groups.Count == 0)
+            return;
+        var naturals = groups.Select(group => group.NaturalWidth).ToList();
+        var total = naturals.Sum();
+        // Spare width is shared out on a filled page. In a window too narrow for every command the groups are
+        // narrowed in proportion instead (no scroll bar eating into the ribbon's height).
+        var extra = total > ClientSize.Width ? ClientSize.Width - total : FillWidth ? ClientSize.Width - total : 0;
+        var x = 0;
+        var assigned = 0;
+        for (var index = 0; index < groups.Count; index++)
+        {
+            var share = index == groups.Count - 1
+                ? extra - assigned
+                : (int)Math.Floor(extra * naturals[index] / (double)total);
+            assigned += share;
+            groups[index].SetBounds(x, 0, naturals[index] + share, ClientSize.Height);
+            x += naturals[index] + share;
+        }
+    }
+}
+
+/// <summary>
+/// A ribbon group: its commands sit on top and its caption along the bottom, with a thin separator on the right,
+/// as in Office-style ribbons. Add commands to <see cref="Content"/>. When the group is wider than it needs, its
+/// commands are widened (up to their <see cref="IRibbonItem.MaxStretch"/>) and the rest is shared as even spacing.
 /// </summary>
 internal sealed class RibbonGroup : Panel
 {
     internal const int CaptionHeight = 18;
+    private const int SidePadding = 3;
+    private const int ItemGap = 2;
 
     internal RibbonGroup(string name, string caption)
     {
@@ -422,43 +505,163 @@ internal sealed class RibbonGroup : Panel
                  | ControlStyles.UserPaint, true);
         BackColor = RibbonPalette.Ribbon;
         Margin = Padding.Empty;
-        Padding = new Padding(1, 1, 3, CaptionHeight);
-        AutoSize = true;
-        AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        Content = new FlowLayoutPanel
-        {
-            Name = name + "Content",
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Margin = Padding.Empty,
-            Padding = Padding.Empty,
-            BackColor = RibbonPalette.Ribbon,
-            Location = new Point(1, 1)
-        };
+        Padding = Padding.Empty;
+        Content = new RibbonGroupContent(name + "Content");
         Controls.Add(Content);
     }
 
     internal string Caption { get; }
 
-    internal FlowLayoutPanel Content { get; }
+    internal Panel Content { get; }
+
+    private Font CaptionFont => _captionFont ??= new Font("Segoe UI", 8.25F);
+    private Font? _captionFont;
+
+    /// <summary>Width the group needs: its commands side by side, or its caption if that is wider.</summary>
+    internal int NaturalWidth
+    {
+        get
+        {
+            var items = Content.Controls.Cast<Control>().Where(control => control.Visible).ToList();
+            var itemsWidth = items.Sum(ItemNaturalWidth) + Math.Max(0, items.Count - 1) * DpiScaling.Scale(ItemGap);
+            var captionWidth = TextRenderer.MeasureText(Caption, CaptionFont, Size.Empty, TextFormatFlags.NoPadding).Width + DpiScaling.Scale(8);
+            return Math.Max(itemsWidth, captionWidth) + 2 * DpiScaling.Scale(SidePadding);
+        }
+    }
+
+    internal static int ItemNaturalWidth(Control control) => control is IRibbonItem item ? item.NaturalWidth : control.Width;
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        var side = DpiScaling.Scale(SidePadding);
+        Content.SetBounds(side, DpiScaling.Scale(2), Math.Max(0, Width - 2 * side),
+            Math.Max(0, Height - DpiScaling.Scale(CaptionHeight) - DpiScaling.Scale(3)));
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
         using var separator = new Pen(RibbonPalette.GroupSeparator);
-        e.Graphics.DrawLine(separator, Width - 1, 6, Width - 1, Height - 6);
-        using var font = new Font("Segoe UI", 8.25F);
-        TextRenderer.DrawText(e.Graphics, Caption, font,
-            new Rectangle(0, Height - CaptionHeight - 1, Width - 2, CaptionHeight), RibbonPalette.Caption,
+        e.Graphics.DrawLine(separator, Width - 1, DpiScaling.Scale(6), Width - 1, Height - DpiScaling.Scale(6));
+        var captionHeight = DpiScaling.Scale(CaptionHeight);
+        TextRenderer.DrawText(e.Graphics, Caption, CaptionFont,
+            new Rectangle(0, Height - captionHeight - 1, Width - 2, captionHeight), RibbonPalette.Caption,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            _captionFont?.Dispose();
+        base.Dispose(disposing);
+    }
+
+    /// <summary>Lays the group's commands out side by side across the full group width.</summary>
+    private sealed class RibbonGroupContent : Panel
+    {
+        internal RibbonGroupContent(string name)
+        {
+            Name = name;
+            Margin = Padding.Empty;
+            Padding = Padding.Empty;
+            BackColor = RibbonPalette.Ribbon;
+        }
+
+        protected override void OnLayout(LayoutEventArgs levent)
+        {
+            base.OnLayout(levent);
+            var items = Controls.Cast<Control>().Where(control => control.Visible).ToList();
+            if (items.Count == 0)
+                return;
+            var gap = DpiScaling.Scale(ItemGap);
+            var naturals = items.Select(ItemNaturalWidth).ToList();
+            var naturalTotal = Math.Max(1, naturals.Sum());
+            var extra = ClientSize.Width - naturalTotal - gap * (items.Count - 1);
+            var widths = new int[items.Count];
+            var used = 0;
+            for (var index = 0; index < items.Count; index++)
+            {
+                var cap = items[index] is IRibbonItem item ? item.MaxStretch : 0;
+                var share = (int)Math.Floor(extra * naturals[index] / (double)naturalTotal);
+                var grow = extra < 0 ? share : Math.Min(cap, share);
+                widths[index] = naturals[index] + grow;
+                used += grow;
+            }
+            // Whatever the commands cannot use becomes equal space around each of them.
+            var spacing = Math.Max(0, extra - used) / (double)items.Count;
+            var x = spacing / 2;
+            for (var index = 0; index < items.Count; index++)
+            {
+                items[index].SetBounds((int)Math.Round(x), 0, widths[index], ClientSize.Height);
+                x += widths[index] + gap + spacing;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// The drag-and-drop component tools of one ribbon group, in two rows. Each column is as wide as its longest
+/// caption needs, and columns widen evenly when the ribbon has room to spare.
+/// </summary>
+internal sealed class RibbonToolGrid : Panel, IRibbonItem
+{
+    private const int MinimumColumnWidth = 44;
+
+    internal RibbonToolGrid(string name)
+    {
+        Name = name;
+        Margin = Padding.Empty;
+        Padding = Padding.Empty;
+        BackColor = RibbonPalette.Ribbon;
+    }
+
+    private int ColumnCount => (Controls.Count + 1) / 2;
+
+    private int[] NaturalColumnWidths()
+    {
+        var widths = new int[ColumnCount];
+        for (var index = 0; index < Controls.Count; index++)
+        {
+            var tool = Controls[index];
+            var title = tool is LayoutToolCard card ? card.Title : tool.Text;
+            var textWidth = TextRenderer.MeasureText(title, LayoutToolCard.CaptionFont, Size.Empty, TextFormatFlags.NoPadding).Width;
+            widths[index / 2] = Math.Max(widths[index / 2], Math.Max(DpiScaling.Scale(MinimumColumnWidth), textWidth + DpiScaling.Scale(6)));
+        }
+        return widths;
+    }
+
+    public int NaturalWidth => NaturalColumnWidths().Sum();
+
+    public int MaxStretch => ColumnCount * DpiScaling.Scale(24);
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        var widths = NaturalColumnWidths();
+        if (widths.Length == 0)
+            return;
+        var extra = ClientSize.Width - widths.Sum();
+        var rowHeight = ClientSize.Height / 2;
+        var x = 0;
+        for (var column = 0; column < widths.Length; column++)
+        {
+            var width = widths[column] + (column == widths.Length - 1 ? extra - extra / widths.Length * (widths.Length - 1) : extra / widths.Length);
+            for (var row = 0; row < 2; row++)
+            {
+                var index = column * 2 + row;
+                if (index < Controls.Count)
+                    Controls[index].SetBounds(x, row * rowHeight, width, rowHeight - 1);
+            }
+            x += width;
+        }
     }
 }
 
 /// <summary>A large ribbon command: icon above a one- or two-line caption. Can act as a toggle or open a menu.</summary>
-internal sealed class RibbonButton : Button
+internal sealed class RibbonButton : Button, IRibbonItem
 {
+    private readonly int _baseWidth;
     private bool _hover;
     private bool _pressed;
     private bool _checked;
@@ -474,8 +677,9 @@ internal sealed class RibbonButton : Button
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
         Font = new Font("Segoe UI", 8.5F);
+        _baseWidth = width;
         Size = new Size(width, 74);
-        Margin = new Padding(0, 0, 1, 0);
+        Margin = Padding.Empty;
         Cursor = Cursors.Hand;
         AccessibleName = text.Replace("\n", " ", StringComparison.Ordinal);
     }
@@ -483,6 +687,21 @@ internal sealed class RibbonButton : Button
     internal RibbonIcon IconKind { get; }
 
     internal string ToolTipText { get; }
+
+    /// <summary>The designed width, or wider if a caption line (and drop-down arrow) needs more room.</summary>
+    public int NaturalWidth
+    {
+        get
+        {
+            var widest = Text.Split('\n')
+                .Select(line => TextRenderer.MeasureText(line, Font, Size.Empty, TextFormatFlags.NoPadding).Width)
+                .DefaultIfEmpty(0).Max();
+            var arrow = DropDownMenu is null ? 0 : DpiScaling.Scale(11);
+            return Math.Max(DpiScaling.Scale(_baseWidth), widest + arrow + DpiScaling.Scale(8));
+        }
+    }
+
+    public int MaxStretch => DpiScaling.Scale(34);
 
     /// <summary>Shows a small arrow and opens this menu below the button when clicked.</summary>
     [Browsable(false)]
@@ -535,10 +754,11 @@ internal sealed class RibbonButton : Button
         }
         var stroke = Enabled ? RibbonPalette.Icon : RibbonPalette.Disabled;
         var accent = Enabled ? RibbonPalette.IconAccent : RibbonPalette.Disabled;
-        const int iconSize = 28;
-        RibbonIcons.Draw(graphics, IconKind, new Rectangle((Width - iconSize) / 2, 6, iconSize, iconSize), stroke, accent);
+        var iconSize = DpiScaling.Scale(28);
+        RibbonIcons.Draw(graphics, IconKind, new Rectangle((Width - iconSize) / 2, DpiScaling.Scale(6), iconSize, iconSize), stroke, accent);
         var textColor = Enabled ? RibbonPalette.Ink : RibbonPalette.Disabled;
-        var textBounds = new Rectangle(1, 37, Width - 2, Height - 38);
+        var textTop = DpiScaling.Scale(38);
+        var textBounds = new Rectangle(1, textTop, Width - 2, Height - textTop - 1);
         TextRenderer.DrawText(graphics, Text, Font, textBounds, textColor,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
         if (DropDownMenu is not null)
@@ -548,12 +768,14 @@ internal sealed class RibbonButton : Button
             var last = lines[^1];
             var lastSize = TextRenderer.MeasureText(graphics, last, Font, Size.Empty, TextFormatFlags.NoPadding);
             var lineHeight = TextRenderer.MeasureText(graphics, "Ag", Font, Size.Empty, TextFormatFlags.NoPadding).Height;
-            var arrowX = (Width + lastSize.Width) / 2f + 3;
+            var arrowX = (Width + lastSize.Width) / 2f + DpiScaling.Scale(3f);
             var arrowY = textBounds.Top + (lines.Length - 1) * lineHeight + lineHeight / 2f - 1;
+            var arrowHalf = DpiScaling.Scale(3f);
             using var arrow = new SolidBrush(textColor);
             graphics.FillPolygon(arrow, new[]
             {
-                new PointF(arrowX, arrowY - 1.5f), new PointF(arrowX + 6, arrowY - 1.5f), new PointF(arrowX + 3, arrowY + 2f)
+                new PointF(arrowX, arrowY - arrowHalf / 2), new PointF(arrowX + 2 * arrowHalf, arrowY - arrowHalf / 2),
+                new PointF(arrowX + arrowHalf, arrowY + arrowHalf * 0.7f)
             });
         }
         if (Focused && ShowFocusCues)
@@ -611,7 +833,7 @@ internal sealed class ToolbarIconButton : Button
                 graphics.DrawPath(border, path);
             }
         }
-        const int iconSize = 18;
+        var iconSize = DpiScaling.Scale(18);
         RibbonIcons.Draw(graphics, IconKind, new Rectangle((Width - iconSize) / 2, (Height - iconSize) / 2, iconSize, iconSize),
             Enabled ? RibbonPalette.Icon : RibbonPalette.Disabled, Enabled ? RibbonPalette.IconAccent : RibbonPalette.Disabled);
         if (Focused && ShowFocusCues)

@@ -174,7 +174,7 @@ internal static class FittingImageResources
     }
 }
 
-internal sealed class FittingImageViewer : Form
+internal sealed class FittingImageViewer : DpiScaledForm
 {
     private readonly PictureBox _picture = new();
     private readonly Panel _scrollArea = new();
@@ -274,7 +274,7 @@ internal sealed class FittingImageViewer : Form
     }
 }
 
-internal sealed class FittingGalleryDialog : Form
+internal sealed class FittingGalleryDialog : DpiScaledForm
 {
     private readonly List<Image> _thumbnails = new();
     private readonly ToolTip _toolTip = new();
