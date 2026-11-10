@@ -15,22 +15,15 @@ internal sealed partial class DuctSystemScreen
     }
 
     internal readonly PolishedTabControl _mainTabs = new();
-    private readonly Button _calculatorNavigationButton = new();
-    private readonly Button _fittingNavigationButton = new();
-    private readonly Button _systemNavigationButton = new();
-    private readonly Button _layoutNavigationButton = new();
-    private readonly Button _saveButton = new();
-    private readonly Button _settingsButton = new();
+    internal readonly Button _saveButton = new();
     private readonly PictureBox _projectHeaderAppIcon = new();
     private readonly Label _projectHeaderBrand = new();
     private readonly Label _projectHeaderLabel = new();
     private readonly PictureBox _projectHeaderLogo = new();
-    private readonly ContextMenuStrip _settingsMenu = new();
-    private string _lastExportBasePath = string.Empty;
-    private ToolStripMenuItem? _imperialUnitsMenuItem;
-    private ToolStripMenuItem? _metricUnitsMenuItem;
-    private readonly TabPage _calculatorTab = new("Duct Calculator");
-    private readonly TabPage _fittingTab = new("Fitting Calculator");
+    internal string _lastExportBasePath = string.Empty;
+    internal readonly TabPage _calculatorTab = new("Duct Calculator");
+    internal readonly TabPage _fittingTab = new("Fitting Calculator");
+    internal readonly TabPage _reportsTab = new("Reports");
     internal readonly TabPage _systemTab = new("Duct System");
     internal readonly TabPage _layoutTab = new("Layout Designer");
     internal readonly DataGridView _ductGrid = new();
@@ -57,7 +50,7 @@ internal sealed partial class DuctSystemScreen
     internal const string DefaultDuctActionText = "Save Duct Changes";
     internal const string DefaultFittingActionText = "Save Fitting Changes";
     internal bool _criticalPathCalculated;
-    private bool _criticalPathFilterEnabled;
+    internal bool _criticalPathFilterEnabled;
     internal HashSet<string> _criticalPathItemKeys = new(StringComparer.OrdinalIgnoreCase);
     private double _criticalPathPressureLossPa;
     private string _criticalPathRoute = string.Empty;
@@ -105,54 +98,25 @@ internal sealed partial class DuctSystemScreen
         _layoutTab.BackColor = _host.BackColor;
         _layoutTab.Controls.Add(_host.LayoutScreen.BuildLayoutDesignerPage());
 
+        _reportsTab.Name = "ReportsTab";
+        _reportsTab.Padding = new Padding(0);
+        _reportsTab.BackColor = _host.BackColor;
+        _reportsTab.Controls.Add(_host.Ribbon.BuildReportsPage());
+
+        // Page order is kept from earlier versions (code and checks address pages by position); which page shows
+        // is chosen by the top tabs: Project = Layout Designer, Analysis = Duct System, Reports, Quick Calc =
+        // the duct or fitting calculator.
         _mainTabs.TabPages.Add(_calculatorTab);
         _mainTabs.TabPages.Add(_fittingTab);
         _mainTabs.TabPages.Add(_systemTab);
         _mainTabs.TabPages.Add(_layoutTab);
-        var navigationHost = new NavigationChromePanel
-        {
-            Name = "MainNavigationHost",
-            Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(236, 243, 247)
-        };
-        var navigation = new FlowLayoutPanel
-        {
-            Name = "MainNavigationBar",
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoScroll = true,
-            Padding = new Padding(12, 3, 242, 11),
-            BackColor = Color.Transparent
-        };
-        ConfigureNavigationButton(_calculatorNavigationButton, "NavCalculatorButton", "Duct Calculator", 0);
-        ConfigureNavigationButton(_fittingNavigationButton, "NavFittingButton", "Fitting Calculator", 1);
-        ConfigureNavigationButton(_systemNavigationButton, "NavSystemButton", "Duct System", 2);
-        ConfigureNavigationButton(_layoutNavigationButton, "NavLayoutButton", "Layout Designer", 3);
-        navigation.Controls.Add(_calculatorNavigationButton);
-        navigation.Controls.Add(_fittingNavigationButton);
-        navigation.Controls.Add(_systemNavigationButton);
-        navigation.Controls.Add(_layoutNavigationButton);
-        ConfigureSettingsMenu();
-        ConfigureSaveButton();
-        var actions = new FlowLayoutPanel
-        {
-            Name = "MainNavigationActions",
-            Dock = DockStyle.Right,
-            Width = 234,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Padding = new Padding(0, 3, 0, 11),
-            BackColor = Color.Transparent
-        };
-        actions.Controls.Add(_saveButton);
-        actions.Controls.Add(_settingsButton);
-        navigationHost.Controls.Add(navigation);
-        navigationHost.Controls.Add(actions);
+        _mainTabs.TabPages.Add(_reportsTab);
 
-        var projectHeader = BuildProjectIdentityHeader();
+        var topBar = BuildProjectIdentityHeader();
+        var ribbon = _host.Ribbon.BuildRibbon();
         var shell = new TableLayoutPanel
         {
+            Name = "MainShell",
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
@@ -161,112 +125,85 @@ internal sealed partial class DuctSystemScreen
             BackColor = _host.BackColor
         };
         shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
-        shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        shell.RowStyles.Add(new RowStyle(SizeType.Absolute, MainRibbon.RibbonHeight));
         shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        shell.Controls.Add(projectHeader, 0, 0);
-        shell.Controls.Add(navigationHost, 0, 1);
+        shell.Controls.Add(topBar, 0, 0);
+        shell.Controls.Add(ribbon, 0, 1);
         shell.Controls.Add(_mainTabs, 0, 2);
         _mainTabs.SelectedIndexChanged += (_, _) =>
         {
-            UpdateNavigationButtonState();
             SynchronizeSelectedSystemView();
             if (_mainTabs.SelectedTab == _fittingTab)
                 _host.FittingScreen.ResetFittingInputScroll();
+            _host.Ribbon.SynchronizeWithPage();
         };
         _host.Controls.Add(shell);
-        UpdateNavigationButtonState();
+        // The application opens on the Project tab (the Layout Designer).
+        _mainTabs.SelectedTab = _layoutTab;
+        _host.Ribbon.SynchronizeWithPage();
         RefreshProjectIdentityHeader();
     }
 
+    /// <summary>
+    /// The dark top bar: application icon and name, the main tabs (Project, Analysis, Reports, Quick Calc), and the
+    /// project identity (name, number, creator, last edit) with the company logo.
+    /// </summary>
     private Control BuildProjectIdentityHeader()
     {
         var header = new ProjectIdentityHeaderPanel
         {
             Name = "ProjectIdentityHeader",
             Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(20, 49, 69),
-            Padding = new Padding(18, 8, 18, 8),
+            BackColor = RibbonPalette.TopBar,
+            Padding = new Padding(10, 0, 10, 0),
+            Margin = Padding.Empty,
             ColumnCount = 5,
             RowCount = 1
         };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 390));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 380));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var iconFrame = new BrandIconFramePanel
-        {
-            Name = "ProjectHeaderIconFrame",
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 1, 7, 1),
-            Padding = new Padding(8)
-        };
         _projectHeaderAppIcon.Name = "ProjectHeaderAppIcon";
         _projectHeaderAppIcon.Dock = DockStyle.Fill;
         _projectHeaderAppIcon.SizeMode = PictureBoxSizeMode.Zoom;
-        _projectHeaderAppIcon.Margin = Padding.Empty;
+        _projectHeaderAppIcon.Margin = new Padding(0, 8, 4, 8);
         _projectHeaderAppIcon.BackColor = Color.Transparent;
         using (var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream(
                    "DuctSizer.WinForms.Assets.DuctSizerCentrifugalIcon.png"))
         using (var sourceIcon = iconStream is null ? null : Image.FromStream(iconStream))
             _projectHeaderAppIcon.Image = sourceIcon is null ? _host.Icon?.ToBitmap() : new Bitmap(sourceIcon);
-        iconFrame.Controls.Add(_projectHeaderAppIcon);
-
-        var brandBlock = new TableLayoutPanel
-        {
-            Name = "ProjectHeaderBrandBlock",
-            Dock = DockStyle.Fill,
-            BackColor = Color.Transparent,
-            Margin = Padding.Empty,
-            Padding = Padding.Empty,
-            ColumnCount = 1,
-            RowCount = 2
-        };
-        brandBlock.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        brandBlock.RowStyles.Add(new RowStyle(SizeType.Percent, 68));
-        brandBlock.RowStyles.Add(new RowStyle(SizeType.Percent, 32));
 
         _projectHeaderBrand.Name = "ProjectHeaderBrand";
         _projectHeaderBrand.Dock = DockStyle.Fill;
         _projectHeaderBrand.Text = "FanWorks";
         _projectHeaderBrand.ForeColor = Color.White;
-        _projectHeaderBrand.Font = new Font("Segoe UI Semibold", 26F);
-        _projectHeaderBrand.TextAlign = ContentAlignment.BottomLeft;
+        _projectHeaderBrand.Font = new Font("Segoe UI Semibold", 14F);
+        _projectHeaderBrand.TextAlign = ContentAlignment.MiddleLeft;
         _projectHeaderBrand.Margin = Padding.Empty;
         _projectHeaderBrand.BackColor = Color.Transparent;
-        var brandTagline = new Label
-        {
-            Name = "ProjectHeaderTagline",
-            Dock = DockStyle.Fill,
-            Text = "HVAC AIRSIDE DESIGN",
-            ForeColor = Color.FromArgb(107, 220, 227),
-            Font = new Font("Segoe UI Semibold", 7.4F),
-            TextAlign = ContentAlignment.TopLeft,
-            Padding = new Padding(11, 0, 0, 0),
-            Margin = Padding.Empty,
-            BackColor = Color.Transparent
-        };
-        brandBlock.Controls.Add(_projectHeaderBrand, 0, 0);
-        brandBlock.Controls.Add(brandTagline, 0, 1);
 
         _projectHeaderLogo.Name = "ProjectHeaderLogo";
-        _projectHeaderLogo.Dock = DockStyle.Fill;
-        _projectHeaderLogo.SizeMode = PictureBoxSizeMode.StretchImage;
-        _projectHeaderLogo.Margin = new Padding(8, 0, 0, 0);
-        _projectHeaderLogo.BackColor = Color.Transparent;
+        _projectHeaderLogo.Size = new Size(96, 34);
+        _projectHeaderLogo.SizeMode = PictureBoxSizeMode.Zoom;
+        _projectHeaderLogo.Margin = new Padding(8, 6, 0, 6);
+        _projectHeaderLogo.Padding = new Padding(3);
+        _projectHeaderLogo.BackColor = Color.White;
         _projectHeaderLabel.Name = "ProjectHeaderLabel";
         _projectHeaderLabel.Dock = DockStyle.Fill;
-        _projectHeaderLabel.Padding = new Padding(8, 4, 8, 0);
+        _projectHeaderLabel.Padding = new Padding(8, 0, 4, 0);
         _projectHeaderLabel.TextAlign = ContentAlignment.MiddleRight;
-        _projectHeaderLabel.ForeColor = Color.FromArgb(220, 232, 239);
-        _projectHeaderLabel.Font = new Font("Segoe UI", 9F);
+        _projectHeaderLabel.ForeColor = RibbonPalette.TopBarText;
+        _projectHeaderLabel.Font = new Font("Segoe UI", 8.5F);
         _projectHeaderLabel.AutoEllipsis = true;
         _projectHeaderLabel.BackColor = Color.Transparent;
-        header.Controls.Add(iconFrame, 0, 0);
-        header.Controls.Add(brandBlock, 1, 0);
+        header.Controls.Add(_projectHeaderAppIcon, 0, 0);
+        header.Controls.Add(_projectHeaderBrand, 1, 0);
+        header.Controls.Add(_host.Ribbon.BuildTopTabs(), 2, 0);
         header.Controls.Add(_projectHeaderLabel, 3, 0);
         header.Controls.Add(_projectHeaderLogo, 4, 0);
         return header;
@@ -284,6 +221,7 @@ internal sealed partial class DuctSystemScreen
             ? timestamp.ToLocalTime().ToString("MMM d, yyyy h:mm tt", CultureInfo.CurrentCulture)
             : "Not yet edited";
         _projectHeaderLabel.Text = $"{project}   •   {number}\r\n{creator}   •   Edited {edited}";
+        _host.Text = $"FanWorks — {project}";
         var previous = _projectHeaderLogo.Image;
         _projectHeaderLogo.Image = null;
         previous?.Dispose();
@@ -337,78 +275,10 @@ internal sealed partial class DuctSystemScreen
         return source.Clone(crop, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
     }
 
-    private void ConfigureSettingsMenu()
+    /// <summary>Opens Project Settings (project information, units, calculation settings) and applies a save.</summary>
+    internal void EditProjectSettings(ProjectSettingsDialog.Page firstPage = ProjectSettingsDialog.Page.ProjectInformation)
     {
-        _settingsButton.Name = "SettingsButton";
-        _settingsButton.Text = "Settings  ▾";
-        _settingsButton.Size = new Size(132, 40);
-        _settingsButton.Width = 132;
-        _settingsButton.Margin = new Padding(0);
-        _settingsButton.BackColor = Color.FromArgb(235, 241, 246);
-        _settingsButton.ForeColor = Color.FromArgb(34, 62, 88);
-        _settingsButton.Font = new Font("Segoe UI Semibold", 9.5F);
-        UiPolish.RoundButton(_settingsButton, 10);
-
-        _imperialUnitsMenuItem = new ToolStripMenuItem("Units: Imperial");
-        _metricUnitsMenuItem = new ToolStripMenuItem("Units: Metric");
-        _imperialUnitsMenuItem.Click += (_, _) => _host._unitsCombo.SelectedIndex = 0;
-        _metricUnitsMenuItem.Click += (_, _) => _host._unitsCombo.SelectedIndex = 1;
-        var projectInformation = new ToolStripMenuItem("Project Settings…");
-        projectInformation.Click += (_, _) => EditProjectSettings();
-        var calculationMethodInputs = new ToolStripMenuItem("Calculation Method Inputs…")
-        {
-            Name = "CalculationMethodInputsMenuItem"
-        };
-        calculationMethodInputs.Click += (_, _) => EditSolverSettings();
-        var automaticSizingInputs = new ToolStripMenuItem("Automatic Sizing Inputs…")
-        {
-            Name = "AutomaticSizingInputsMenuItem"
-        };
-        automaticSizingInputs.Click += (_, _) => EditAutomaticSizingInputs();
-        // The Name is kept from v0.92 ("Import Project") so existing automation finds the item.
-        var importProject = new ToolStripMenuItem("Open Project…") { Name = "ImportProjectMenuItem" };
-        importProject.Click += (_, _) => OpenProject();
-        _settingsMenu.Items.AddRange(new ToolStripItem[]
-        {
-            _imperialUnitsMenuItem,
-            _metricUnitsMenuItem,
-            new ToolStripSeparator(),
-            projectInformation,
-            calculationMethodInputs,
-            automaticSizingInputs,
-            importProject
-        });
-        _settingsMenu.Opening += (_, _) => UpdateSettingsMenuState();
-        _settingsButton.Click += (_, _) =>
-            _settingsMenu.Show(_settingsButton, new Point(0, _settingsButton.Height));
-    }
-
-    private void ConfigureSaveButton()
-    {
-        _saveButton.Name = "SaveSystemButton";
-        _saveButton.Text = "Save";
-        _saveButton.Size = new Size(86, 40);
-        _saveButton.Margin = new Padding(0, 0, 8, 0);
-        _saveButton.BackColor = Color.FromArgb(42, 135, 91);
-        _saveButton.ForeColor = Color.White;
-        _saveButton.Font = new Font("Segoe UI Semibold", 9.5F);
-        _saveButton.FlatStyle = FlatStyle.Flat;
-        _saveButton.FlatAppearance.BorderSize = 0;
-        UiPolish.RoundButton(_saveButton, 10);
-        _saveButton.Click += (_, _) => ExportDuctSystem();
-    }
-
-    private void UpdateSettingsMenuState()
-    {
-        if (_imperialUnitsMenuItem is not null)
-            _imperialUnitsMenuItem.Checked = _host._currentUnits == UnitSystem.Imperial;
-        if (_metricUnitsMenuItem is not null)
-            _metricUnitsMenuItem.Checked = _host._currentUnits == UnitSystem.Metric;
-    }
-
-    private void EditProjectSettings()
-    {
-        using var dialog = new ProjectSettingsDialog(_ductSystem, _host._currentUnits);
+        using var dialog = new ProjectSettingsDialog(_ductSystem, _host._currentUnits, firstPage);
         if (dialog.ShowDialog(_host) != DialogResult.OK)
             return;
         _ductSystem.UserName = dialog.UserName;
@@ -416,25 +286,31 @@ internal sealed partial class DuctSystemScreen
         _ductSystem.ProjectNumber = dialog.ProjectNumber;
         _ductSystem.ProjectDate = dialog.ProjectDate;
         _ductSystem.CompanyLogoPngBase64 = dialog.CompanyLogoPngBase64;
-        SaveDuctSystem();
-        RefreshProjectIdentityHeader();
-    }
-
-    private void EditSolverSettings()
-    {
-        using var dialog = new SolverSettingsDialog(_ductSystem, _host._currentUnits);
-        if (dialog.ShowDialog(_host) != DialogResult.OK)
-            return;
         _ductSystem.DefaultSizingIncrementM = dialog.SizingIncrementM;
         _ductSystem.DefaultSizeRoundingDirection = dialog.RoundingDirection;
         _ductSystem.DefaultEquivalentDiameterMethod = dialog.EquivalentDiameterMethod;
         _ductSystem.DefaultPressureLossBasis = dialog.PressureLossBasis;
         ApplyProjectCalculationSettings();
         SaveDuctSystem();
+        RefreshProjectIdentityHeader();
+        if (dialog.SelectedUnits != _host._currentUnits)
+            _host._unitsCombo.SelectedIndex = dialog.SelectedUnits == UnitSystem.Imperial ? 0 : 1;
+        _host.CalculatorScreen.CalculateAndDisplay();
+        _host.Ribbon.SynchronizeWithPage();
+    }
+
+    /// <summary>Sets the autosize increment (ribbon Round Sizes); same field as Project Settings.</summary>
+    internal void SetSizingIncrement(double incrementM)
+    {
+        if (!(incrementM > 0) || Math.Abs(_ductSystem.DefaultSizingIncrementM - incrementM) < 1e-12)
+            return;
+        _ductSystem.DefaultSizingIncrementM = incrementM;
+        ApplyProjectCalculationSettings();
+        SaveDuctSystem();
         _host.CalculatorScreen.CalculateAndDisplay();
     }
 
-    private void EditAutomaticSizingInputs()
+    internal void EditAutomaticSizingInputs()
     {
         using var dialog = new AutomaticSizingInputsDialog(_ductSystem.AutomaticSizing, _host._currentUnits);
         if (dialog.ShowDialog(_host) != DialogResult.OK)
@@ -460,45 +336,6 @@ internal sealed partial class DuctSystemScreen
         finally
         {
             _host._updatingControls = false;
-        }
-    }
-
-    private void ConfigureNavigationButton(Button button, string name, string text, int tabIndex)
-    {
-        button.Name = name;
-        button.Text = text;
-        button.Size = new Size(172, 40);
-        button.Margin = new Padding(0, 0, 4, 0);
-        button.BackColor = Color.FromArgb(235, 241, 246);
-        button.ForeColor = Color.FromArgb(34, 62, 88);
-        button.Font = new Font("Segoe UI Semibold", 9.5F);
-        button.FlatAppearance.BorderColor = Color.FromArgb(190, 205, 217);
-        UiPolish.RoundButton(button, 10);
-        button.Click += (_, _) =>
-        {
-            if (tabIndex == 0)
-                ClearDuctEditingContext();
-            else if (tabIndex == 1)
-                ClearFittingEditingContext();
-            _mainTabs.SelectedIndex = tabIndex;
-        };
-    }
-
-    private void UpdateNavigationButtonState()
-    {
-        var buttons = new[] { _calculatorNavigationButton, _fittingNavigationButton, _systemNavigationButton, _layoutNavigationButton };
-        for (var index = 0; index < buttons.Length; index++)
-        {
-            var selected = index == _mainTabs.SelectedIndex;
-            buttons[index].BackColor = selected ? Color.FromArgb(21, 104, 119) : Color.FromArgb(235, 241, 243);
-            buttons[index].ForeColor = selected ? Color.White : Color.FromArgb(34, 62, 88);
-            buttons[index].FlatAppearance.MouseOverBackColor = selected
-                ? Color.FromArgb(28, 121, 137)
-                : Color.FromArgb(245, 249, 252);
-            buttons[index].FlatAppearance.MouseDownBackColor = selected
-                ? Color.FromArgb(16, 83, 96)
-                : Color.FromArgb(221, 231, 239);
-            buttons[index].Invalidate();
         }
     }
 
@@ -1079,7 +916,36 @@ internal sealed partial class DuctSystemScreen
         return $"{shape} {_host.CalculatorScreen.FormatGeometry(result.Input.Geometry)} – {airflow}";
     }
 
-    private void AutoSizeFan()
+    /// <summary>
+    /// Ribbon "Calculate": sizes the fan to the critical path (as Auto-size Fan did on the Duct System tab), then
+    /// highlights the critical path on the drawing. If the system cannot be calculated, the reasons are shown and
+    /// nothing is changed.
+    /// </summary>
+    internal bool CalculateSystem()
+    {
+        if (!TryAutoSizeFan(out var message))
+        {
+            _host.LayoutScreen._layoutStatusLabel.Text = message.Replace("\r\n", " ", StringComparison.Ordinal);
+            _host.LayoutScreen._layoutStatusLabel.ForeColor = Color.DarkOrange;
+            if (!AutomationOptions.SuppressDialogs)
+                MessageBox.Show(_host, message, "Calculate", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _host.Ribbon.SynchronizeWithPage();
+            return false;
+        }
+
+        SaveDuctSystem();
+        RefreshDuctSystemGrid();
+        _systemStorageStatusLabel.Text = message;
+        _systemStorageStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+        _host.LayoutScreen.ShowLayoutCriticalPathHighlight();
+        _host.LayoutScreen.RefreshLayoutDesigner();
+        _host.LayoutScreen._layoutStatusLabel.Text = $"Calculated. {message} Critical path: {_criticalPathRoute}.";
+        _host.LayoutScreen._layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+        _host.Ribbon.SynchronizeWithPage();
+        return true;
+    }
+
+    internal void AutoSizeFan()
     {
         if (!TryAutoSizeFan(out var message))
         {
@@ -1165,7 +1031,7 @@ internal sealed partial class DuctSystemScreen
         ? $"{horsepower:0.###} hp"
         : "not available (check fan airflow, static pressure and efficiency)";
 
-    private void ViewFanInformation()
+    internal void ViewFanInformation()
     {
         if (!TryGetFanInformation(out var information))
         {
@@ -1202,7 +1068,7 @@ internal sealed partial class DuctSystemScreen
         return true;
     }
 
-    private void ToggleCriticalPathFilter()
+    internal void ToggleCriticalPathFilter()
     {
         if (!_criticalPathCalculated)
             return;
@@ -2344,7 +2210,7 @@ internal sealed partial class DuctSystemScreen
         _host._statusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
-    private void ClearDuctEditingContext()
+    internal void ClearDuctEditingContext()
     {
         _editingDuctSequence = null;
         _host.CalculatorScreen._ductEditingLabel.Visible = false;
@@ -2352,7 +2218,7 @@ internal sealed partial class DuctSystemScreen
         _addDuctButton.Visible = false;
     }
 
-    private void ClearFittingEditingContext()
+    internal void ClearFittingEditingContext()
     {
         _editingFittingSequence = null;
         _host.FittingScreen._fittingEditingLabel.Visible = false;
@@ -2628,7 +2494,7 @@ internal sealed partial class DuctSystemScreen
         }
     }
 
-    private void ExportDuctSystem()
+    internal void ExportDuctSystem()
     {
         var automatedExportPath = AutomationOptions.ExportBasePath;
         var basePath = string.IsNullOrWhiteSpace(automatedExportPath) ? _lastExportBasePath : automatedExportPath;
@@ -3879,7 +3745,7 @@ internal sealed partial class DuctSystemScreen
     /// settings). A CSV schedule can also be chosen; it carries ducts and fittings only,
     /// so the user is told that layout and connections will not be restored.
     /// </summary>
-    private void OpenProject()
+    internal void OpenProject()
     {
         var path = AutomationOptions.OpenProjectPath;
         if (string.IsNullOrWhiteSpace(path))
@@ -3931,7 +3797,7 @@ internal sealed partial class DuctSystemScreen
         _systemStorageStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
-    private bool ConfirmReplaceCurrentSystem(string question)
+    internal bool ConfirmReplaceCurrentSystem(string question)
     {
         var existingCount = _ductSystem.Ducts.Count + _ductSystem.Fittings.Count + _ductSystem.LayoutNodes.Count;
         if (existingCount == 0 || AutomationOptions.SuppressDialogs)
@@ -3944,7 +3810,7 @@ internal sealed partial class DuctSystemScreen
     }
 
     /// <summary>Makes <paramref name="document"/> the working system and resets all editing state.</summary>
-    private void ReplaceCurrentSystem(DuctSystemDocument document)
+    internal void ReplaceCurrentSystem(DuctSystemDocument document)
     {
         _ductSystem = document;
         _lastExportBasePath = string.Empty;

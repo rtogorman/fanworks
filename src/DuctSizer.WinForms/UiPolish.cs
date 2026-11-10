@@ -101,48 +101,9 @@ internal sealed class ProjectIdentityHeaderPanel : TableLayoutPanel
 
     protected override void OnPaintBackground(PaintEventArgs eventArgs)
     {
-        var graphics = eventArgs.Graphics;
-        graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using (var gradient = new LinearGradientBrush(ClientRectangle,
-                   Color.FromArgb(4, 25, 42), Color.FromArgb(14, 69, 91), LinearGradientMode.Horizontal))
-            graphics.FillRectangle(gradient, ClientRectangle);
-
-        // The brand deck remains visually separate from project metadata while
-        // the upper-to-lower line bank reads as diminishing airflow velocity.
-        var leftDeck = new PointF[]
-        {
-            new(0, 0), new(Math.Min(330, Width * .29F), 0),
-            new(Math.Min(390, Width * .34F), Height), new(0, Height)
-        };
-        using (var deck = new LinearGradientBrush(ClientRectangle,
-                   Color.FromArgb(6, 36, 57), Color.FromArgb(9, 52, 70), LinearGradientMode.Horizontal))
-            graphics.FillPolygon(deck, leftDeck);
-
-        var lineEnd = Width - 18F;
-        var maximumLength = Math.Max(120F, Width - 36F);
-        const int lineCount = 7;
-        for (var index = 0; index < lineCount; index++)
-        {
-            var progress = index / (lineCount - 1F);
-            var length = maximumLength * (1F - progress * .26F);
-            var alpha = (int)Math.Round(72 - progress * 46);
-            var y = 12F + index * Math.Max(8F, (Height - 28F) / (lineCount - 1F));
-            using var airflowLine = new Pen(Color.FromArgb(alpha, 73, 220, 226), index == 0 ? 2F : 1.25F)
-            {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round
-            };
-            graphics.DrawLine(airflowLine, lineEnd, y, lineEnd - length, y);
-        }
-
-        using var indexPen = new Pen(Color.FromArgb(32, 123, 209, 217), 1F);
-        for (var x = lineEnd; x > lineEnd - maximumLength; x -= 32F)
-        {
-            graphics.DrawLine(indexPen, x, 5, x, 9);
-        }
-
-        using var lowerEdge = new Pen(Color.FromArgb(120, 5, 31, 48), 1F);
-        graphics.DrawLine(lowerEdge, 0, Height - 1, Width, Height - 1);
+        // The top bar of the window: a flat dark band that holds the brand, the main tabs and the project identity.
+        using var fill = new SolidBrush(RibbonPalette.TopBar);
+        eventArgs.Graphics.FillRectangle(fill, ClientRectangle);
     }
 }
 

@@ -15,14 +15,37 @@ internal sealed class ProjectSettingsDialog : Form
     };
     private readonly PictureBox _logoPreview = new() { Name = "SettingsCompanyLogoPreview", SizeMode = PictureBoxSizeMode.Zoom, BorderStyle = BorderStyle.FixedSingle };
     private string _companyLogoPngBase64;
+    private readonly UnitSystem _units;
+    private readonly RadioButton _imperialUnits = new() { Name = "SettingsImperialUnitsRadio", Text = "Imperial (in., ft, cfm, in. w.c., °F)", AutoSize = true };
+    private readonly RadioButton _metricUnits = new() { Name = "SettingsMetricUnitsRadio", Text = "Metric (mm, m, L/s, Pa, °C)", AutoSize = true };
+    private readonly TextBox _sizingIncrement = new() { Name = "SettingsSizingIncrementText", TextAlign = HorizontalAlignment.Right };
+    private readonly ComboBox _roundingMethod = new() { Name = "SettingsRoundingMethodCombo", DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _equivalentMethod = new() { Name = "SettingsEquivalentMethodCombo", DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _pressureBasis = new() { Name = "SettingsPressureBasisCombo", DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly TabControl _pages = new() { Name = "ProjectSettingsPages", Dock = DockStyle.Fill };
+
+    internal UnitSystem SelectedUnits => _metricUnits.Checked ? UnitSystem.Metric : UnitSystem.Imperial;
+    internal double SizingIncrementM { get; private set; }
+    internal SizeRoundingDirection RoundingDirection => Choice(_roundingMethod, SizeRoundingDirection.Automatic);
+    internal EquivalentDiameterMethod EquivalentDiameterMethod => Choice(_equivalentMethod, EquivalentDiameterMethod.Huebscher);
+    internal PressureLossBasis PressureLossBasis => Choice(_pressureBasis, PressureLossBasis.EquivalentRoundArea);
+
+    /// <summary>Which page to show first.</summary>
+    internal enum Page { ProjectInformation, Units, CalculationSettings }
 
     internal string UserName => _userName.Text.Trim();
     internal string ProjectName => _projectName.Text.Trim();
     internal string ProjectNumber => _projectNumber.Text.Trim();
     internal string ProjectDate => _projectDate.Value.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     internal string CompanyLogoPngBase64 => _companyLogoPngBase64;
-    internal ProjectSettingsDialog(DuctSystemDocument document, UnitSystem units)
+    /// <summary>
+    /// One form for everything that belongs to the project: identity (user, project name and number, date,
+    /// company logo), display units, and the calculation settings used by sizing (autosize increment and
+    /// rounding, equivalent-diameter method, duct area basis). Values are applied only when the user saves.
+    /// </summary>
+    internal ProjectSettingsDialog(DuctSystemDocument document, UnitSystem units, Page firstPage = Page.ProjectInformation)
     {
+        _units = units;
         _companyLogoPngBase64 = document.CompanyLogoPngBase64;
         Text = "Project Settings";
         StartPosition = FormStartPosition.CenterParent;
@@ -30,7 +53,7 @@ internal sealed class ProjectSettingsDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(660, 430);
+        ClientSize = new Size(680, 480);
         Font = new Font("Segoe UI", 9F);
         BackColor = Color.FromArgb(245, 247, 250);
 
@@ -87,11 +110,89 @@ internal sealed class ProjectSettingsDialog : Form
         table.Controls.Add(logoEditor, 1, 4);
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 8));
 
-        var buttons = new FlowLayoutPanel
+        table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var projectPage = new TabPage("Project Information") { Name = "ProjectInformationPage", BackColor = BackColor };
+        projectPage.Controls.Add(table);
+
+        _imperialUnits.Checked = units == UnitSystem.Imperial;
+        _metricUnits.Checked = units == UnitSystem.Metric;
+        var unitsLayout = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Padding = new Padding(24, 22, 20, 20),
+            BackColor = BackColor
+        };
+        unitsLayout.Controls.Add(new Label
+        {
+            Text = "Units used for input and display. Calculations are always done in SI internally, so switching "
+                   + "units converts the displayed values without changing any result.",
+            AutoSize = false,
+            Size = new Size(600, 48),
+            ForeColor = Color.FromArgb(48, 65, 80)
+        });
+        _imperialUnits.Margin = new Padding(4, 8, 0, 4);
+        _metricUnits.Margin = new Padding(4, 4, 0, 4);
+        unitsLayout.Controls.Add(_imperialUnits);
+        unitsLayout.Controls.Add(_metricUnits);
+        var unitsPage = new TabPage("Units") { Name = "UnitsPage", BackColor = BackColor };
+        unitsPage.Controls.Add(unitsLayout);
+
+        _sizingIncrement.Text = (units == UnitSystem.Imperial
+            ? UnitConversions.MToInches(document.DefaultSizingIncrementM)
+            : UnitConversions.MToMillimeters(document.DefaultSizingIncrementM)).ToString("0.####", CultureInfo.CurrentCulture);
+        _roundingMethod.Items.AddRange(new object[]
+        {
+            new SettingChoice<SizeRoundingDirection>("Automatic (.5 rounds up)", SizeRoundingDirection.Automatic),
+            new SettingChoice<SizeRoundingDirection>("Round Down", SizeRoundingDirection.Down)
+        });
+        _equivalentMethod.Items.AddRange(new object[]
+        {
+            new SettingChoice<EquivalentDiameterMethod>("Huebscher", EquivalentDiameterMethod.Huebscher),
+            new SettingChoice<EquivalentDiameterMethod>("Hydraulic Diameter", EquivalentDiameterMethod.HydraulicDiameter)
+        });
+        _pressureBasis.Items.AddRange(new object[]
+        {
+            new SettingChoice<PressureLossBasis>("Equivalent Round Area", PressureLossBasis.EquivalentRoundArea),
+            new SettingChoice<PressureLossBasis>("Actual Duct Area", PressureLossBasis.ActualDuctArea)
+        });
+        Select(_roundingMethod, document.DefaultSizeRoundingDirection);
+        Select(_equivalentMethod, document.DefaultEquivalentDiameterMethod);
+        Select(_pressureBasis, document.DefaultPressureLossBasis);
+        var calculationTable = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(20), BackColor = BackColor };
+        calculationTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
+        calculationTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        AddRow(calculationTable, 0, units == UnitSystem.Imperial ? "Autosize Increment (in)" : "Autosize Increment (mm)", _sizingIncrement);
+        AddRow(calculationTable, 1, "Autosize Rounding", _roundingMethod);
+        AddRow(calculationTable, 2, "Equivalent Diameter Method", _equivalentMethod);
+        AddRow(calculationTable, 3, "Duct Area Calculation Method", _pressureBasis);
+        calculationTable.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        calculationTable.Controls.Add(new Label
+        {
+            Text = "The autosize increment is the same value as the ribbon's Round Sizes choice.",
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Margin = new Padding(4, 10, 0, 0),
+            ForeColor = Color.FromArgb(72, 92, 110)
+        }, 0, 4);
+        calculationTable.SetColumnSpan(calculationTable.GetControlFromPosition(0, 4)!, 2);
+        var calculationPage = new TabPage("Calculation Settings") { Name = "CalculationSettingsPage", BackColor = BackColor };
+        calculationPage.Controls.Add(calculationTable);
+
+        _pages.TabPages.Add(projectPage);
+        _pages.TabPages.Add(unitsPage);
+        _pages.TabPages.Add(calculationPage);
+        _pages.SelectedIndex = (int)firstPage;
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 52,
+            Padding = new Padding(0, 8, 16, 8),
             FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false
+            WrapContents = false,
+            BackColor = BackColor
         };
         var save = new Button { Text = "Save", Width = 94, Height = 34, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(42, 135, 91), ForeColor = Color.White };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 94, Height = 34, FlatStyle = FlatStyle.Flat };
@@ -99,15 +200,43 @@ internal sealed class ProjectSettingsDialog : Form
         UiPolish.RoundButton(cancel, 8);
         buttons.Controls.Add(save);
         buttons.Controls.Add(cancel);
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        table.Controls.Add(buttons, 0, 6);
-        table.SetColumnSpan(buttons, 2);
-        save.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
-        Controls.Add(table);
+        save.Name = "ProjectSettingsSaveButton";
+        save.Click += (_, _) => SaveSettings();
+        Controls.Add(_pages);
+        Controls.Add(buttons);
         AcceptButton = save;
         CancelButton = cancel;
         UiPolish.ApplyDialogSurface(this);
     }
+
+    private void SaveSettings()
+    {
+        if ((!double.TryParse(_sizingIncrement.Text, NumberStyles.Float | NumberStyles.AllowThousands,
+                 CultureInfo.CurrentCulture, out var displayed)
+             && !double.TryParse(_sizingIncrement.Text, NumberStyles.Float | NumberStyles.AllowThousands,
+                 CultureInfo.InvariantCulture, out displayed))
+            || !double.IsFinite(displayed) || displayed < 0)
+        {
+            _pages.SelectedIndex = (int)Page.CalculationSettings;
+            MessageBox.Show(this, "Enter a nonnegative autosize increment.", "Invalid Calculation Setting",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _sizingIncrement.Focus();
+            _sizingIncrement.SelectAll();
+            return;
+        }
+        SizingIncrementM = _units == UnitSystem.Imperial
+            ? UnitConversions.InchesToM(displayed) : UnitConversions.MillimetersToM(displayed);
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    private static T Choice<T>(ComboBox combo, T fallback) where T : struct =>
+        (combo.SelectedItem as SettingChoice<T>)?.Value ?? fallback;
+
+    private static void Select<T>(ComboBox combo, T value) where T : struct =>
+        combo.SelectedItem = combo.Items.Cast<SettingChoice<T>>().First(x => EqualityComparer<T>.Default.Equals(x.Value, value));
+
+    private sealed record SettingChoice<T>(string Label, T Value) { public override string ToString() => Label; }
 
     private void ChooseLogo()
     {

@@ -1,0 +1,458 @@
+using System.Globalization;
+using DuctSizer.Core;
+
+namespace DuctSizer.WinForms;
+
+/// <summary>
+/// The main tabs (Project, Analysis, Reports, Quick Calc) and the ribbon under them. The ribbon only
+/// invokes existing commands of the screens; it holds no engineering logic and no project state of its own.
+/// </summary>
+internal sealed class MainRibbon
+{
+    internal const int RibbonHeight = 100;
+
+    internal enum TopTab { Project, Analysis, Reports, QuickCalc }
+
+    private readonly MainForm _host;
+    private readonly Dictionary<TopTab, AppTabButton> _tabButtons = new();
+    private readonly Dictionary<TopTab, Control> _pages = new();
+    private TopTab _activeTab = TopTab.Project;
+    private TabPage? _lastQuickCalcPage;
+
+    private RibbonButton? _selectButton;
+    private RibbonButton? _moveButton;
+    private RibbonButton? _highlightButton;
+    private RibbonButton? _roundSizesButton;
+    private RibbonButton? _criticalOnlyButton;
+    private RibbonButton? _ductCalculatorButton;
+    private RibbonButton? _fittingCalculatorButton;
+    private readonly ToolTip _toolTips = new() { AutoPopDelay = 9000, InitialDelay = 400, ReshowDelay = 100 };
+
+    internal MainRibbon(MainForm host)
+    {
+        _host = host;
+    }
+
+    private DuctSystemScreen SystemScreen => _host.DuctSystemScreen;
+    private LayoutDesignerScreen Layout => _host.LayoutScreen;
+
+    internal TopTab ActiveTab => _activeTab;
+
+    /// <summary>The four main tabs, placed in the dark top bar.</summary>
+    internal Control BuildTopTabs()
+    {
+        var strip = new FlowLayoutPanel
+        {
+            Name = "MainTopTabs",
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = new Padding(12, 0, 0, 0),
+            Padding = Padding.Empty,
+            BackColor = RibbonPalette.TopBar
+        };
+        AddTab(TopTab.Project, "TopTabProject", "Project", RibbonIcon.Project);
+        AddTab(TopTab.Analysis, "TopTabAnalysis", "Analysis", RibbonIcon.Analysis);
+        AddTab(TopTab.Reports, "TopTabReports", "Reports", RibbonIcon.Reports);
+        AddTab(TopTab.QuickCalc, "TopTabQuickCalc", "Quick Calc", RibbonIcon.QuickCalc);
+        return strip;
+
+        void AddTab(TopTab tab, string name, string text, RibbonIcon icon)
+        {
+            var button = new AppTabButton(text, icon) { Name = name };
+            button.Click += (_, _) => ShowTab(tab);
+            _tabButtons[tab] = button;
+            strip.Controls.Add(button);
+        }
+    }
+
+    /// <summary>The ribbon: one row of command groups per main tab.</summary>
+    internal Control BuildRibbon()
+    {
+        var ribbon = new RibbonHostPanel
+        {
+            Name = "MainRibbon",
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
+            Padding = new Padding(6, 4, 6, 1),
+            BackColor = RibbonPalette.Ribbon
+        };
+        _pages[TopTab.Project] = BuildProjectRibbon();
+        _pages[TopTab.Analysis] = BuildAnalysisRibbon();
+        _pages[TopTab.Reports] = BuildReportsRibbon();
+        _pages[TopTab.QuickCalc] = BuildQuickCalcRibbon();
+        foreach (var page in _pages.Values)
+            ribbon.Controls.Add(page);
+        Layout.LayoutCommandStateChanged += SynchronizeWithPage;
+        return ribbon;
+    }
+
+    private FlowLayoutPanel NewRibbonPage(string name) => new()
+    {
+        Name = name,
+        Dock = DockStyle.Fill,
+        FlowDirection = FlowDirection.LeftToRight,
+        WrapContents = false,
+        AutoScroll = true,
+        Margin = Padding.Empty,
+        Padding = Padding.Empty,
+        BackColor = RibbonPalette.Ribbon,
+        Visible = false
+    };
+
+    private RibbonGroup AddGroup(FlowLayoutPanel page, string name, string caption)
+    {
+        var group = new RibbonGroup(name, caption);
+        page.Controls.Add(group);
+        return group;
+    }
+
+    private RibbonButton AddButton(RibbonGroup group, string name, string text, RibbonIcon icon, string toolTip,
+        Action action, int width = 60)
+    {
+        var button = new RibbonButton(name, text, icon, toolTip, width);
+        button.Click += (_, _) =>
+        {
+            if (button.DropDownMenu is null)
+                action();
+        };
+        _toolTips.SetToolTip(button, toolTip);
+        group.Content.Controls.Add(button);
+        return button;
+    }
+
+    private Control BuildProjectRibbon()
+    {
+        var page = NewRibbonPage("RibbonProjectPage");
+
+        var project = AddGroup(page, "RibbonProjectGroup", "Project");
+        AddButton(project, "RibbonNewProjectButton", "New\nProject", RibbonIcon.NewProject,
+            "Start a new project. You are asked before the current project is closed.", NewProject);
+        AddButton(project, "RibbonOpenButton", "Open", RibbonIcon.Open,
+            "Open a FanWorks project (.fanworks), or import a CSV schedule.", () => SystemScreen.OpenProject());
+        AddButton(project, "RibbonSaveButton", "Save", RibbonIcon.Save,
+            "Save the project (.fanworks) with its PDF report and CSV schedule.", () => SystemScreen.ExportDuctSystem(), 52);
+        AddButton(project, "RibbonSaveAsButton", "Save As", RibbonIcon.SaveAs,
+            "Save the project under a new name or location.", SaveProjectAs, 56);
+
+        var settings = AddGroup(page, "RibbonSettingsGroup", "Settings");
+        AddButton(settings, "RibbonProjectSettingsButton", "Project\nSettings", RibbonIcon.ProjectSettings,
+            "Project information, units (Imperial or Metric) and calculation settings.",
+            () => SystemScreen.EditProjectSettings());
+        AddButton(settings, "RibbonSizingCriteriaButton", "Sizing\nCriteria", RibbonIcon.SizingCriteria,
+            "Automatic sizing inputs used by Auto Size for ducts and components.",
+            () => SystemScreen.EditAutomaticSizingInputs());
+        _roundSizesButton = AddButton(settings, "RibbonRoundSizesButton", "Round\nSizes", RibbonIcon.RoundSizes,
+            "Round automatically sized ductwork to the nearest ½ in., 1 in. or 2 in.", () => { }, 64);
+        _roundSizesButton.DropDownMenu = BuildRoundSizesMenu();
+
+        var edit = AddGroup(page, "RibbonEditGroup", "Edit");
+        _selectButton = AddButton(edit, "RibbonSelectButton", "Select", RibbonIcon.Select,
+            "Select, connect and edit items on the grid.", () => Layout.UseLayoutSelectMode(), 52);
+        _moveButton = AddButton(edit, "RibbonMoveButton", "Move", RibbonIcon.Move,
+            "Move mode: drag components to tidy the drawing. Connections and calculations do not change.",
+            () =>
+            {
+                Layout.ToggleLayoutRearrangeMode();
+                SynchronizeWithPage();
+            }, 52);
+
+        AddComponentGroup(page, "RibbonSpacesGroup", "Spaces", new (LayoutNodeType, string, string, string?)[]
+        {
+            (LayoutNodeType.Reservoir, "Source", "Space Source: airflow, temperature, and source pressure", "Space Source"),
+            (LayoutNodeType.Reservoir, "Sink", "Space Sink: calculated terminal airflow and temperature", "Space Sink")
+        });
+        AddComponentGroup(page, "RibbonEquipmentGroup", "Equipment", new (LayoutNodeType, string, string, string?)[]
+        {
+            (LayoutNodeType.Fan, "Fan", "Airflow, temperature, air system", null),
+            (LayoutNodeType.Coil, "Coil", "Temperature and pressure drop", null),
+            (LayoutNodeType.Filter, "Filter", "Pressure-drop input", null),
+            (LayoutNodeType.Fitting, "VAV", "Titus DESV VAV with or without hot-water reheat", FittingCatalog.VavSelectionGroup),
+            (LayoutNodeType.CustomComponent, "Custom", "User-defined component label and static pressure drop", null)
+        });
+        AddComponentGroup(page, "RibbonFittingsGroup", "Fittings", new (LayoutNodeType, string, string, string?)[]
+        {
+            (LayoutNodeType.Fitting, "Elbow", "ASHRAE elbow", "Elbows"),
+            (LayoutNodeType.Fitting, "Transition", "ASHRAE transition", "Transitions"),
+            (LayoutNodeType.Fitting, "Split", "Diverting fitting: one inlet, two outlets", "Diverting Fittings"),
+            (LayoutNodeType.Fitting, "Merge", "Converging fitting: two inlets, one outlet", "Converging Fittings"),
+            (LayoutNodeType.Fitting, "Damper", "ASHRAE damper", "Dampers"),
+            (LayoutNodeType.Fitting, "Fan/Plenum", "Fan exits and plenum connections", FittingCatalog.FanExitsAndPlenumsSelectionGroup)
+        });
+        AddComponentGroup(page, "RibbonTerminalsGroup", "Terminals", new (LayoutNodeType, string, string, string?)[]
+        {
+            (LayoutNodeType.Fitting, "Terminal", "Entries, exits, terminals and takeoffs", FittingCatalog.TerminalSelectionGroup),
+            (LayoutNodeType.Grd, "GRD", "Grille, square diffuser, or linear diffuser", "GRDs")
+        });
+        AddComponentGroup(page, "RibbonPointsGroup", "Calculation Points", new (LayoutNodeType, string, string, string?)[]
+        {
+            (LayoutNodeType.CalculationPoint, "Pressure", "Pressure calculation point", "Pressure"),
+            (LayoutNodeType.CalculationPoint, "Temp", "Temperature calculation point", "Temperature"),
+            (LayoutNodeType.CalculationPoint, "Velocity", "Velocity calculation point", "Velocity"),
+            (LayoutNodeType.CalculationPoint, "Airflow", "Airflow calculation point", "Airflow")
+        });
+
+        var sizing = AddGroup(page, "RibbonSizingGroup", "Sizing");
+        AddButton(sizing, "RibbonAutoSizeButton", "Auto Size", RibbonIcon.AutoSize,
+            "Size every undefined component from the Sizing Criteria, then re-size all connected ductwork from the current airflows.",
+            () => Layout.AutoSizeLayout());
+        AddButton(sizing, "RibbonCalculateButton", "Calculate", RibbonIcon.Calculate,
+            "Calculate the system: size the fan to the critical path and highlight the critical path.",
+            () => SystemScreen.CalculateSystem());
+
+        var view = AddGroup(page, "RibbonViewGroup", "View");
+        _highlightButton = AddButton(view, "RibbonHighlightCriticalPathButton", "Highlight\nCritical Path",
+            RibbonIcon.CriticalPath, "Highlight or unhighlight the critical path on the drawing.",
+            () => Layout.ToggleLayoutCriticalPathHighlight(), 76);
+        return page;
+    }
+
+    private void AddComponentGroup(FlowLayoutPanel page, string name, string caption,
+        IReadOnlyList<(LayoutNodeType Type, string Title, string Detail, string? Group)> tools)
+    {
+        var group = AddGroup(page, name, caption);
+        var columns = (tools.Count + 1) / 2;
+        var grid = new TableLayoutPanel
+        {
+            Name = name + "Tools",
+            ColumnCount = columns,
+            RowCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = RibbonPalette.Ribbon
+        };
+        for (var index = 0; index < tools.Count; index++)
+        {
+            var (type, title, detail, fittingGroup) = tools[index];
+            var tool = Layout.CreateRibbonLayoutTool(type, title, detail, fittingGroup);
+            tool.Click += (_, _) => ShowTab(TopTab.Project);
+            grid.Controls.Add(tool, index / 2, index % 2);
+        }
+        group.Content.Controls.Add(grid);
+    }
+
+    private Control BuildAnalysisRibbon()
+    {
+        var page = NewRibbonPage("RibbonAnalysisPage");
+        var project = AddGroup(page, "RibbonAnalysisProjectGroup", "Project");
+        AddButton(project, "RibbonAnalysisSaveButton", "Save", RibbonIcon.Save,
+            "Save the project (.fanworks) with its PDF report and CSV schedule.", () => SystemScreen.ExportDuctSystem(), 52);
+        var system = AddGroup(page, "RibbonAnalysisSystemGroup", "System");
+        AddButton(system, "RibbonAnalysisCalculateButton", "Calculate", RibbonIcon.Calculate,
+            "Calculate the system: size the fan to the critical path.", () => SystemScreen.CalculateSystem());
+        _criticalOnlyButton = AddButton(system, "RibbonCriticalPathOnlyButton", "Critical\nPath Only",
+            RibbonIcon.Filter, "Show only the items on the critical path, or all items.", () =>
+            {
+                SystemScreen.ToggleCriticalPathFilter();
+                SynchronizeWithPage();
+            }, 66);
+        AddButton(system, "RibbonFanInformationButton", "Fan\nInformation", RibbonIcon.Fan,
+            "Fan airflow, static pressure, efficiency and brake horsepower.", () => SystemScreen.ViewFanInformation(), 70);
+        return page;
+    }
+
+    private Control BuildReportsRibbon()
+    {
+        var page = NewRibbonPage("RibbonReportsPage");
+        var report = AddGroup(page, "RibbonReportGroup", "Report");
+        AddButton(report, "RibbonPrintReportButton", "Print\nReport", RibbonIcon.PrintReport,
+            "Create the PDF report (saved with the project and its CSV schedule).", () => SystemScreen.ExportDuctSystem());
+        return page;
+    }
+
+    private Control BuildQuickCalcRibbon()
+    {
+        var page = NewRibbonPage("RibbonQuickCalcPage");
+        var calculators = AddGroup(page, "RibbonCalculatorsGroup", "Calculators");
+        _ductCalculatorButton = AddButton(calculators, "RibbonDuctCalculatorButton", "Duct\nCalculator",
+            RibbonIcon.DuctCalculator, "Size or check a single duct without a project.",
+            () => ShowQuickCalc(SystemScreen._calculatorTab, clearEditing: true), 68);
+        _fittingCalculatorButton = AddButton(calculators, "RibbonFittingCalculatorButton", "Fitting\nCalculator",
+            RibbonIcon.FittingCalculator, "Calculate a single ASHRAE fitting loss without a project.",
+            () => ShowQuickCalc(SystemScreen._fittingTab, clearEditing: true), 68);
+        return page;
+    }
+
+    /// <summary>The Reports page. Stage 4 replaces this with a page-by-page preview of the report.</summary>
+    internal Control BuildReportsPage()
+    {
+        var page = new Panel { Name = "ReportsPage", Dock = DockStyle.Fill, BackColor = _host.BackColor, Padding = new Padding(24) };
+        var card = new RoundedPanel
+        {
+            Name = "ReportsInformationCard",
+            Dock = DockStyle.Top,
+            Height = 150,
+            CornerRadius = 10,
+            BackColor = Color.White,
+            Padding = new Padding(22, 18, 22, 18)
+        };
+        card.Controls.Add(new Label
+        {
+            Name = "ReportsInformationText",
+            Dock = DockStyle.Fill,
+            ForeColor = RibbonPalette.Ink,
+            Font = new Font("Segoe UI", 10F),
+            Text = "Project report\r\n\r\nPrint Report creates the PDF report: project information, the duct system schedule, "
+                   + "the critical path, the layout drawing and the calculation sheets for each item. It is saved next to "
+                   + "the project file together with the CSV schedule.\r\n\r\nA page-by-page preview of the report will appear here."
+        });
+        page.Controls.Add(card);
+        return page;
+    }
+
+    private ContextMenuStrip BuildRoundSizesMenu()
+    {
+        var menu = new ContextMenuStrip { Name = "RibbonRoundSizesMenu" };
+        foreach (var inches in new[] { 0.5, 1.0, 2.0 })
+        {
+            var item = new ToolStripMenuItem { Name = $"RoundSizes{inches.ToString("0.#", CultureInfo.InvariantCulture).Replace(".", "_", StringComparison.Ordinal)}In", Tag = inches };
+            item.Click += (_, _) =>
+            {
+                SystemScreen.SetSizingIncrement(UnitConversions.InchesToM(inches));
+                SynchronizeWithPage();
+                Layout._layoutStatusLabel.Text = $"Automatic duct sizes now round to the nearest {FormatIncrement(inches)}. Use Auto Size to re-size existing ducts.";
+                Layout._layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+            };
+            menu.Items.Add(item);
+        }
+        var custom = new ToolStripMenuItem { Name = "RoundSizesCustom", Enabled = false, Visible = false };
+        menu.Items.Add(custom);
+        menu.Opening += (_, _) => RefreshRoundSizesMenu(menu);
+        return menu;
+    }
+
+    private string FormatIncrement(double inches) => _host._currentUnits == UnitSystem.Imperial
+        ? inches switch { 0.5 => "½ in.", _ => $"{inches:0.##} in." }
+        : $"{UnitConversions.MToMillimeters(UnitConversions.InchesToM(inches)):0.#} mm ({(inches == 0.5 ? "½" : inches.ToString("0.##", CultureInfo.CurrentCulture))} in.)";
+
+    private void RefreshRoundSizesMenu(ContextMenuStrip menu)
+    {
+        var currentInches = UnitConversions.MToInches(SystemScreen._ductSystem.DefaultSizingIncrementM);
+        var matched = false;
+        foreach (var item in menu.Items.OfType<ToolStripMenuItem>())
+        {
+            if (item.Tag is double inches)
+            {
+                item.Text = FormatIncrement(inches);
+                item.Checked = Math.Abs(inches - currentInches) < 1e-6;
+                matched |= item.Checked;
+            }
+            else
+            {
+                item.Visible = !matched;
+                item.Checked = !matched;
+                item.Text = $"Custom: {(_host._currentUnits == UnitSystem.Imperial ? $"{currentInches:0.####} in." : $"{UnitConversions.MToMillimeters(SystemScreen._ductSystem.DefaultSizingIncrementM):0.##} mm")} (set in Project Settings)";
+            }
+        }
+    }
+
+    /// <summary>Shows a main tab and its ribbon.</summary>
+    internal void ShowTab(TopTab tab)
+    {
+        switch (tab)
+        {
+            case TopTab.Project:
+                SystemScreen._mainTabs.SelectedTab = SystemScreen._layoutTab;
+                break;
+            case TopTab.Analysis:
+                SystemScreen._mainTabs.SelectedTab = SystemScreen._systemTab;
+                break;
+            case TopTab.Reports:
+                SystemScreen._mainTabs.SelectedTab = SystemScreen._reportsTab;
+                break;
+            case TopTab.QuickCalc:
+                ShowQuickCalc(_lastQuickCalcPage ?? SystemScreen._calculatorTab, clearEditing: false);
+                break;
+        }
+        SynchronizeWithPage();
+    }
+
+    private void ShowQuickCalc(TabPage page, bool clearEditing)
+    {
+        if (clearEditing || SystemScreen._mainTabs.SelectedTab != page)
+        {
+            if (page == SystemScreen._calculatorTab)
+                SystemScreen.ClearDuctEditingContext();
+            else
+                SystemScreen.ClearFittingEditingContext();
+        }
+        SystemScreen._mainTabs.SelectedTab = page;
+        SynchronizeWithPage();
+    }
+
+    /// <summary>Brings the tabs and ribbon in line with the page on screen and the current command states.</summary>
+    internal void SynchronizeWithPage()
+    {
+        if (_pages.Count == 0)
+            return;
+        var selected = SystemScreen._mainTabs.SelectedTab;
+        _activeTab = selected == SystemScreen._systemTab ? TopTab.Analysis
+            : selected == SystemScreen._reportsTab ? TopTab.Reports
+            : selected == SystemScreen._calculatorTab || selected == SystemScreen._fittingTab ? TopTab.QuickCalc
+            : TopTab.Project;
+        if (selected == SystemScreen._calculatorTab || selected == SystemScreen._fittingTab)
+            _lastQuickCalcPage = selected;
+        foreach (var (tab, button) in _tabButtons)
+            button.Selected = tab == _activeTab;
+        foreach (var (tab, page) in _pages)
+            page.Visible = tab == _activeTab;
+
+        if (_moveButton is not null)
+            _moveButton.Checked = Layout._layoutRearrangeMode;
+        if (_selectButton is not null)
+            _selectButton.Checked = !Layout._layoutRearrangeMode;
+        if (_highlightButton is not null)
+            _highlightButton.Checked = Layout._layoutCriticalPathHighlighted;
+        if (_criticalOnlyButton is not null)
+            _criticalOnlyButton.Checked = SystemScreen._criticalPathFilterEnabled;
+        if (_ductCalculatorButton is not null)
+            _ductCalculatorButton.Checked = selected == SystemScreen._calculatorTab;
+        if (_fittingCalculatorButton is not null)
+            _fittingCalculatorButton.Checked = selected == SystemScreen._fittingTab;
+    }
+
+    private void NewProject()
+    {
+        if (!SystemScreen.ConfirmReplaceCurrentSystem("Start a new project?"))
+            return;
+        var current = SystemScreen._ductSystem;
+        // The user's name and company logo carry over; everything about the old project is cleared.
+        var document = new DuctSystemDocument
+        {
+            UserName = current.UserName,
+            CompanyLogoPngBase64 = current.CompanyLogoPngBase64,
+            ProjectDate = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        };
+        SystemScreen.ReplaceCurrentSystem(document);
+        ShowTab(TopTab.Project);
+        Layout._layoutStatusLabel.Text = "New project started. Enter the project details in Project Settings, then drag components onto the grid.";
+        Layout._layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+        if (!AutomationOptions.SuppressDialogs)
+            SystemScreen.EditProjectSettings();
+    }
+
+    private void SaveProjectAs()
+    {
+        SystemScreen._lastExportBasePath = string.Empty;
+        SystemScreen.ExportDuctSystem();
+    }
+
+    /// <summary>The ribbon background with a hairline along its bottom edge.</summary>
+    private sealed class RibbonHostPanel : Panel
+    {
+        internal RibbonHostPanel()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw
+                     | ControlStyles.UserPaint, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            using var border = new Pen(RibbonPalette.RibbonBorder);
+            e.Graphics.DrawLine(border, 0, Height - 1, Width, Height - 1);
+        }
+    }
+}

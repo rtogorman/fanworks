@@ -23,40 +23,48 @@ internal sealed partial class LayoutDesignerScreen
     internal string? _pendingLayoutNodeId;
     internal string? _pendingConnectionNodeId;
     internal bool _pendingConnectionSecondary;
-    private readonly Button _layoutUndoButton = new();
-    private readonly Button _layoutRedoButton = new();
-    private readonly Button _layoutDeleteButton = new();
+    private readonly ToolbarIconButton _layoutUndoButton = new("LayoutUndoButton", RibbonIcon.Undo, "Undo");
+    private readonly ToolbarIconButton _layoutRedoButton = new("LayoutRedoButton", RibbonIcon.Redo, "Redo");
+    private readonly ToolbarIconButton _layoutDeleteButton = new("LayoutDeleteButton", RibbonIcon.Delete, "Delete selected item");
     private readonly Button _layoutRearrangeButton = new();
     private readonly Button _layoutLabelsButton = new();
     private readonly Button _layoutDuctSizesButton = new();
-    private readonly Button _layoutCenterButton = new();
-    private readonly Button _layoutCoordinateOriginButton = new();
-    private readonly Button _layoutSourceSinkEditorButton = new();
+    private readonly ToolbarIconButton _layoutCenterButton = new("LayoutCenterButton", RibbonIcon.ZoomFit, "Center view");
+    private readonly ToolbarIconButton _layoutCoordinateOriginButton = new("LayoutCoordinateOriginButton", RibbonIcon.Origin, "Set coordinate origin");
+    private readonly ToolbarIconButton _layoutSourceSinkEditorButton = new("LayoutSourceSinkEditorButton", RibbonIcon.SourceSink, "Source/Sink Editor");
     private readonly Button _layoutSizeUndefinedButton = new();
     private readonly Button _layoutRecalculateDuctworkButton = new();
     private readonly Button _layoutCriticalPathButton = new();
-    private readonly Button _layoutPdfButton = new();
+    private readonly ToolbarIconButton _layoutPdfButton = new("LayoutPdfBackgroundButton", RibbonIcon.PdfImport, "PDF underlay");
     private ContextMenuStrip? _layoutPdfMenu;
     private readonly ComboBox _layoutViewModeSelector = new();
     private bool _updatingLayoutViewMode;
-    private readonly TextBox _layoutScaleInput = new();
+    private readonly ComboBox _layoutScaleSelector = new();
+    private bool _updatingLayoutScaleSelector;
+    private readonly Label _layoutZoomValue = new();
+    private readonly CheckBox _layoutShowLabelsCheck = new();
+    private readonly CheckBox _layoutShowFlowCheck = new();
+    private readonly CheckBox _layoutShowSizesCheck = new();
+
+    /// <summary>Grid scales offered in the toolbar (feet per grid cell). A project's own scale is added if it differs.</summary>
+    internal static readonly double[] StandardGridScalesFeet = { 0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50 };
+
+    private sealed record GridScaleChoice(double Feet)
+    {
+        public override string ToString() => $"{Feet.ToString("0.##", CultureInfo.CurrentCulture)} ft / cell";
+    }
     private readonly DataGridView _layoutSystemSummaryGrid = new();
     private SplitContainer? _layoutWorkspaceSplitter;
-    private SplitContainer? _layoutToolboxSplitter;
     private readonly VerticalTextButton _layoutSummaryReopenButton = new();
-    private readonly VerticalTextButton _layoutToolboxReopenButton = new();
     private int _layoutSummaryWidth = 330;
-    private int _layoutToolboxWidth = 110;
     private bool _layoutSummaryInitialized;
-    private bool _layoutToolboxInitialized;
     private bool _updatingLayoutSummarySplitter;
-    private bool _updatingLayoutToolboxSplitter;
     private bool _syncingLayoutSelection;
     private Control? _layoutCanvasHost;
     internal bool _layoutViewportInitialized;
     private string _layoutViewportStartSignature = string.Empty;
-    private bool _layoutRearrangeMode;
-    private bool _layoutCriticalPathHighlighted;
+    internal bool _layoutRearrangeMode;
+    internal bool _layoutCriticalPathHighlighted;
     /// <summary>Designer undo/redo depth. Each entry is a project snapshot without the PDF underlay or logo.</summary>
     private const int LayoutHistoryCapacity = 100;
     private readonly BoundedHistory<string> _layoutUndoHistory = new(LayoutHistoryCapacity);
@@ -71,58 +79,23 @@ internal sealed partial class LayoutDesignerScreen
 
     internal Control BuildLayoutDesignerPage()
     {
+        // The Project tab's centre. Commands that used to sit in a header and button row now live in the main
+        // ribbon (Move, Auto Size, Calculate, Highlight Critical Path, component tools); this page keeps a compact
+        // canvas toolbar for view controls. The canvas, its drawing, drag-and-drop and zoom are unchanged.
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
-            Padding = new Padding(10),
+            RowCount = 3,
+            Padding = new Padding(8, 6, 8, 4),
             BackColor = _host.BackColor
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
 
-        var header = new SectionTitlePanel
-        {
-            Name = "DesignerSectionHeader",
-            Dock = DockStyle.Fill,
-            BackColor = UiPalette.Blue
-        };
-        header.Controls.Add(new Label
-        {
-            Text = "Layout Designer",
-            Dock = DockStyle.Top,
-            Height = 44,
-            Padding = new Padding(22, 2, 0, 0),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 15F),
-            TextAlign = ContentAlignment.MiddleLeft,
-            BackColor = Color.Transparent
-        });
-        header.Controls.Add(new Label
-        {
-            Text = "Drag components onto the grid, then drag between connector circles to create ducts. Drop directly on a duct to choose whether to insert the component.",
-            Dock = DockStyle.Bottom,
-            Height = 30,
-            Padding = new Padding(24, 0, 0, 5),
-            ForeColor = Color.FromArgb(215, 229, 242),
-            Font = new Font("Segoe UI", 8.3F),
-            BackColor = Color.Transparent
-        });
-
-        var workspace = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            Padding = new Padding(0, 6, 0, 0),
-            BackColor = _host.BackColor
-        };
-        workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        workspace.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        workspace.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var toolbar = BuildLayoutCanvasToolbar();
 
         var leftHost = new TableLayoutPanel
         {
@@ -134,200 +107,6 @@ internal sealed partial class LayoutDesignerScreen
             BackColor = _host.BackColor
         };
         leftHost.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var zoomBar = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Padding = new Padding(0, 3, 0, 3),
-            BackColor = _host.BackColor,
-            AutoScroll = true
-        };
-        var zoomValue = new Label
-        {
-            Name = "LayoutZoomValue",
-            Text = "100%",
-            Size = new Size(34, 32),
-            Visible = false,
-            TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = Color.FromArgb(34, 62, 88),
-            Font = new Font("Segoe UI Semibold", 9F),
-        };
-        zoomValue.Margin = new Padding(0, 0, 2, 0);
-        _layoutToolTips.SetToolTip(zoomValue, "Mouse-wheel zoom");
-        zoomBar.Controls.Add(zoomValue);
-        _layoutUndoButton.Name = "LayoutUndoButton";
-        _layoutUndoButton.Size = new Size(36, 32);
-        _layoutUndoButton.Margin = new Padding(1, 0, 1, 0);
-        _layoutUndoButton.FlatStyle = FlatStyle.Flat;
-        _layoutRedoButton.Name = "LayoutRedoButton";
-        _layoutRedoButton.Size = new Size(36, 32);
-        _layoutRedoButton.Margin = new Padding(0, 0, 1, 0);
-        _layoutRedoButton.FlatStyle = FlatStyle.Flat;
-        _layoutDeleteButton.Name = "LayoutDeleteButton";
-        _layoutDeleteButton.Text = "×";
-        _layoutDeleteButton.Size = new Size(34, 32);
-        _layoutDeleteButton.Margin = new Padding(0, 0, 1, 0);
-        _layoutDeleteButton.FlatStyle = FlatStyle.Flat;
-        _layoutDeleteButton.Enabled = false;
-        _layoutRearrangeButton.Name = "LayoutRearrangeButton";
-        _layoutRearrangeButton.Text = "Move";
-        _layoutRearrangeButton.Size = new Size(65, 32);
-        _layoutRearrangeButton.Margin = new Padding(1, 0, 1, 0);
-        _layoutRearrangeButton.FlatStyle = FlatStyle.Flat;
-        _layoutLabelsButton.Name = "LayoutLabelsButton";
-        _layoutLabelsButton.Text = "Hide Labels";
-        _layoutLabelsButton.Size = new Size(105, 34);
-        _layoutLabelsButton.Margin = new Padding(1, 0, 1, 0);
-        _layoutLabelsButton.FlatStyle = FlatStyle.Flat;
-        _layoutDuctSizesButton.Name = "LayoutDuctSizesButton";
-        _layoutDuctSizesButton.Text = "Show Duct Sizes";
-        _layoutDuctSizesButton.Size = new Size(140, 34);
-        _layoutDuctSizesButton.Margin = new Padding(1, 0, 1, 0);
-        _layoutDuctSizesButton.FlatStyle = FlatStyle.Flat;
-        _layoutCenterButton.Name = "LayoutCenterButton";
-        _layoutCenterButton.Text = "Center";
-        _layoutCenterButton.Size = new Size(70, 32);
-        _layoutCenterButton.Margin = new Padding(1, 0, 1, 0);
-        _layoutCenterButton.FlatStyle = FlatStyle.Flat;
-        _layoutCoordinateOriginButton.Name = "LayoutCoordinateOriginButton";
-        _layoutCoordinateOriginButton.Text = "Origin";
-        _layoutCoordinateOriginButton.Size = new Size(70, 32);
-        _layoutCoordinateOriginButton.Margin = new Padding(0, 0, 1, 0);
-        _layoutCoordinateOriginButton.FlatStyle = FlatStyle.Flat;
-        _layoutCoordinateOriginButton.Enabled = false;
-        _layoutSourceSinkEditorButton.Name = "LayoutSourceSinkEditorButton";
-        _layoutSourceSinkEditorButton.Text = "Source/Sink Editor";
-        _layoutSourceSinkEditorButton.Size = new Size(148, 34);
-        _layoutSourceSinkEditorButton.Margin = new Padding(1, 0, 1, 0);
-        _layoutSourceSinkEditorButton.FlatStyle = FlatStyle.Flat;
-        _layoutSourceSinkEditorButton.BackColor = Color.White;
-        _layoutSourceSinkEditorButton.ForeColor = Color.FromArgb(28, 69, 108);
-        _layoutSizeUndefinedButton.Name = "LayoutSizeUndefinedButton";
-        _layoutSizeUndefinedButton.Text = "Size Undefined Components";
-        _layoutSizeUndefinedButton.Size = new Size(245, 34);
-        _layoutSizeUndefinedButton.Margin = new Padding(1, 0, 1, 0);
-        _layoutSizeUndefinedButton.FlatStyle = FlatStyle.Flat;
-        _layoutSizeUndefinedButton.Font = new Font("Segoe UI Semibold", 8F);
-        _layoutSizeUndefinedButton.UseCompatibleTextRendering = true;
-        _layoutSizeUndefinedButton.BackColor = Color.FromArgb(31, 111, 168);
-        _layoutSizeUndefinedButton.ForeColor = Color.White;
-        _layoutRecalculateDuctworkButton.Name = "LayoutRecalculateDuctworkButton";
-        _layoutRecalculateDuctworkButton.Text = "Recalculate All Ductwork";
-        _layoutRecalculateDuctworkButton.Size = new Size(185, 34);
-        _layoutRecalculateDuctworkButton.Margin = new Padding(1, 0, 1, 0);
-        _layoutRecalculateDuctworkButton.FlatStyle = FlatStyle.Flat;
-        _layoutRecalculateDuctworkButton.Font = new Font("Segoe UI Semibold", 8F);
-        _layoutRecalculateDuctworkButton.UseCompatibleTextRendering = true;
-        _layoutRecalculateDuctworkButton.BackColor = Color.FromArgb(42, 135, 91);
-        _layoutRecalculateDuctworkButton.ForeColor = Color.White;
-        foreach (var compactButton in new[]
-                 {
-                     _layoutDeleteButton, _layoutRearrangeButton, _layoutLabelsButton,
-                     _layoutDuctSizesButton, _layoutCenterButton,
-                     _layoutCoordinateOriginButton, _layoutSourceSinkEditorButton, _layoutSizeUndefinedButton,
-                     _layoutRecalculateDuctworkButton, _layoutCriticalPathButton
-                 })
-        {
-            compactButton.Font = new Font("Segoe UI Semibold", 7F);
-            compactButton.UseCompatibleTextRendering = false;
-        }
-        _layoutSourceSinkEditorButton.Font = new Font("Segoe UI Semibold", 7.2F);
-        _layoutSizeUndefinedButton.Font = new Font("Segoe UI Semibold", 7.2F);
-        _layoutRecalculateDuctworkButton.Font = new Font("Segoe UI Semibold", 7F);
-        _layoutCriticalPathButton.Name = "LayoutCriticalPathButton";
-        _layoutCriticalPathButton.Text = "Highlight Critical Path";
-        _layoutCriticalPathButton.Size = new Size(180, 34);
-        _layoutCriticalPathButton.Margin = new Padding(1, 0, 1, 0);
-        _layoutCriticalPathButton.FlatStyle = FlatStyle.Flat;
-        _layoutCriticalPathButton.Font = new Font("Segoe UI Semibold", 7F);
-        _layoutCriticalPathButton.UseCompatibleTextRendering = false;
-        _layoutCriticalPathButton.BackColor = Color.White;
-        _layoutCriticalPathButton.ForeColor = Color.FromArgb(28, 69, 108);
-        _layoutViewModeSelector.Name = "LayoutViewModeSelector";
-        _layoutViewModeSelector.DropDownStyle = ComboBoxStyle.DropDownList;
-        _layoutViewModeSelector.Items.AddRange(new object[]
-        {
-            "Isometric Positive", "Isometric Negative", "Top-Down"
-        });
-        _layoutViewModeSelector.Size = new Size(138, 30);
-        _layoutViewModeSelector.Margin = new Padding(1, 1, 3, 0);
-        _layoutPdfButton.Name = "LayoutPdfBackgroundButton";
-        _layoutPdfButton.Text = "Upload PDF";
-        _layoutPdfButton.Size = new Size(136, 28);
-        _layoutPdfButton.Margin = new Padding(2, 0, 4, 0);
-        _layoutPdfButton.FlatStyle = FlatStyle.Flat;
-        _layoutPdfButton.BackColor = Color.White;
-        _layoutPdfButton.ForeColor = Color.FromArgb(28, 69, 108);
-        _layoutPdfButton.Font = new Font("Segoe UI Semibold", 7.4F);
-        UiPolish.RoundButton(_layoutUndoButton, 7);
-        UiPolish.RoundButton(_layoutRedoButton, 7);
-        UiPolish.ApplyHistoryGlyph(_layoutUndoButton, redo: false);
-        UiPolish.ApplyHistoryGlyph(_layoutRedoButton, redo: true);
-        _layoutToolTips.SetToolTip(_layoutUndoButton, "Undo (Ctrl+Z)");
-        _layoutToolTips.SetToolTip(_layoutRedoButton, "Redo (Ctrl+Y)");
-        _layoutToolTips.SetToolTip(_layoutDeleteButton, "Delete selected item");
-        _layoutToolTips.SetToolTip(_layoutCenterButton, "Center the view on the system start");
-        UiPolish.RoundButton(_layoutDeleteButton, 7);
-        UiPolish.RoundButton(_layoutRearrangeButton, 7);
-        UiPolish.RoundButton(_layoutLabelsButton, 7);
-        UiPolish.RoundButton(_layoutDuctSizesButton, 7);
-        UiPolish.RoundButton(_layoutCenterButton, 7);
-        UiPolish.RoundButton(_layoutCoordinateOriginButton, 7);
-        UiPolish.RoundButton(_layoutSourceSinkEditorButton, 7);
-        UiPolish.RoundButton(_layoutSizeUndefinedButton, 7);
-        UiPolish.RoundButton(_layoutRecalculateDuctworkButton, 7);
-        UiPolish.RoundButton(_layoutCriticalPathButton, 7);
-        UiPolish.RoundButton(_layoutPdfButton, 7);
-        _layoutUndoButton.Click += (_, _) => UndoLayoutChange();
-        _layoutRedoButton.Click += (_, _) => RedoLayoutChange();
-        _layoutDeleteButton.Click += (_, _) => _layoutCanvas?.DeleteSelectedItem();
-        _layoutRearrangeButton.Click += (_, _) => ToggleLayoutRearrangeMode();
-        _layoutLabelsButton.Click += (_, _) => ToggleLayoutLabels();
-        _layoutDuctSizesButton.Click += (_, _) => ToggleLayoutDuctSizes();
-        _layoutCenterButton.Click += (_, _) => CenterLayoutOnStart(showStatus: true);
-        _layoutCoordinateOriginButton.Click += (_, _) => ChangeLayoutCoordinateOrigin();
-        _layoutSourceSinkEditorButton.Click += (_, _) => OpenSourceSinkEditor();
-        _layoutSizeUndefinedButton.Click += (_, _) => SizeUndefinedLayoutItems();
-        _layoutRecalculateDuctworkButton.Click += (_, _) => RecalculateAllLayoutDuctwork();
-        _layoutCriticalPathButton.Click += (_, _) => ToggleLayoutCriticalPathHighlight();
-        _layoutPdfButton.Click += (_, _) => ManageLayoutPdfBackground();
-        _layoutViewModeSelector.SelectedIndexChanged += (_, _) => ApplySelectedLayoutViewMode();
-        zoomBar.Controls.Add(_layoutUndoButton);
-        zoomBar.Controls.Add(_layoutRedoButton);
-        zoomBar.Controls.Add(_layoutDeleteButton);
-        zoomBar.Controls.Add(_layoutRearrangeButton);
-        zoomBar.Controls.Add(_layoutLabelsButton);
-        zoomBar.Controls.Add(_layoutDuctSizesButton);
-        zoomBar.Controls.Add(_layoutCenterButton);
-        zoomBar.Controls.Add(_layoutCoordinateOriginButton);
-        zoomBar.Controls.Add(_layoutSourceSinkEditorButton);
-        zoomBar.Controls.Add(_layoutSizeUndefinedButton);
-        zoomBar.Controls.Add(_layoutRecalculateDuctworkButton);
-        var scaleTitle = new Label
-        {
-            Name = "LayoutScaleTitleLabel",
-            Text = "Grid Scale:",
-            AutoSize = true,
-            Margin = new Padding(2, 8, 1, 0),
-            ForeColor = Color.FromArgb(34, 62, 88),
-            Font = new Font("Segoe UI Semibold", 8F)
-        };
-        _layoutScaleInput.Name = "LayoutScaleInput";
-        _layoutScaleInput.Text = "1";
-        _layoutScaleInput.TextAlign = HorizontalAlignment.Right;
-        _layoutScaleInput.Size = new Size(72, 28);
-        _layoutScaleInput.Margin = new Padding(2, 2, 2, 0);
-        var scaleLabel = new Label
-        {
-            Name = "LayoutScaleLabel",
-            Text = "ft/cell",
-            AutoSize = true,
-            Margin = new Padding(2, 8, 0, 0),
-            ForeColor = Color.FromArgb(72, 92, 110)
-        };
-        _layoutViewModeSelector.Font = new Font("Segoe UI", 7.2F);
-        zoomBar.Controls.Add(_layoutCriticalPathButton);
         UpdateLayoutHistoryButtons();
 
         var canvasHost = new Panel
@@ -382,7 +161,7 @@ internal sealed partial class LayoutDesignerScreen
                 _layoutStatusLabel.Text = $"Selected {(!string.IsNullOrWhiteSpace(ductId) ? ductId : "unsized duct")}. Double-click to edit or press Delete to remove it.";
             }
         };
-        _layoutCanvas.ZoomChanged += factor => zoomValue.Text = $"{factor:P0}";
+        _layoutCanvas.ZoomChanged += factor => _layoutZoomValue.Text = $"{factor:P0}";
         _layoutCanvas.EmptyGridClicked += point =>
         {
             if (_selectedLayoutTool is not LayoutNodeType type)
@@ -399,99 +178,7 @@ internal sealed partial class LayoutDesignerScreen
             if (!_layoutViewportInitialized)
                 EnsureLayoutViewportPositioned();
         };
-        _layoutScaleInput.Validated += (_, _) => ApplyLayoutScaleInput();
-        _layoutScaleInput.KeyDown += (_, args) =>
-        {
-            if (args.KeyCode != Keys.Enter)
-                return;
-            ApplyLayoutScaleInput();
-            args.Handled = true;
-            args.SuppressKeyPress = true;
-        };
         leftHost.Controls.Add(canvasHost, 0, 0);
-
-        var palette = new RoundedPanel
-        {
-            Name = "LayoutToolPalette",
-            Dock = DockStyle.Fill,
-            BackColor = Color.White,
-            BorderColor = UiPalette.CardBorder,
-            CornerRadius = 12,
-            Padding = new Padding(8)
-        };
-        var paletteLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            BackColor = Color.White,
-            Margin = Padding.Empty
-        };
-        paletteLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        paletteLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var paletteHeader = new CardHeaderPanel { Dock = DockStyle.Fill, BackColor = Color.White };
-        paletteHeader.Controls.Add(new Label
-        {
-            Text = "TOOLS",
-            Dock = DockStyle.Left,
-            Width = 70,
-            ForeColor = Color.FromArgb(34, 62, 88),
-            Font = new Font("Segoe UI Semibold", 7.2F),
-            TextAlign = ContentAlignment.MiddleLeft
-        });
-        var collapseToolbox = new Button
-        {
-            Name = "LayoutToolboxCollapseButton",
-            Text = ">",
-            Dock = DockStyle.Right,
-            Width = 22,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White,
-            ForeColor = Color.FromArgb(28, 69, 108),
-            Font = new Font("Segoe UI Semibold", 10F),
-            TextAlign = ContentAlignment.MiddleCenter
-        };
-        collapseToolbox.UseCompatibleTextRendering = true;
-        collapseToolbox.Padding = Padding.Empty;
-        collapseToolbox.FlatAppearance.BorderSize = 0;
-        collapseToolbox.Click += (_, _) => SetLayoutToolboxCollapsed(true);
-        paletteHeader.Controls.Add(collapseToolbox);
-        collapseToolbox.BringToFront();
-        paletteLayout.Controls.Add(paletteHeader, 0, 0);
-        var toolList = new FlowLayoutPanel
-        {
-            Name = "LayoutToolList",
-            Dock = DockStyle.Fill,
-            BackColor = Color.White,
-            Padding = new Padding(2),
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoScroll = true
-        };
-        AddLayoutTool(toolList, LayoutNodeType.Reservoir, "Source", "Space Source: airflow, temperature, and source pressure", "Space Source");
-        AddLayoutTool(toolList, LayoutNodeType.Reservoir, "Sink", "Space Sink: calculated terminal airflow and temperature", "Space Sink");
-        AddLayoutTool(toolList, LayoutNodeType.Fan, "Fan", "Airflow, temperature, air system");
-        AddLayoutTool(toolList, LayoutNodeType.Coil, "Coil", "Temperature and pressure drop");
-        AddLayoutTool(toolList, LayoutNodeType.Filter, "Filter", "Pressure-drop input");
-        AddLayoutTool(toolList, LayoutNodeType.Fitting, "Elbow", "ASHRAE elbow", "Elbows");
-        AddLayoutTool(toolList, LayoutNodeType.Fitting, "Transition", "ASHRAE transition", "Transitions");
-        AddLayoutTool(toolList, LayoutNodeType.Fitting, "Split", "Diverting fitting: one inlet, two outlets", "Diverting Fittings");
-        AddLayoutTool(toolList, LayoutNodeType.Fitting, "Merge", "Converging fitting: two inlets, one outlet", "Converging Fittings");
-        AddLayoutTool(toolList, LayoutNodeType.Fitting, "Damper", "ASHRAE damper", "Dampers");
-        AddLayoutTool(toolList, LayoutNodeType.Fitting, "VAV", "Titus DESV VAV with or without hot-water reheat",
-            FittingCatalog.VavSelectionGroup);
-        AddLayoutTool(toolList, LayoutNodeType.Fitting, "Terminal", "Entries, exits, terminals and takeoffs",
-            FittingCatalog.TerminalSelectionGroup);
-        AddLayoutTool(toolList, LayoutNodeType.Grd, "GRD", "Grille, square diffuser, or linear diffuser", "GRDs");
-        AddLayoutTool(toolList, LayoutNodeType.Fitting, "Fan/Plenum", "Fan exits and plenum connections",
-            FittingCatalog.FanExitsAndPlenumsSelectionGroup);
-        AddLayoutTool(toolList, LayoutNodeType.CustomComponent, "Custom", "User-defined component label and static pressure drop");
-        AddLayoutTool(toolList, LayoutNodeType.CalculationPoint, "Pressure", "Pressure calculation point", "Pressure");
-        AddLayoutTool(toolList, LayoutNodeType.CalculationPoint, "Temp", "Temperature calculation point", "Temperature");
-        AddLayoutTool(toolList, LayoutNodeType.CalculationPoint, "Velocity", "Velocity calculation point", "Velocity");
-        AddLayoutTool(toolList, LayoutNodeType.CalculationPoint, "Airflow", "Airflow calculation point", "Airflow");
-        paletteLayout.Controls.Add(toolList, 0, 1);
-        palette.Controls.Add(paletteLayout);
 
         _layoutWorkspaceSplitter = new SplitContainer
         {
@@ -537,7 +224,7 @@ internal sealed partial class LayoutDesignerScreen
         var canvasArea = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 3,
+            ColumnCount = 2,
             RowCount = 1,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
@@ -545,7 +232,6 @@ internal sealed partial class LayoutDesignerScreen
         };
         canvasArea.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));
         canvasArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        canvasArea.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));
         _layoutSummaryReopenButton.Name = "LayoutSummaryReopenButton";
         _layoutSummaryReopenButton.Text = "SYSTEM QUICKVIEW";
         _layoutSummaryReopenButton.Dock = DockStyle.Fill;
@@ -555,91 +241,175 @@ internal sealed partial class LayoutDesignerScreen
         _layoutSummaryReopenButton.BackColor = Color.FromArgb(235, 242, 247);
         _layoutSummaryReopenButton.Font = new Font("Segoe UI Semibold", 8.2F);
         _layoutSummaryReopenButton.Click += (_, _) => SetLayoutSummaryCollapsed(false);
-        _layoutToolboxReopenButton.Name = "LayoutToolboxReopenButton";
-        _layoutToolboxReopenButton.Text = "TOOLBOX";
-        _layoutToolboxReopenButton.Dock = DockStyle.Fill;
-        _layoutToolboxReopenButton.Visible = false;
-        _layoutToolboxReopenButton.FlatStyle = FlatStyle.Flat;
-        _layoutToolboxReopenButton.ForeColor = Color.FromArgb(28, 69, 108);
-        _layoutToolboxReopenButton.BackColor = Color.FromArgb(235, 242, 247);
-        _layoutToolboxReopenButton.Font = new Font("Segoe UI Semibold", 8.2F);
-        _layoutToolboxReopenButton.Click += (_, _) => SetLayoutToolboxCollapsed(false);
         canvasArea.Controls.Add(_layoutSummaryReopenButton, 0, 0);
         canvasArea.Controls.Add(leftHost, 1, 0);
-        canvasArea.Controls.Add(_layoutToolboxReopenButton, 2, 0);
-
-        _layoutToolboxSplitter = new SplitContainer
-        {
-            Name = "LayoutToolboxSplitter",
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Vertical,
-            SplitterWidth = 6,
-            FixedPanel = FixedPanel.Panel2,
-            BackColor = Color.FromArgb(215, 224, 231)
-        };
-        _layoutToolboxSplitter.Panel1MinSize = 360;
-        _layoutToolboxSplitter.Panel2MinSize = 88;
-        _layoutToolboxSplitter.Panel1.Controls.Add(canvasArea);
-        _layoutToolboxSplitter.Panel2.Controls.Add(palette);
-        _layoutToolboxSplitter.SizeChanged += (_, _) => InitializeLayoutToolboxSplitter();
-        _layoutToolboxSplitter.SplitterMoved += (_, _) =>
-        {
-            if (_layoutToolboxInitialized && !_updatingLayoutToolboxSplitter
-                && !_layoutToolboxSplitter.Panel2Collapsed && _layoutToolboxSplitter.Width >= 560)
-                _layoutToolboxWidth = Math.Max(96,
-                    _layoutToolboxSplitter.Width - _layoutToolboxSplitter.SplitterDistance
-                    - _layoutToolboxSplitter.SplitterWidth);
-        };
-        _layoutWorkspaceSplitter.Panel2.Controls.Add(_layoutToolboxSplitter);
-
-        workspace.Controls.Add(zoomBar, 0, 0);
-        workspace.Controls.Add(_layoutWorkspaceSplitter, 0, 1);
+        _layoutWorkspaceSplitter.Panel2.Controls.Add(canvasArea);
 
         _layoutStatusLabel.Name = "LayoutDesignerStatus";
         _layoutStatusLabel.Dock = DockStyle.Fill;
         _layoutStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         _layoutStatusLabel.ForeColor = Color.FromArgb(72, 92, 110);
-        _layoutStatusLabel.Text = "Drag between green outlet and inlet circles to connect items. Red ducts are valid but unsized; green ducts are sized. Double-click to edit.";
+        _layoutStatusLabel.Text = "Drag components from the ribbon onto the grid, then drag between green outlet and inlet circles to connect them. Red ducts are unsized; green ducts are sized. Double-click to edit.";
         _layoutStatusLabel.AutoEllipsis = true;
 
-        var statusBar = new TableLayoutPanel
+        root.Controls.Add(toolbar, 0, 0);
+        root.Controls.Add(_layoutWorkspaceSplitter, 0, 1);
+        root.Controls.Add(_layoutStatusLabel, 0, 2);
+        return root;
+    }
+
+    /// <summary>
+    /// Canvas toolbar: history and delete, zoom, PDF underlay and grid scale, view direction, display check boxes,
+    /// coordinate origin and the source/sink editor.
+    /// </summary>
+    private Control BuildLayoutCanvasToolbar()
+    {
+        var toolbar = new FlowLayoutPanel
         {
-            Name = "LayoutDesignerStatusBar",
+            Name = "LayoutCanvasToolbar",
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            Margin = Padding.Empty,
-            BackColor = _host.BackColor
-        };
-        statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var viewControls = new FlowLayoutPanel
-        {
-            Name = "LayoutViewControls",
-            Dock = DockStyle.Fill,
-            AutoSize = true,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Margin = Padding.Empty,
-            Padding = Padding.Empty,
-            BackColor = _host.BackColor
+            AutoScroll = true,
+            Padding = new Padding(4, 4, 4, 0),
+            Margin = new Padding(0, 0, 0, 4),
+            BackColor = Color.White
         };
-        scaleTitle.Margin = new Padding(2, 6, 1, 0);
-        _layoutScaleInput.Margin = new Padding(2, 0, 2, 0);
-        scaleLabel.Margin = new Padding(2, 6, 6, 0);
-        _layoutViewModeSelector.Margin = new Padding(2, 0, 0, 0);
-        viewControls.Controls.Add(_layoutPdfButton);
-        viewControls.Controls.Add(scaleTitle);
-        viewControls.Controls.Add(_layoutScaleInput);
-        viewControls.Controls.Add(scaleLabel);
-        viewControls.Controls.Add(_layoutViewModeSelector);
-        statusBar.Controls.Add(_layoutStatusLabel, 0, 0);
-        statusBar.Controls.Add(viewControls, 1, 0);
+        void Separator() => toolbar.Controls.Add(new Label
+        {
+            AutoSize = false,
+            Size = new Size(1, 22),
+            Margin = new Padding(6, 4, 6, 0),
+            BackColor = RibbonPalette.GroupSeparator
+        });
+        Label TextLabel(string name, string text) => new()
+        {
+            Name = name,
+            Text = text,
+            AutoSize = true,
+            Margin = new Padding(2, 7, 2, 0),
+            ForeColor = RibbonPalette.Caption,
+            Font = new Font("Segoe UI", 8.5F)
+        };
 
-        root.Controls.Add(header, 0, 0);
-        root.Controls.Add(workspace, 0, 1);
-        root.Controls.Add(statusBar, 0, 2);
-        return root;
+        _layoutToolTips.SetToolTip(_layoutUndoButton, "Undo (Ctrl+Z)");
+        _layoutToolTips.SetToolTip(_layoutRedoButton, "Redo (Ctrl+Y)");
+        _layoutToolTips.SetToolTip(_layoutDeleteButton, "Delete the selected item (Delete)");
+        _layoutDeleteButton.Enabled = false;
+        _layoutUndoButton.Click += (_, _) => UndoLayoutChange();
+        _layoutRedoButton.Click += (_, _) => RedoLayoutChange();
+        _layoutDeleteButton.Click += (_, _) => _layoutCanvas?.DeleteSelectedItem();
+        toolbar.Controls.Add(_layoutUndoButton);
+        toolbar.Controls.Add(_layoutRedoButton);
+        toolbar.Controls.Add(_layoutDeleteButton);
+        Separator();
+
+        var zoomOut = new ToolbarIconButton("LayoutZoomOutButton", RibbonIcon.ZoomOut, "Zoom out");
+        var zoomIn = new ToolbarIconButton("LayoutZoomInButton", RibbonIcon.ZoomIn, "Zoom in");
+        _layoutToolTips.SetToolTip(zoomOut, "Zoom out (or scroll the mouse wheel)");
+        _layoutToolTips.SetToolTip(zoomIn, "Zoom in (or scroll the mouse wheel)");
+        _layoutToolTips.SetToolTip(_layoutCenterButton, "Center the view on the system start");
+        zoomOut.Click += (_, _) => _layoutCanvas?.ZoomBy(-0.10F);
+        zoomIn.Click += (_, _) => _layoutCanvas?.ZoomBy(0.10F);
+        _layoutCenterButton.Click += (_, _) => CenterLayoutOnStart(showStatus: true);
+        _layoutZoomValue.Name = "LayoutZoomValue";
+        _layoutZoomValue.Text = "100%";
+        _layoutZoomValue.AutoSize = false;
+        _layoutZoomValue.Size = new Size(44, 30);
+        _layoutZoomValue.TextAlign = ContentAlignment.MiddleCenter;
+        _layoutZoomValue.ForeColor = RibbonPalette.Ink;
+        _layoutZoomValue.Font = new Font("Segoe UI", 8.5F);
+        _layoutToolTips.SetToolTip(_layoutZoomValue, "Zoom level. Scroll the mouse wheel over the grid to zoom.");
+        toolbar.Controls.Add(zoomOut);
+        toolbar.Controls.Add(_layoutZoomValue);
+        toolbar.Controls.Add(zoomIn);
+        toolbar.Controls.Add(_layoutCenterButton);
+        Separator();
+
+        _layoutToolTips.SetToolTip(_layoutPdfButton, "Import or manage the PDF drawing underlay");
+        _layoutPdfButton.Click += (_, _) => ManageLayoutPdfBackground();
+        toolbar.Controls.Add(_layoutPdfButton);
+        var gridIcon = new ToolbarIconButton("LayoutGridIcon", RibbonIcon.Grid, "Grid scale") { Enabled = true, TabStop = false };
+        gridIcon.Click += (_, _) => _layoutScaleSelector.DroppedDown = true;
+        _layoutToolTips.SetToolTip(gridIcon, "Grid scale: feet represented by one grid cell");
+        toolbar.Controls.Add(gridIcon);
+        _layoutScaleSelector.Name = "LayoutScaleSelector";
+        _layoutScaleSelector.DropDownStyle = ComboBoxStyle.DropDownList;
+        _layoutScaleSelector.Size = new Size(108, 28);
+        _layoutScaleSelector.Margin = new Padding(0, 3, 4, 0);
+        _layoutScaleSelector.Font = new Font("Segoe UI", 8.5F);
+        foreach (var feet in StandardGridScalesFeet)
+            _layoutScaleSelector.Items.Add(new GridScaleChoice(feet));
+        _layoutScaleSelector.SelectedIndexChanged += (_, _) =>
+        {
+            if (!_updatingLayoutScaleSelector)
+                ApplyLayoutScaleInput();
+        };
+        _layoutToolTips.SetToolTip(_layoutScaleSelector, "Grid scale: feet represented by one grid cell");
+        toolbar.Controls.Add(_layoutScaleSelector);
+
+        _layoutViewModeSelector.Name = "LayoutViewModeSelector";
+        _layoutViewModeSelector.DropDownStyle = ComboBoxStyle.DropDownList;
+        _layoutViewModeSelector.Items.AddRange(new object[] { "Isometric Positive", "Isometric Negative", "Top-Down" });
+        _layoutViewModeSelector.Size = new Size(138, 28);
+        _layoutViewModeSelector.Margin = new Padding(0, 3, 2, 0);
+        _layoutViewModeSelector.Font = new Font("Segoe UI", 8.5F);
+        _layoutViewModeSelector.SelectedIndexChanged += (_, _) => ApplySelectedLayoutViewMode();
+        _layoutToolTips.SetToolTip(_layoutViewModeSelector, "View direction");
+        toolbar.Controls.Add(_layoutViewModeSelector);
+        Separator();
+
+        toolbar.Controls.Add(TextLabel("LayoutShowCaption", "Show:"));
+        ConfigureDisplayCheck(_layoutShowLabelsCheck, "LayoutShowLabelsCheck", "Labels", true,
+            "Show component and duct item labels");
+        ConfigureDisplayCheck(_layoutShowFlowCheck, "LayoutShowFlowCheck", "Flow", false,
+            "Show the airflow carried by each duct");
+        ConfigureDisplayCheck(_layoutShowSizesCheck, "LayoutShowSizesCheck", "Sizes", false,
+            "Show duct sizes beside their runs");
+        _layoutShowLabelsCheck.CheckedChanged += (_, _) =>
+        {
+            if (_layoutCanvas is not null && _layoutCanvas.ShowLabels != _layoutShowLabelsCheck.Checked)
+                ToggleLayoutLabels();
+        };
+        _layoutShowFlowCheck.CheckedChanged += (_, _) => ApplyLayoutDuctCaptionOptions();
+        _layoutShowSizesCheck.CheckedChanged += (_, _) => ApplyLayoutDuctCaptionOptions();
+        toolbar.Controls.Add(_layoutShowLabelsCheck);
+        toolbar.Controls.Add(_layoutShowFlowCheck);
+        toolbar.Controls.Add(_layoutShowSizesCheck);
+        Separator();
+
+        _layoutToolTips.SetToolTip(_layoutCoordinateOriginButton, "Make the selected component the coordinate origin (0, 0, 0)");
+        _layoutToolTips.SetToolTip(_layoutSourceSinkEditorButton, "Source/Sink Editor: airflow balance of every space");
+        _layoutCoordinateOriginButton.Enabled = false;
+        _layoutCoordinateOriginButton.Click += (_, _) => ChangeLayoutCoordinateOrigin();
+        _layoutSourceSinkEditorButton.Click += (_, _) => OpenSourceSinkEditor();
+        toolbar.Controls.Add(_layoutCoordinateOriginButton);
+        toolbar.Controls.Add(_layoutSourceSinkEditorButton);
+
+        // These commands now live in the main ribbon. The buttons stay (unparented) so their state text keeps
+        // working for existing code paths; the ribbon calls the same methods.
+        _layoutRearrangeButton.Name = "LayoutRearrangeButton";
+        _layoutLabelsButton.Name = "LayoutLabelsButton";
+        _layoutLabelsButton.Text = "Hide Labels";
+        _layoutDuctSizesButton.Name = "LayoutDuctSizesButton";
+        _layoutDuctSizesButton.Text = "Show Duct Sizes";
+        _layoutSizeUndefinedButton.Name = "LayoutSizeUndefinedButton";
+        _layoutRecalculateDuctworkButton.Name = "LayoutRecalculateDuctworkButton";
+        _layoutCriticalPathButton.Name = "LayoutCriticalPathButton";
+        _layoutCriticalPathButton.Text = "Highlight Critical Path";
+        return toolbar;
+
+        void ConfigureDisplayCheck(CheckBox check, string name, string text, bool isChecked, string toolTip)
+        {
+            check.Name = name;
+            check.Text = text;
+            check.AutoSize = true;
+            check.Checked = isChecked;
+            check.Margin = new Padding(4, 6, 4, 0);
+            check.Font = new Font("Segoe UI", 8.5F);
+            check.ForeColor = RibbonPalette.Ink;
+            _layoutToolTips.SetToolTip(check, toolTip);
+        }
     }
 
     private Control BuildLayoutSystemSummaryPanel()
@@ -759,50 +529,6 @@ internal sealed partial class LayoutDesignerScreen
             canvasArea.ColumnStyles[0].Width = collapsed ? 34 : 0;
     }
 
-    private void InitializeLayoutToolboxSplitter()
-    {
-        if (_layoutToolboxSplitter is null || _layoutToolboxSplitter.Width < 560
-            || _layoutToolboxSplitter.Panel2Collapsed)
-            return;
-        _updatingLayoutToolboxSplitter = true;
-        try
-        {
-            var width = Math.Clamp(_layoutToolboxWidth, 96,
-                Math.Max(96, _layoutToolboxSplitter.Width - 360 - _layoutToolboxSplitter.SplitterWidth));
-            _layoutToolboxSplitter.SplitterDistance = _layoutToolboxSplitter.Width
-                                                     - width - _layoutToolboxSplitter.SplitterWidth;
-            _layoutToolboxInitialized = true;
-        }
-        finally
-        {
-            _updatingLayoutToolboxSplitter = false;
-        }
-    }
-
-    private void SetLayoutToolboxCollapsed(bool collapsed)
-    {
-        if (_layoutToolboxSplitter is null)
-            return;
-        if (collapsed && !_layoutToolboxSplitter.Panel2Collapsed)
-            _layoutToolboxWidth = Math.Max(96,
-                _layoutToolboxSplitter.Width - _layoutToolboxSplitter.SplitterDistance
-                - _layoutToolboxSplitter.SplitterWidth);
-        _updatingLayoutToolboxSplitter = true;
-        try
-        {
-            _layoutToolboxSplitter.Panel2Collapsed = collapsed;
-            if (!collapsed)
-                InitializeLayoutToolboxSplitter();
-        }
-        finally
-        {
-            _updatingLayoutToolboxSplitter = false;
-        }
-        _layoutToolboxReopenButton.Visible = collapsed;
-        if (_layoutToolboxReopenButton.Parent is TableLayoutPanel canvasArea)
-            canvasArea.ColumnStyles[2].Width = collapsed ? 34 : 0;
-    }
-
     internal void RefreshLayoutSystemSummary()
     {
         if (_layoutSystemSummaryGrid.Columns.Count == 0 || _host.DuctSystemScreen._ductGrid.Columns.Count == 0)
@@ -913,6 +639,25 @@ internal sealed partial class LayoutDesignerScreen
         DuctSystemScreen.SystemRowTag { IsFitting: false } ductTag => node.LinkedDuctSequence == ductTag.Sequence,
         _ => false
     };
+
+    /// <summary>
+    /// Creates a draggable component tool for the ribbon: click it then click the grid, or drag it onto the grid.
+    /// Same behaviour and icons as the former Designer toolbox.
+    /// </summary>
+    internal LayoutToolCard CreateRibbonLayoutTool(LayoutNodeType type, string title, string detail, string? fittingGroup = null)
+    {
+        var host = new Panel();
+        AddLayoutTool(host, type, title, detail, fittingGroup);
+        var tool = (LayoutToolCard)host.Controls[0];
+        host.Controls.Remove(tool);
+        host.Dispose();
+        tool.Dock = DockStyle.None;
+        tool.ShowCaption = true;
+        tool.BackColor = RibbonPalette.Ribbon;
+        tool.Size = new Size(52, 37);
+        tool.Margin = new Padding(1, 0, 1, 1);
+        return tool;
+    }
 
     private void AddLayoutTool(Control parent, LayoutNodeType type, string title, string detail, string? fittingGroup = null)
     {
@@ -1041,7 +786,7 @@ internal sealed partial class LayoutDesignerScreen
         _layoutRedoButton.Enabled = _layoutRedoHistory.Count > 0;
     }
 
-    private void ToggleLayoutRearrangeMode()
+    internal void ToggleLayoutRearrangeMode()
     {
         _layoutRearrangeMode = !_layoutRearrangeMode;
         if (_layoutCanvas is not null)
@@ -1067,6 +812,7 @@ internal sealed partial class LayoutDesignerScreen
         _layoutStatusLabel.ForeColor = _layoutRearrangeMode
             ? Color.FromArgb(31, 120, 180)
             : Color.FromArgb(72, 92, 110);
+        NotifyLayoutCommandStateChanged();
     }
 
     private void ToggleLayoutLabels()
@@ -1075,6 +821,8 @@ internal sealed partial class LayoutDesignerScreen
             return;
         _layoutCanvas.ShowLabels = !_layoutCanvas.ShowLabels;
         _layoutLabelsButton.Text = _layoutCanvas.ShowLabels ? "Hide Labels" : "Show Labels";
+        if (_layoutShowLabelsCheck.Checked != _layoutCanvas.ShowLabels)
+            _layoutShowLabelsCheck.Checked = _layoutCanvas.ShowLabels;
         _layoutCanvas.Invalidate();
         _layoutStatusLabel.Text = _layoutCanvas.ShowLabels
             ? "Component and duct item labels are visible."
@@ -1085,10 +833,9 @@ internal sealed partial class LayoutDesignerScreen
     {
         if (_layoutCanvas is null)
             return;
-        _layoutCanvas.ShowDuctSizes = !_layoutCanvas.ShowDuctSizes;
-        _layoutDuctSizesButton.Text = _layoutCanvas.ShowDuctSizes ? "Hide Duct Sizes" : "Show Duct Sizes";
-        _layoutCanvas.Invalidate();
-        _layoutStatusLabel.Text = _layoutCanvas.ShowDuctSizes
+        _layoutShowSizesCheck.Checked = !_layoutShowSizesCheck.Checked;
+        ApplyLayoutDuctCaptionOptions();
+        _layoutStatusLabel.Text = _layoutShowSizesCheck.Checked
             ? "Duct sizes are displayed beside their runs."
             : "Duct size labels are hidden.";
     }
@@ -3220,7 +2967,7 @@ internal sealed partial class LayoutDesignerScreen
         return connected;
     }
 
-    private void ToggleLayoutCriticalPathHighlight()
+    internal void ToggleLayoutCriticalPathHighlight()
     {
         if (!_host.DuctSystemScreen._criticalPathCalculated || _host.DuctSystemScreen._criticalPathItemKeys.Count == 0)
             _host.DuctSystemScreen.RefreshDuctSystemGrid();
@@ -3243,6 +2990,13 @@ internal sealed partial class LayoutDesignerScreen
             ? Color.FromArgb(174, 104, 0) : Color.FromArgb(72, 92, 110);
     }
 
+    /// <summary>Turns the critical-path highlight on (used after Calculate).</summary>
+    internal void ShowLayoutCriticalPathHighlight()
+    {
+        if (!_layoutCriticalPathHighlighted)
+            ToggleLayoutCriticalPathHighlight();
+    }
+
     private void UpdateLayoutCriticalPathButton()
     {
         _layoutCriticalPathButton.Text = _layoutCriticalPathHighlighted
@@ -3251,6 +3005,7 @@ internal sealed partial class LayoutDesignerScreen
             ? Color.FromArgb(230, 145, 31) : Color.White;
         _layoutCriticalPathButton.ForeColor = _layoutCriticalPathHighlighted
             ? Color.White : Color.FromArgb(28, 69, 108);
+        NotifyLayoutCommandStateChanged();
     }
 
     private bool IsLayoutNodeOnCriticalPath(SavedLayoutNode node)
@@ -3506,11 +3261,19 @@ internal sealed partial class LayoutDesignerScreen
         var duct = DuctForConnection(connection.Downstream, connection.Secondary);
         if (duct is null)
             return string.Empty;
-        return duct.Shape == DuctShape.Round
-            ? duct.DiameterM > 0 ? $"{UnitConversions.MToInches(duct.DiameterM):0.##}\"" : string.Empty
-            : duct.WidthM > 0 && duct.HeightM > 0
-                ? $"{UnitConversions.MToInches(duct.WidthM):0.##}\" / {UnitConversions.MToInches(duct.HeightM):0.##}\""
-                : string.Empty;
+        var size = !_layoutShowSizesCheck.Checked
+            ? string.Empty
+            : duct.Shape == DuctShape.Round
+                ? duct.DiameterM > 0 ? $"{UnitConversions.MToInches(duct.DiameterM):0.##}\"" : string.Empty
+                : duct.WidthM > 0 && duct.HeightM > 0
+                    ? $"{UnitConversions.MToInches(duct.WidthM):0.##}\" / {UnitConversions.MToInches(duct.HeightM):0.##}\""
+                    : string.Empty;
+        var flow = !_layoutShowFlowCheck.Checked || !(duct.AirflowM3PerS > 0)
+            ? string.Empty
+            : _host._currentUnits == UnitSystem.Imperial
+                ? $"{UnitConversions.M3PerSToCfm(duct.AirflowM3PerS):N0} cfm"
+                : $"{UnitConversions.M3PerSToLps(duct.AirflowM3PerS):N0} L/s";
+        return string.Join("  ", new[] { size, flow }.Where(part => part.Length > 0));
     }
 
     internal static bool LayoutConnectionFlowReversed(LayoutConnectionRef connection) => connection.Secondary
@@ -3849,10 +3612,7 @@ internal sealed partial class LayoutDesignerScreen
         {
             _updatingLayoutViewMode = false;
         }
-        var formattedScale = feetPerCell.ToString("0.##", CultureInfo.CurrentCulture);
-        if (!_layoutScaleInput.Focused && _layoutScaleInput.Text != formattedScale)
-            _layoutScaleInput.Text = formattedScale;
-        _layoutScaleInput.Enabled = true;
+        SelectLayoutScaleChoice(feetPerCell);
     }
 
     private void ApplySelectedLayoutViewMode()
@@ -3887,17 +3647,40 @@ internal sealed partial class LayoutDesignerScreen
         _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
     }
 
+    private void SelectLayoutScaleChoice(double feetPerCell)
+    {
+        _updatingLayoutScaleSelector = true;
+        try
+        {
+            var match = _layoutScaleSelector.Items.OfType<GridScaleChoice>()
+                .FirstOrDefault(choice => Math.Abs(choice.Feet - feetPerCell) < 1e-9);
+            if (match is null)
+            {
+                // A project saved with a scale outside the standard list keeps it, shown as its own entry.
+                match = new GridScaleChoice(feetPerCell);
+                var insertAt = _layoutScaleSelector.Items.OfType<GridScaleChoice>().Count(choice => choice.Feet < feetPerCell);
+                _layoutScaleSelector.Items.Insert(insertAt, match);
+            }
+            _layoutScaleSelector.SelectedItem = match;
+        }
+        finally
+        {
+            _updatingLayoutScaleSelector = false;
+        }
+    }
+
     private bool ApplyLayoutScaleInput()
     {
-        if (!double.TryParse(_layoutScaleInput.Text, NumberStyles.Float, CultureInfo.CurrentCulture,
-                out var feetPerCell)
+        if (_layoutScaleSelector.SelectedItem is not GridScaleChoice { Feet: var feetPerCell }
             || !double.IsFinite(feetPerCell) || feetPerCell < 0.1 || feetPerCell > 1000.0)
         {
-            _layoutScaleInput.Text = _host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell.ToString("0.##", CultureInfo.CurrentCulture);
-            _layoutStatusLabel.Text = "Scale must be a number from 0.1 through 1000 feet per grid cell.";
+            SelectLayoutScaleChoice(_host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell);
+            _layoutStatusLabel.Text = "Scale must be from 0.1 through 1000 feet per grid cell.";
             _layoutStatusLabel.ForeColor = Color.Firebrick;
             return false;
         }
+        if (Math.Abs(_host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell - feetPerCell) < 1e-12)
+            return true;
 
         _host.DuctSystemScreen._ductSystem.LayoutFeetPerGridCell = feetPerCell;
         ApplyLayoutScaleSettings();
@@ -3907,7 +3690,111 @@ internal sealed partial class LayoutDesignerScreen
         return true;
     }
 
-    private void RecalculateAllLayoutDuctwork()
+    /// <summary>Applies the Flow and Sizes check boxes: the canvas shows a caption when either is on.</summary>
+    private void ApplyLayoutDuctCaptionOptions()
+    {
+        if (_layoutCanvas is null)
+            return;
+        _layoutCanvas.ShowDuctSizes = _layoutShowSizesCheck.Checked || _layoutShowFlowCheck.Checked;
+        _layoutDuctSizesButton.Text = _layoutShowSizesCheck.Checked ? "Hide Duct Sizes" : "Show Duct Sizes";
+        _layoutCanvas.Invalidate();
+    }
+
+    /// <summary>Raised after a ribbon-visible Designer state changes (move mode, critical-path highlight).</summary>
+    internal event Action? LayoutCommandStateChanged;
+
+    internal void NotifyLayoutCommandStateChanged() => LayoutCommandStateChanged?.Invoke();
+
+    /// <summary>Ribbon "Select": leaves Move mode and drops any component tool waiting to be placed.</summary>
+    internal void UseLayoutSelectMode()
+    {
+        if (_layoutRearrangeMode)
+            ToggleLayoutRearrangeMode();
+        _selectedLayoutTool = null;
+        _selectedLayoutFittingGroup = null;
+        if (_layoutCanvas is not null)
+            _layoutCanvas.SelectedTool = null;
+        _layoutStatusLabel.Text = "Select mode: click an item to select it, double-click to edit it.";
+        _layoutStatusLabel.ForeColor = Color.FromArgb(72, 92, 110);
+        NotifyLayoutCommandStateChanged();
+    }
+
+    /// <summary>
+    /// Ribbon "Auto Size": the former "Size Undefined Components" followed by "Recalculate All Ductwork", as one
+    /// undo step. Undefined supported components are sized from the Sizing Criteria, then every connected duct is
+    /// re-sized from the current airflows. Items that cannot be sized are listed; nothing is assumed for them.
+    /// </summary>
+    internal void AutoSizeLayout()
+    {
+        var historyState = CaptureLayoutHistoryState();
+        var componentCount = 0;
+        var ductCount = 0;
+        var failures = new List<string>();
+        UpdateCalculatedLayoutValues();
+
+        foreach (var node in _host.DuctSystemScreen._ductSystem.LayoutNodes
+                     .Where(x => !x.IsDefined && IsAutomaticSizingComponent(x))
+                     .OrderBy(x => x.Sequence).ToArray())
+        {
+            try
+            {
+                if (node.Type == LayoutNodeType.Fitting)
+                    AutoSizeFittingNode(node);
+                else
+                    AutoSizeEquipmentNode(node);
+                componentCount++;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+                                           or KeyNotFoundException or OverflowException)
+            {
+                failures.Add($"{node.Id}: {ex.Message}");
+            }
+        }
+
+        UpdateCalculatedLayoutValues();
+        foreach (var connection in _host.DuctSystemScreen._ductSystem.LayoutNodes.OrderBy(node => node.Sequence)
+                     .SelectMany(node => new[]
+                     {
+                         string.IsNullOrWhiteSpace(node.ParentNodeId)
+                             ? (LayoutConnectionRef?)null : new LayoutConnectionRef(node, false),
+                         string.IsNullOrWhiteSpace(node.SecondaryParentNodeId)
+                             ? (LayoutConnectionRef?)null : new LayoutConnectionRef(node, true)
+                     })
+                     .Where(connection => connection.HasValue)
+                     .Select(connection => connection!.Value)
+                     .ToArray())
+        {
+            try
+            {
+                AutoSizeConnectionDuct(connection);
+                ductCount++;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
+            {
+                failures.Add($"duct to {connection.Downstream.Id}: {ex.Message}");
+            }
+        }
+
+        UpdateCalculatedLayoutValues();
+        CommitLayoutHistoryState(historyState);
+        _host.DuctSystemScreen.ResetCriticalPath();
+        _host.DuctSystemScreen.SaveDuctSystem();
+        RefreshLayoutDesigner();
+        _host.DuctSystemScreen.RefreshDuctSystemGrid();
+        _layoutStatusLabel.Text = componentCount == 0 && ductCount == 0 && failures.Count == 0
+            ? "There are no components or connected ducts to size."
+            : $"Auto Size: sized {componentCount} undefined component(s) and {ductCount} duct section(s)."
+              + (failures.Count > 0 ? $" {failures.Count} item(s) still need attention." : string.Empty);
+        _layoutStatusLabel.ForeColor = failures.Count == 0 ? Color.FromArgb(30, 100, 55) : Color.DarkOrange;
+        if (failures.Count > 0 && !AutomatedLayoutVerification)
+            MessageBox.Show(_host,
+                "Some items could not be sized:\r\n\r\n" + string.Join("\r\n", failures.Take(12))
+                + (failures.Count > 12 ? $"\r\n... and {failures.Count - 12} more" : string.Empty),
+                "Auto Size Completed with Notices", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        NotifyLayoutCommandStateChanged();
+    }
+
+    internal void RecalculateAllLayoutDuctwork()
     {
         var historyState = CaptureLayoutHistoryState();
         var resized = 0;
@@ -3954,7 +3841,7 @@ internal sealed partial class LayoutDesignerScreen
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
-    private void SizeUndefinedLayoutItems()
+    internal void SizeUndefinedLayoutItems()
     {
         var historyState = CaptureLayoutHistoryState();
         var componentCount = 0;

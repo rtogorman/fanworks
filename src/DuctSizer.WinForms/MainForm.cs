@@ -39,6 +39,9 @@ public sealed partial class MainForm : Form
         }
     }
 
+    private MainRibbon? _ribbon;
+    internal MainRibbon Ribbon => _ribbon ??= new MainRibbon(this);
+
     private DuctSystemScreen? _ductSystemScreen;
     internal DuctSystemScreen DuctSystemScreen => _ductSystemScreen ??= new DuctSystemScreen(this);
 

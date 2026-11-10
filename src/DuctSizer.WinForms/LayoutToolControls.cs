@@ -57,14 +57,43 @@ internal sealed class LayoutToolCard : Control
         AccessibleName = $"Add {title}";
     }
 
+    /// <summary>Draws the tool's short name under its icon (used in the ribbon).</summary>
+    internal bool ShowCaption { get; set; }
+
+    internal string Title => _title;
+
+    private bool _hover;
+
+    protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var iconSize = Math.Min(40, Math.Max(28, Height - 8));
+        if (!ShowCaption)
+        {
+            var iconSize = Math.Min(40, Math.Max(28, Height - 8));
+            LayoutIconPainter.Draw(e.Graphics, _type,
+                new Rectangle((Width - iconSize) / 2, (Height - iconSize) / 2, iconSize, iconSize),
+                Color.FromArgb(21, 83, 99), _fittingGroup);
+            return;
+        }
+        if (_hover)
+        {
+            using var hover = UiPolish.CreateRoundedPath(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), 4);
+            using var fill = new SolidBrush(RibbonPalette.Hover);
+            e.Graphics.FillPath(fill, hover);
+        }
+        const int captionHeight = 13;
+        var compactIcon = Math.Max(16, Math.Min(24, Height - captionHeight - 3));
         LayoutIconPainter.Draw(e.Graphics, _type,
-            new Rectangle((Width - iconSize) / 2, (Height - iconSize) / 2, iconSize, iconSize),
+            new Rectangle((Width - compactIcon) / 2, 2, compactIcon, compactIcon),
             Color.FromArgb(21, 83, 99), _fittingGroup);
+        using var font = new Font("Segoe UI", 7.5F);
+        TextRenderer.DrawText(e.Graphics, _title, font, new Rectangle(0, Height - captionHeight - 1, Width, captionHeight),
+            RibbonPalette.Ink, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.NoPadding
+                               | TextFormatFlags.EndEllipsis);
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
