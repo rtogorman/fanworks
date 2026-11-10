@@ -78,10 +78,19 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 14;
+    public const int CurrentSchemaVersion = 15;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
+
+    /// <summary>
+    /// Free-text notes the engineer keeps with individual items (Selection Inspector, Notes tab), keyed by the
+    /// item key used throughout the system model (<see cref="CriticalPathAnalyzer.DuctKey"/>,
+    /// <see cref="CriticalPathAnalyzer.FittingKey"/>, <see cref="CriticalPathAnalyzer.LayoutKey"/>). Keeping them
+    /// here rather than on each record means re-sizing or re-creating a duct or fitting with the same ID never loses
+    /// its notes. Notes of deleted items are dropped when the project is saved. Schema 15.
+    /// </summary>
+    public Dictionary<string, string> ItemNotes { get; set; } = new(StringComparer.Ordinal);
     public int NextSequence { get; set; } = 1;
     public int NextFittingSequence { get; set; } = 1;
     public int NextLayoutSequence { get; set; } = 1;
@@ -798,6 +807,9 @@ public static class DuctSystemStore
         // Version 14: per-type component blocks (moved above, before reading).
         if (document.SchemaVersion == 13)
             document.SchemaVersion = 14;
+        // Version 15: optional per-item notes (ItemNotes; empty when absent).
+        if (document.SchemaVersion == 14)
+            document.SchemaVersion = 15;
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."
@@ -940,6 +952,10 @@ public static class DuctSystemStore
         if (!positionsFromOffsets)
             LayoutPositions.DeriveOffsetsFromAbsolute(document);
         LayoutPositions.StoreAbsolute(document);
+        if (document.ItemNotes is null)
+            document.ItemNotes = new Dictionary<string, string>(StringComparer.Ordinal);
+        else if (document.ItemNotes.Comparer != StringComparer.Ordinal)
+            document.ItemNotes = new Dictionary<string, string>(document.ItemNotes, StringComparer.Ordinal);
         return document;
     }
 
@@ -1133,6 +1149,19 @@ public static class DuctSystemStore
         }
     }
 
+    /// <summary>Drops empty notes and notes whose item no longer exists.</summary>
+    public static void PruneItemNotes(DuctSystemDocument document)
+    {
+        document.ItemNotes ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        var liveKeys = document.Ducts.Select(x => CriticalPathAnalyzer.DuctKey(x.Sequence))
+            .Concat(document.Fittings.Select(x => CriticalPathAnalyzer.FittingKey(x.Sequence)))
+            .Concat(document.LayoutNodes.Select(x => CriticalPathAnalyzer.LayoutKey(x.Sequence)))
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var key in document.ItemNotes.Keys.ToArray())
+            if (!liveKeys.Contains(key) || string.IsNullOrWhiteSpace(document.ItemNotes[key]))
+                document.ItemNotes.Remove(key);
+    }
+
     public static void Save(string path, DuctSystemDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -1145,6 +1174,7 @@ public static class DuctSystemStore
         var backupPath = path + ".bak";
         // The saved absolute positions are the authoritative geometry: bring them up to date first.
         LayoutPositions.StoreAbsolute(document);
+        PruneItemNotes(document);
         File.WriteAllText(temporaryPath, JsonSerializer.Serialize(document, JsonOptions));
         if (File.Exists(path))
             File.Copy(path, backupPath, overwrite: true);

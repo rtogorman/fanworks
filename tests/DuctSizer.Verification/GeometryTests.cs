@@ -346,3 +346,54 @@ internal static class ComponentModelTests
         }
     }
 }
+
+internal static class ItemNotesTests
+{
+    public static void NotesRoundTripAndFollowTheirItem()
+    {
+        var document = new DuctSystemDocument();
+        var fan = SystemTests.AddNode(document, LayoutNodeType.Fan, parent: null, duct: null);
+        var coil = SystemTests.AddNode(document, LayoutNodeType.Coil, fan, duct: null);
+        document.ItemNotes[CriticalPathAnalyzer.LayoutKey(fan.Sequence)] = "Fan per schedule FS-1; confirm motor size.";
+        document.ItemNotes[CriticalPathAnalyzer.LayoutKey(coil.Sequence)] = "   ";
+        document.ItemNotes[CriticalPathAnalyzer.DuctKey(999)] = "Item that no longer exists";
+        var path = Path.Combine(Path.GetTempPath(), $"fanworks-notes-{Guid.NewGuid():N}.json");
+        try
+        {
+            DuctSystemStore.Save(path, document);
+            var loaded = DuctSystemStore.Load(path);
+            if (loaded.SchemaVersion != 15 || DuctSystemDocument.CurrentSchemaVersion != 15)
+                throw new Exception("Notes are saved in file format 15.");
+            if (loaded.ItemNotes.Count != 1
+                || loaded.ItemNotes[CriticalPathAnalyzer.LayoutKey(fan.Sequence)] != "Fan per schedule FS-1; confirm motor size.")
+                throw new Exception("A note must round-trip unchanged; blank notes and notes of deleted items are dropped.");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    public static void OlderFilesOpenWithNoNotes()
+    {
+        var document = new DuctSystemDocument();
+        SystemTests.AddNode(document, LayoutNodeType.Fan, parent: null, duct: null);
+        var path = Path.Combine(Path.GetTempPath(), $"fanworks-notes14-{Guid.NewGuid():N}.json");
+        try
+        {
+            DuctSystemStore.Save(path, document);
+            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            json["SchemaVersion"] = 14;
+            json.Remove("ItemNotes");
+            File.WriteAllText(path, json.ToJsonString());
+            var loaded = DuctSystemStore.Load(path);
+            if (loaded.SchemaVersion != 15 || loaded.ItemNotes is null || loaded.ItemNotes.Count != 0
+                || loaded.LayoutNodes.Count != 1)
+                throw new Exception("A format-14 project must open as format 15 with no notes and nothing else changed.");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+}

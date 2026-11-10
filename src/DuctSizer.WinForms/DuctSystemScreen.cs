@@ -2821,247 +2821,253 @@ internal sealed partial class DuctSystemScreen
     {
         var items = new List<(string Key, DuctSystemPdfReportItem Item)>();
         foreach (var duct in _ductSystem.Ducts.OrderBy(x => x.Sequence))
-        {
-            var topology = LayoutTopologyForDuct(duct.Sequence);
-            var inputs = new List<DuctSystemPdfField>
-            {
-                PdfField("Air system", duct.AirSystemType), PdfField("Branch", duct.BranchId),
-                PdfField("Upstream item", topology.Upstream), PdfField("Downstream item", topology.Downstream),
-                PdfField("Airflow", PdfAirflow(duct.AirflowM3PerS)), PdfField("Air temperature", PdfTemperature(duct.TemperatureC)),
-                PdfField("Relative humidity", $"{duct.RelativeHumidity * 100:0.#}%"), PdfField("Atmospheric pressure", $"{duct.AtmosphericPressurePa:N0} Pa"),
-                PdfField("Duct shape", duct.Shape.ToString()), PdfField("Entered size", SafeDuctSize(duct)),
-                PdfField("Duct length", PdfLength(duct.LengthM)), PdfField("Material", duct.MaterialName),
-                PdfField("Absolute roughness", PdfRoughness(duct.RoughnessFeet)),
-                PdfField("Equivalent diameter method", duct.EquivalentDiameterMethod == EquivalentDiameterMethod.Huebscher ? "Huebscher" : "Hydraulic diameter"),
-                PdfField("Pressure-loss basis", duct.PressureLossBasis == PressureLossBasis.EquivalentRoundArea ? "Equivalent round area" : "Actual area"),
-                PdfField("Relative delta X", PdfDelta(duct.DeltaXM)), PdfField("Relative delta Y", PdfDelta(duct.DeltaYM)),
-                PdfField("Relative delta Z", PdfDelta(duct.DeltaZM))
-            };
-            var outputs = new List<DuctSystemPdfField>();
-            var calculations = new List<DuctSystemPdfCalculationSection>();
-            try
-            {
-                var result = duct.Calculate();
-                var pressure = SystemPressureForDuctPair(duct.Sequence);
-                outputs.AddRange(new[]
-                {
-                    PdfField("Actual area", PdfArea(result.Input.Geometry.ActualAreaM2)),
-                    PdfField("Equivalent diameter", PdfDiameter(result.EquivalentDiameterM)),
-                    PdfField("Equivalent round area", PdfArea(result.EquivalentAreaM2)),
-                    PdfField("Actual velocity", PdfVelocity(result.ActualVelocityMPerS)),
-                    PdfField("Equivalent velocity", PdfVelocity(result.EquivalentVelocityMPerS)),
-                    PdfField("Calculation velocity", PdfVelocity(result.CalculationVelocityMPerS)),
-                    PdfField("Reynolds number", $"{result.ReynoldsNumber:N0}"),
-                    PdfField("Flow regime", result.Friction.Regime.ToString()),
-                    PdfField("Darcy friction factor", PdfFriction(result.Friction)),
-                    PdfField("Pressure-loss rate", PdfPressureRate(result)),
-                    PdfField("Total pressure loss", PdfPressure(result.TotalPressureLossUpperPa)),
-                    PdfField("Static pressure in", PdfPressure(pressure.Inlet)),
-                    PdfField("Static pressure out", PdfPressure(pressure.Outlet)),
-                    PdfField("Calculation basis", result.CalculationBasisDescription)
-                });
-                calculations.AddRange(BuildDuctPdfCalculations(result));
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
-            {
-                outputs.Add(PdfField("Calculation status", $"Invalid - {ex.Message}"));
-            }
-            var quickCheck = new[]
-            {
-                PdfField("Duct size", SafeDuctSize(duct)),
-                PdfField("Airflow", PdfAirflow(duct.AirflowM3PerS)),
-                PdfField("Duct length", PdfLength(duct.LengthM)),
-                PdfField("Pressure drop", outputs.FirstOrDefault(field => field.Label == "Total pressure loss")?.Value
-                    ?? "Not calculated")
-            };
-            items.Add((DuctKey(duct.Sequence),
-                new DuctSystemPdfReportItem(duct.Id, duct.Description, "STRAIGHT DUCT", inputs, outputs, calculations,
-                    QuickCheck: quickCheck)));
-        }
-
+            items.Add((DuctKey(duct.Sequence), BuildDuctReportItem(duct)));
         foreach (var fitting in _ductSystem.Fittings.OrderBy(x => x.Sequence))
-        {
-            var topology = LayoutTopologyForFitting(fitting.Sequence);
-            var layoutNode = _ductSystem.LayoutNodes.FirstOrDefault(x => x.LinkedFittingSequence == fitting.Sequence);
-            var inputs = new List<DuctSystemPdfField>
-            {
-                PdfField("Layout item", layoutNode?.Id ?? "-"), PdfField("Air system", fitting.AirSystemType),
-                PdfField("Branch", fitting.BranchId), PdfField("Upstream item", topology.Upstream),
-                PdfField("Downstream item", topology.Downstream), PdfField("Fitting number", fitting.FittingCode),
-                PdfField("Airflow", fitting.AirflowM3PerS > 0 ? PdfAirflow(fitting.AirflowM3PerS) : "-"),
-                PdfField("Air temperature", PdfTemperature(fitting.TemperatureC)),
-                PdfField("Reference duct", SafeFittingSize(fitting)),
-                PdfField("Relative delta X", PdfDelta(fitting.DeltaXM)), PdfField("Relative delta Y", PdfDelta(fitting.DeltaYM)),
-                PdfField("Relative delta Z", PdfDelta(fitting.DeltaZM))
-            };
-            var outputs = new List<DuctSystemPdfField>();
-            var calculations = new List<DuctSystemPdfCalculationSection>();
-            var referenceImage = BuildFittingReportImage(fitting.FittingCode);
-            try
-            {
-                var result = fitting.Calculate();
-                var pressure = SystemPressureForFittingPair(fitting.Sequence);
-                foreach (var pair in fitting.Inputs.OrderBy(x => x.Key))
-                {
-                    if (pair.Key is "selectedCfm" or "soundNc" or "soundBelow15" or "throw150" or "throw100" or "throw50" or "staticPressure" or "selectedInlet"
-                        or "selectedPressureDropInWg" or "lowerCfm" or "lowerPressureDropInWg" or "upperCfm" or "upperPressureDropInWg")
-                        continue;
-                    var definitionInput = result.Definition.Inputs.FirstOrDefault(x =>
-                        string.Equals(x.Key, pair.Key, StringComparison.OrdinalIgnoreCase));
-                    var inputLabel = (definitionInput?.Label ?? pair.Key).Replace(" (ratio)", string.Empty,
-                        StringComparison.OrdinalIgnoreCase);
-                    inputs.Add(PdfField(inputLabel, $"{pair.Value:0.####}"));
-                }
-                if (fitting.Junction is JunctionFlowData junction)
-                {
-                    inputs.Add(PdfField("Calculated path", junction.Path.ToString()));
-                    inputs.Add(PdfField("Common airflow", PdfAirflow(junction.CommonAirflowM3PerS)));
-                    inputs.Add(PdfField("Straight airflow", PdfAirflow(junction.StraightAirflowM3PerS)));
-                    inputs.Add(PdfField("Branch airflow", PdfAirflow(junction.BranchAirflowM3PerS)));
-                }
-                outputs.AddRange(new[]
-                {
-                    PdfField("Fitting description", result.Definition.Description),
-                    PdfField("Category", result.Definition.Category),
-                    PdfField("Loss coefficient C", $"{result.Coefficient:0.####}"),
-                    PdfField("Reference velocity", PdfVelocity(result.ReferenceVelocityMPerS)),
-                    PdfField("Velocity pressure", PdfPressure(result.VelocityPressurePa)),
-                    PdfField("Fitting pressure loss", PdfPressure(result.PressureLossPa)),
-                    PdfField("Static pressure in", PdfPressure(pressure.Inlet)),
-                    PdfField("Static pressure out", PdfPressure(pressure.Outlet)),
-                    PdfField("Air density", $"{result.Air.DensityKgPerM3:0.####} kg/m3"),
-                    PdfField("Calculation source", result.Definition.IsAutomated ? "Built-in table/equation" : "Entered coefficient")
-                });
-                if (IsPublishedGrdCode(result.Definition.Code))
-                {
-                    var selection = GrdSelectionFromResult(result);
-                    outputs.Add(PdfField("Selected published airflow", $"{selection.Selected.AirflowCfm:0} cfm"));
-                    if (selection.InletDiameterIn is int inletDiameter)
-                        outputs.Add(PdfField("Automatically selected inlet", $"{inletDiameter} in"));
-                    outputs.Add(PdfField("Manufacturer total pressure", $"{selection.Selected.TotalPressureInWg:0.###} in. w.c."));
-                    outputs.Add(PdfField("Sound", $"NC {selection.Selected.SoundNc}"));
-                    outputs.Add(PdfField("Throw (150/100/50 fpm)", $"{selection.Selected.ThrowFt} ft"));
-                }
-                if (IsPublishedVavCode(result.Definition.Code))
-                {
-                    var selection = VavSelectionFromResult(result);
-                    outputs.Add(PdfField("VAV configuration", selection.Configuration));
-                    outputs.Add(PdfField("Manufacturer airside pressure drop", $"{selection.PressureDropInWg:0.###} in. w.c."));
-                    outputs.Add(PdfField("Lookup method", selection.WasInterpolated
-                        ? $"Linear interpolation: {selection.LowerPoint.AirflowCfm:0} to {selection.UpperPoint.AirflowCfm:0} cfm"
-                        : "Exact published airflow point"));
-                }
-                calculations.AddRange(BuildFittingPdfCalculations(result));
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException or KeyNotFoundException)
-            {
-                outputs.Add(PdfField("Calculation status", $"Invalid - {ex.Message}"));
-            }
-            var quickCheck = new[]
-            {
-                PdfField("Fitting type / name", outputs.FirstOrDefault(field => field.Label == "Fitting description")?.Value
-                    ?? $"{fitting.FittingCode} - {fitting.Description}"),
-                PdfField("Fitting C-value", outputs.FirstOrDefault(field => field.Label == "Loss coefficient C")?.Value
-                    ?? "Not calculated"),
-                PdfField("Pressure drop", outputs.FirstOrDefault(field => field.Label == "Fitting pressure loss")?.Value
-                    ?? "Not calculated")
-            };
-            items.Add((FittingKey(fitting.Sequence),
-                new DuctSystemPdfReportItem(fitting.Id, fitting.Description, "FITTING", inputs, outputs, calculations,
-                    referenceImage.Base64, referenceImage.Width, referenceImage.Height, quickCheck)));
-        }
-
+            items.Add((FittingKey(fitting.Sequence), BuildFittingReportItem(fitting)));
         foreach (var node in _ductSystem.LayoutNodes
                      .Where(x => x.Type is LayoutNodeType.Reservoir or LayoutNodeType.Fan or LayoutNodeType.Coil
                                      or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CalculationPoint
                                      or LayoutNodeType.CustomComponent
                                  || x.Type == LayoutNodeType.Fitting && !x.IsDefined && x.LinkedFittingSequence is null)
                      .OrderBy(x => x.Sequence))
-        {
-            var topology = LayoutTopologyForNode(node);
-            var description = LayoutReportDescription(node);
-            var inputs = new List<DuctSystemPdfField>
-            {
-                PdfField("Definition status", node.IsDefined ? "Defined" : "Undefined - double-click in Designer"),
-                PdfField("Air system", node.IsDefined ? node.AirSystemType : "-"), PdfField("Branch", node.BranchId),
-                PdfField("Upstream item", topology.Upstream), PdfField("Downstream item", topology.Downstream),
-                PdfField("Relative delta X", PdfDelta(node.DeltaXM)), PdfField("Relative delta Y", PdfDelta(node.DeltaYM)),
-                PdfField("Relative delta Z", PdfDelta(node.DeltaZM))
-            };
-            if (node.IsDefined)
-            {
-                inputs.Add(PdfField("Airflow", node.AirflowM3PerS > 0 ? PdfAirflow(node.AirflowM3PerS) : "-"));
-                inputs.Add(PdfField("Air temperature", PdfTemperature(node.TemperatureC)));
-                if (node.Type == LayoutNodeType.Reservoir)
-                    inputs.Add(PdfField("Space role", node.SpaceRole));
-                if (node.Type == LayoutNodeType.Grd)
-                {
-                    inputs.Add(PdfField("GRD type", node.GrdType));
-                    if (string.Equals(node.GrdType, "Grille", StringComparison.OrdinalIgnoreCase))
-                        inputs.Add(PdfField("Nominal duct size", $"{node.GrdNominalDuctSizeIn} in"));
-                    else if (string.Equals(node.GrdType, "Diffuser", StringComparison.OrdinalIgnoreCase))
-                    {
-                        inputs.Add(PdfField("Face size", $"{node.GrdFaceSizeIn:0} x {node.GrdFaceSizeIn:0} in"));
-                        inputs.Add(PdfField("Neck diameter", $"{node.GrdNeckDiameterIn:0} in"));
-                    }
-                    else if (string.Equals(node.GrdType, "Linear Diffuser TBD-80 D", StringComparison.OrdinalIgnoreCase))
-                    {
-                        inputs.Add(PdfField("Diffuser length", $"{node.GrdLengthFt:0} ft"));
-                        inputs.Add(PdfField("Slot size", $"{node.GrdSlotWidthIn:0.##} in"));
-                        inputs.Add(PdfField("Number of slots", $"{node.GrdSlotCount}"));
-                        inputs.Add(PdfField("Selected inlet", $"{node.GrdInletDiameterIn:0} in"));
-                    }
-                }
-                if (node.Type == LayoutNodeType.CustomComponent)
-                    inputs.Add(PdfField("Component description", node.Description));
-                if (node.Type == LayoutNodeType.Fan)
-                {
-                    inputs.Add(PdfField("Fan system static pressure", PdfPressure(node.FanStaticPressurePa)));
-                    inputs.Add(PdfField("Fan efficiency", $"{node.FanEfficiencyPercent:0.##}%"));
-                }
-                if (node.Type == LayoutNodeType.CalculationPoint)
-                {
-                    inputs.Add(PdfField("Calculation point", node.CalculationPointType));
-                    inputs.Add(PdfField("Observed duct", node.ObservedDuctSequence is int observed
-                        ? $"D-{observed:000}" : "Unassigned"));
-                    inputs.Add(PdfField("Position along duct", $"{node.CalculationConnectionFraction * 100:0.#}%"));
-                }
-            }
-            var pressure = SystemPressureForEquipmentPair(node);
-            var outputs = new List<DuctSystemPdfField>
-            {
-                PdfField("Component pressure loss", node.IsDefined && (node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CustomComponent)
-                    ? PdfPressure(node.PressureDropPa) : node.IsDefined ? "0" : "Not calculated"),
-                PdfField("Static pressure in", node.IsDefined ? PdfPressure(pressure.Inlet) : "Not calculated"),
-                PdfField("Static pressure out", node.IsDefined ? PdfPressure(pressure.Outlet) : "Not calculated")
-            };
-            if (node.IsDefined && node.Type == LayoutNodeType.CalculationPoint)
-                outputs.Add(PdfField("Calculated value", node.CalculationPointType switch
-                {
-                    "Temperature" => PdfTemperature(node.TemperatureC),
-                    "Velocity" => PdfVelocity(node.VelocityMPerS),
-                    "Airflow" => PdfAirflow(node.AirflowM3PerS),
-                    _ => PdfPressure(node.PressurePa)
-                }));
-            if (node.IsDefined && node.Type == LayoutNodeType.Grd && node.GrdSelectedAirflowCfm > 0)
-            {
-                outputs.Add(PdfField("Selected published airflow", $"{node.GrdSelectedAirflowCfm:0} cfm"));
-                if (string.Equals(node.GrdType, "Linear Diffuser TBD-80 D", StringComparison.OrdinalIgnoreCase))
-                    outputs.Add(PdfField("Automatically selected inlet", $"{node.GrdInletDiameterIn:0} in"));
-                outputs.Add(PdfField("Sound", $"NC {node.GrdSoundNc}"));
-                if (!string.Equals(node.GrdType, "Grille", StringComparison.OrdinalIgnoreCase))
-                    outputs.Add(PdfField("Throw (150/100/50 fpm)", $"{node.GrdThrowFt} ft"));
-            }
-            var reportType = node.Type == LayoutNodeType.CalculationPoint
-                ? "CALCULATION POINT"
-                : node.Type.ToString().ToUpperInvariant();
-            var quickCheck = BuildEquipmentPdfQuickCheck(node, description, inputs, outputs);
-            items.Add((LayoutKey(node.Sequence),
-                new DuctSystemPdfReportItem(node.Id, description, reportType, inputs, outputs,
-                    BuildEquipmentPdfCalculations(node, pressure), QuickCheck: quickCheck)));
-        }
+            items.Add((LayoutKey(node.Sequence), BuildNodeReportItem(node)));
+
         return OrderPdfReportItems(items);
     }
+
+    internal DuctSystemPdfReportItem BuildDuctReportItem(SavedDuct duct)
+    {
+        var topology = LayoutTopologyForDuct(duct.Sequence);
+        var inputs = new List<DuctSystemPdfField>
+        {
+            PdfField("Air system", duct.AirSystemType), PdfField("Branch", duct.BranchId),
+            PdfField("Upstream item", topology.Upstream), PdfField("Downstream item", topology.Downstream),
+            PdfField("Airflow", PdfAirflow(duct.AirflowM3PerS)), PdfField("Air temperature", PdfTemperature(duct.TemperatureC)),
+            PdfField("Relative humidity", $"{duct.RelativeHumidity * 100:0.#}%"), PdfField("Atmospheric pressure", $"{duct.AtmosphericPressurePa:N0} Pa"),
+            PdfField("Duct shape", duct.Shape.ToString()), PdfField("Entered size", SafeDuctSize(duct)),
+            PdfField("Duct length", PdfLength(duct.LengthM)), PdfField("Material", duct.MaterialName),
+            PdfField("Absolute roughness", PdfRoughness(duct.RoughnessFeet)),
+            PdfField("Equivalent diameter method", duct.EquivalentDiameterMethod == EquivalentDiameterMethod.Huebscher ? "Huebscher" : "Hydraulic diameter"),
+            PdfField("Pressure-loss basis", duct.PressureLossBasis == PressureLossBasis.EquivalentRoundArea ? "Equivalent round area" : "Actual area"),
+            PdfField("Relative delta X", PdfDelta(duct.DeltaXM)), PdfField("Relative delta Y", PdfDelta(duct.DeltaYM)),
+            PdfField("Relative delta Z", PdfDelta(duct.DeltaZM))
+        };
+        var outputs = new List<DuctSystemPdfField>();
+        var calculations = new List<DuctSystemPdfCalculationSection>();
+        try
+        {
+            var result = duct.Calculate();
+            var pressure = SystemPressureForDuctPair(duct.Sequence);
+            outputs.AddRange(new[]
+            {
+                PdfField("Actual area", PdfArea(result.Input.Geometry.ActualAreaM2)),
+                PdfField("Equivalent diameter", PdfDiameter(result.EquivalentDiameterM)),
+                PdfField("Equivalent round area", PdfArea(result.EquivalentAreaM2)),
+                PdfField("Actual velocity", PdfVelocity(result.ActualVelocityMPerS)),
+                PdfField("Equivalent velocity", PdfVelocity(result.EquivalentVelocityMPerS)),
+                PdfField("Calculation velocity", PdfVelocity(result.CalculationVelocityMPerS)),
+                PdfField("Reynolds number", $"{result.ReynoldsNumber:N0}"),
+                PdfField("Flow regime", result.Friction.Regime.ToString()),
+                PdfField("Darcy friction factor", PdfFriction(result.Friction)),
+                PdfField("Pressure-loss rate", PdfPressureRate(result)),
+                PdfField("Total pressure loss", PdfPressure(result.TotalPressureLossUpperPa)),
+                PdfField("Static pressure in", PdfPressure(pressure.Inlet)),
+                PdfField("Static pressure out", PdfPressure(pressure.Outlet)),
+                PdfField("Calculation basis", result.CalculationBasisDescription)
+            });
+            calculations.AddRange(BuildDuctPdfCalculations(result));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
+        {
+            outputs.Add(PdfField("Calculation status", $"Invalid - {ex.Message}"));
+        }
+        var quickCheck = new[]
+        {
+            PdfField("Duct size", SafeDuctSize(duct)),
+            PdfField("Airflow", PdfAirflow(duct.AirflowM3PerS)),
+            PdfField("Duct length", PdfLength(duct.LengthM)),
+            PdfField("Pressure drop", outputs.FirstOrDefault(field => field.Label == "Total pressure loss")?.Value
+                ?? "Not calculated")
+        };
+        return new DuctSystemPdfReportItem(duct.Id, duct.Description, "STRAIGHT DUCT", inputs, outputs, calculations,
+                QuickCheck: quickCheck);
+    }
+
+    internal DuctSystemPdfReportItem BuildFittingReportItem(SavedFitting fitting)
+    {
+        var topology = LayoutTopologyForFitting(fitting.Sequence);
+        var layoutNode = _ductSystem.LayoutNodes.FirstOrDefault(x => x.LinkedFittingSequence == fitting.Sequence);
+        var inputs = new List<DuctSystemPdfField>
+        {
+            PdfField("Layout item", layoutNode?.Id ?? "-"), PdfField("Air system", fitting.AirSystemType),
+            PdfField("Branch", fitting.BranchId), PdfField("Upstream item", topology.Upstream),
+            PdfField("Downstream item", topology.Downstream), PdfField("Fitting number", fitting.FittingCode),
+            PdfField("Airflow", fitting.AirflowM3PerS > 0 ? PdfAirflow(fitting.AirflowM3PerS) : "-"),
+            PdfField("Air temperature", PdfTemperature(fitting.TemperatureC)),
+            PdfField("Reference duct", SafeFittingSize(fitting)),
+            PdfField("Relative delta X", PdfDelta(fitting.DeltaXM)), PdfField("Relative delta Y", PdfDelta(fitting.DeltaYM)),
+            PdfField("Relative delta Z", PdfDelta(fitting.DeltaZM))
+        };
+        var outputs = new List<DuctSystemPdfField>();
+        var calculations = new List<DuctSystemPdfCalculationSection>();
+        var referenceImage = BuildFittingReportImage(fitting.FittingCode);
+        try
+        {
+            var result = fitting.Calculate();
+            var pressure = SystemPressureForFittingPair(fitting.Sequence);
+            foreach (var pair in fitting.Inputs.OrderBy(x => x.Key))
+            {
+                if (pair.Key is "selectedCfm" or "soundNc" or "soundBelow15" or "throw150" or "throw100" or "throw50" or "staticPressure" or "selectedInlet"
+                    or "selectedPressureDropInWg" or "lowerCfm" or "lowerPressureDropInWg" or "upperCfm" or "upperPressureDropInWg")
+                    continue;
+                var definitionInput = result.Definition.Inputs.FirstOrDefault(x =>
+                    string.Equals(x.Key, pair.Key, StringComparison.OrdinalIgnoreCase));
+                var inputLabel = (definitionInput?.Label ?? pair.Key).Replace(" (ratio)", string.Empty,
+                    StringComparison.OrdinalIgnoreCase);
+                inputs.Add(PdfField(inputLabel, $"{pair.Value:0.####}"));
+            }
+            if (fitting.Junction is JunctionFlowData junction)
+            {
+                inputs.Add(PdfField("Calculated path", junction.Path.ToString()));
+                inputs.Add(PdfField("Common airflow", PdfAirflow(junction.CommonAirflowM3PerS)));
+                inputs.Add(PdfField("Straight airflow", PdfAirflow(junction.StraightAirflowM3PerS)));
+                inputs.Add(PdfField("Branch airflow", PdfAirflow(junction.BranchAirflowM3PerS)));
+            }
+            outputs.AddRange(new[]
+            {
+                PdfField("Fitting description", result.Definition.Description),
+                PdfField("Category", result.Definition.Category),
+                PdfField("Loss coefficient C", $"{result.Coefficient:0.####}"),
+                PdfField("Reference velocity", PdfVelocity(result.ReferenceVelocityMPerS)),
+                PdfField("Velocity pressure", PdfPressure(result.VelocityPressurePa)),
+                PdfField("Fitting pressure loss", PdfPressure(result.PressureLossPa)),
+                PdfField("Static pressure in", PdfPressure(pressure.Inlet)),
+                PdfField("Static pressure out", PdfPressure(pressure.Outlet)),
+                PdfField("Air density", $"{result.Air.DensityKgPerM3:0.####} kg/m3"),
+                PdfField("Calculation source", result.Definition.IsAutomated ? "Built-in table/equation" : "Entered coefficient")
+            });
+            if (IsPublishedGrdCode(result.Definition.Code))
+            {
+                var selection = GrdSelectionFromResult(result);
+                outputs.Add(PdfField("Selected published airflow", $"{selection.Selected.AirflowCfm:0} cfm"));
+                if (selection.InletDiameterIn is int inletDiameter)
+                    outputs.Add(PdfField("Automatically selected inlet", $"{inletDiameter} in"));
+                outputs.Add(PdfField("Manufacturer total pressure", $"{selection.Selected.TotalPressureInWg:0.###} in. w.c."));
+                outputs.Add(PdfField("Sound", $"NC {selection.Selected.SoundNc}"));
+                outputs.Add(PdfField("Throw (150/100/50 fpm)", $"{selection.Selected.ThrowFt} ft"));
+            }
+            if (IsPublishedVavCode(result.Definition.Code))
+            {
+                var selection = VavSelectionFromResult(result);
+                outputs.Add(PdfField("VAV configuration", selection.Configuration));
+                outputs.Add(PdfField("Manufacturer airside pressure drop", $"{selection.PressureDropInWg:0.###} in. w.c."));
+                outputs.Add(PdfField("Lookup method", selection.WasInterpolated
+                    ? $"Linear interpolation: {selection.LowerPoint.AirflowCfm:0} to {selection.UpperPoint.AirflowCfm:0} cfm"
+                    : "Exact published airflow point"));
+            }
+            calculations.AddRange(BuildFittingPdfCalculations(result));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException or KeyNotFoundException)
+        {
+            outputs.Add(PdfField("Calculation status", $"Invalid - {ex.Message}"));
+        }
+        var quickCheck = new[]
+        {
+            PdfField("Fitting type / name", outputs.FirstOrDefault(field => field.Label == "Fitting description")?.Value
+                ?? $"{fitting.FittingCode} - {fitting.Description}"),
+            PdfField("Fitting C-value", outputs.FirstOrDefault(field => field.Label == "Loss coefficient C")?.Value
+                ?? "Not calculated"),
+            PdfField("Pressure drop", outputs.FirstOrDefault(field => field.Label == "Fitting pressure loss")?.Value
+                ?? "Not calculated")
+        };
+        return new DuctSystemPdfReportItem(fitting.Id, fitting.Description, "FITTING", inputs, outputs, calculations,
+                referenceImage.Base64, referenceImage.Width, referenceImage.Height, quickCheck);
+    }
+
+    internal DuctSystemPdfReportItem BuildNodeReportItem(SavedLayoutNode node)
+    {
+        var topology = LayoutTopologyForNode(node);
+        var description = LayoutReportDescription(node);
+        var inputs = new List<DuctSystemPdfField>
+        {
+            PdfField("Definition status", node.IsDefined ? "Defined" : "Undefined - double-click in Designer"),
+            PdfField("Air system", node.IsDefined ? node.AirSystemType : "-"), PdfField("Branch", node.BranchId),
+            PdfField("Upstream item", topology.Upstream), PdfField("Downstream item", topology.Downstream),
+            PdfField("Relative delta X", PdfDelta(node.DeltaXM)), PdfField("Relative delta Y", PdfDelta(node.DeltaYM)),
+            PdfField("Relative delta Z", PdfDelta(node.DeltaZM))
+        };
+        if (node.IsDefined)
+        {
+            inputs.Add(PdfField("Airflow", node.AirflowM3PerS > 0 ? PdfAirflow(node.AirflowM3PerS) : "-"));
+            inputs.Add(PdfField("Air temperature", PdfTemperature(node.TemperatureC)));
+            if (node.Type == LayoutNodeType.Reservoir)
+                inputs.Add(PdfField("Space role", node.SpaceRole));
+            if (node.Type == LayoutNodeType.Grd)
+            {
+                inputs.Add(PdfField("GRD type", node.GrdType));
+                if (string.Equals(node.GrdType, "Grille", StringComparison.OrdinalIgnoreCase))
+                    inputs.Add(PdfField("Nominal duct size", $"{node.GrdNominalDuctSizeIn} in"));
+                else if (string.Equals(node.GrdType, "Diffuser", StringComparison.OrdinalIgnoreCase))
+                {
+                    inputs.Add(PdfField("Face size", $"{node.GrdFaceSizeIn:0} x {node.GrdFaceSizeIn:0} in"));
+                    inputs.Add(PdfField("Neck diameter", $"{node.GrdNeckDiameterIn:0} in"));
+                }
+                else if (string.Equals(node.GrdType, "Linear Diffuser TBD-80 D", StringComparison.OrdinalIgnoreCase))
+                {
+                    inputs.Add(PdfField("Diffuser length", $"{node.GrdLengthFt:0} ft"));
+                    inputs.Add(PdfField("Slot size", $"{node.GrdSlotWidthIn:0.##} in"));
+                    inputs.Add(PdfField("Number of slots", $"{node.GrdSlotCount}"));
+                    inputs.Add(PdfField("Selected inlet", $"{node.GrdInletDiameterIn:0} in"));
+                }
+            }
+            if (node.Type == LayoutNodeType.CustomComponent)
+                inputs.Add(PdfField("Component description", node.Description));
+            if (node.Type == LayoutNodeType.Fan)
+            {
+                inputs.Add(PdfField("Fan system static pressure", PdfPressure(node.FanStaticPressurePa)));
+                inputs.Add(PdfField("Fan efficiency", $"{node.FanEfficiencyPercent:0.##}%"));
+            }
+            if (node.Type == LayoutNodeType.CalculationPoint)
+            {
+                inputs.Add(PdfField("Calculation point", node.CalculationPointType));
+                inputs.Add(PdfField("Observed duct", node.ObservedDuctSequence is int observed
+                    ? $"D-{observed:000}" : "Unassigned"));
+                inputs.Add(PdfField("Position along duct", $"{node.CalculationConnectionFraction * 100:0.#}%"));
+            }
+        }
+        var pressure = SystemPressureForEquipmentPair(node);
+        var outputs = new List<DuctSystemPdfField>
+        {
+            PdfField("Component pressure loss", node.IsDefined && (node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CustomComponent)
+                ? PdfPressure(node.PressureDropPa) : node.IsDefined ? "0" : "Not calculated"),
+            PdfField("Static pressure in", node.IsDefined ? PdfPressure(pressure.Inlet) : "Not calculated"),
+            PdfField("Static pressure out", node.IsDefined ? PdfPressure(pressure.Outlet) : "Not calculated")
+        };
+        if (node.IsDefined && node.Type == LayoutNodeType.CalculationPoint)
+            outputs.Add(PdfField("Calculated value", node.CalculationPointType switch
+            {
+                "Temperature" => PdfTemperature(node.TemperatureC),
+                "Velocity" => PdfVelocity(node.VelocityMPerS),
+                "Airflow" => PdfAirflow(node.AirflowM3PerS),
+                _ => PdfPressure(node.PressurePa)
+            }));
+        if (node.IsDefined && node.Type == LayoutNodeType.Grd && node.GrdSelectedAirflowCfm > 0)
+        {
+            outputs.Add(PdfField("Selected published airflow", $"{node.GrdSelectedAirflowCfm:0} cfm"));
+            if (string.Equals(node.GrdType, "Linear Diffuser TBD-80 D", StringComparison.OrdinalIgnoreCase))
+                outputs.Add(PdfField("Automatically selected inlet", $"{node.GrdInletDiameterIn:0} in"));
+            outputs.Add(PdfField("Sound", $"NC {node.GrdSoundNc}"));
+            if (!string.Equals(node.GrdType, "Grille", StringComparison.OrdinalIgnoreCase))
+                outputs.Add(PdfField("Throw (150/100/50 fpm)", $"{node.GrdThrowFt} ft"));
+        }
+        var reportType = node.Type == LayoutNodeType.CalculationPoint
+            ? "CALCULATION POINT"
+            : node.Type.ToString().ToUpperInvariant();
+        var quickCheck = BuildEquipmentPdfQuickCheck(node, description, inputs, outputs);
+        return new DuctSystemPdfReportItem(node.Id, description, reportType, inputs, outputs,
+                BuildEquipmentPdfCalculations(node, pressure), QuickCheck: quickCheck);
+    }
+
 
     private static IReadOnlyList<DuctSystemPdfField> BuildEquipmentPdfQuickCheck(SavedLayoutNode node,
         string description, IReadOnlyList<DuctSystemPdfField> inputs, IReadOnlyList<DuctSystemPdfField> outputs)

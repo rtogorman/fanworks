@@ -65,7 +65,9 @@ var tests = new (string Name, Action Run)[]
     ("Positions: stored absolute positions win over offsets", PositionTests.StoredAbsolutePositionsWinOverOffsets),
     ("Positions: older files migrate without moving components", PositionTests.OlderFilesMigrateWithoutMovingComponents),
     ("Component model: each type saves only its own data", ComponentModelTests.EachComponentTypeSavesOnlyItsOwnData),
-    ("Component model: older flat fields move into type blocks", ComponentModelTests.FlatFieldsFromOlderFilesMoveIntoTheirBlocks)
+    ("Component model: older flat fields move into type blocks", ComponentModelTests.FlatFieldsFromOlderFilesMoveIntoTheirBlocks),
+    ("Item notes: saved with the project and kept per item", ItemNotesTests.NotesRoundTripAndFollowTheirItem),
+    ("Item notes: older files open with no notes", ItemNotesTests.OlderFilesOpenWithNoNotes)
 };
 
 var failures = new List<string>();
