@@ -488,9 +488,8 @@ internal sealed partial class DuctSystemScreen
         _criticalPathFilterButton.Font = new Font("Segoe UI Semibold", 7.5F);
         _autoSizeFanButton.FlatAppearance.BorderColor = Color.FromArgb(31, 120, 180);
         _criticalPathFilterButton.Enabled = false;
+        // Calculate (fan sizing) and Fan Information are ribbon commands since v0.96; the filter stays with the table.
         primaryActions.Controls.Add(_criticalPathFilterButton);
-        primaryActions.Controls.Add(_autoSizeFanButton);
-        primaryActions.Controls.Add(_viewFanInformationButton);
         destructiveActions.Controls.Add(_deleteAllSystemButton);
         actions.Controls.Add(primaryActions, 0, 0);
         actions.Controls.Add(destructiveActions, 1, 0);
@@ -972,7 +971,7 @@ internal sealed partial class DuctSystemScreen
         _criticalPathFilterEnabled = true;
         ApplyCriticalRoute(ComputeLongestRoute());
         var horsepower = TryBrakeHorsepower(requiredAirflow, fan.FanStaticPressurePa, fan.FanEfficiencyPercent);
-        message = $"{fan.Id} was sized to {FormatSystemAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} static pressure, and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency.";
+        message = $"{fan.Id} was sized to {PdfAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} static pressure, and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency.";
         return true;
     }
 
@@ -1023,7 +1022,7 @@ internal sealed partial class DuctSystemScreen
         var fan = fans[0];
         var horsepower = TryBrakeHorsepower(fan.AirflowM3PerS, fan.FanStaticPressurePa,
             fan.FanEfficiencyPercent);
-        information = $"{fan.Id} — System Fan\r\n\r\nAirflow: {FormatSystemAirflow(fan.AirflowM3PerS)}\r\n" +
+        information = $"{fan.Id} — System Fan\r\n\r\nAirflow: {PdfAirflow(fan.AirflowM3PerS)}\r\n" +
                       $"Static pressure: {FormatSystemTotal(fan.FanStaticPressurePa)}\r\n" +
                       $"Fan efficiency: {fan.FanEfficiencyPercent:0.#}%\r\n" +
                       $"Required motor power: {FormatHorsepower(horsepower)}";
@@ -2514,7 +2513,7 @@ internal sealed partial class DuctSystemScreen
         var metadata = new DuctSystemPdfMetadata(_ductSystem.UserName, _ductSystem.ProjectName,
             _ductSystem.ProjectNumber, projectDate, logo.Base64, logo.Width, logo.Height,
             DateTime.Now.ToString("MMMM d, yyyy h:mm tt", CultureInfo.CurrentCulture),
-            fan?.Id ?? "No fan added", fan is null ? "Not available" : FormatSystemAirflow(fan.AirflowM3PerS),
+            fan?.Id ?? "No fan added", fan is null ? "Not available" : PdfAirflow(fan.AirflowM3PerS),
             fan is null ? "Not available" : FormatSystemTotal(fan.FanStaticPressurePa),
             fan is null ? "Not available" : $"{fan.FanEfficiencyPercent:0.#}%",
             fan is null ? "Not available" : FormatHorsepower(fanHorsepower),

@@ -108,6 +108,13 @@ Page mapping: Project = Layout Designer, Analysis = Duct System, Reports = repor
 calculator. Page order in `_mainTabs` is kept (0 calculator, 1 fitting, 2 system, 3 layout, 4 reports). The Designer's
 component tools are created by `LayoutDesignerScreen.CreateRibbonLayoutTool` and placed in ribbon groups.
 
+Project page (v0.96): `ProjectExplorer` | drawing over the bottom panel (`LayoutDesignerScreen.Panels.cs`: System
+Overview, Errors from `BuildProjectIssues`, Validation) | `SelectionInspector`. The inspector shows the per-item
+report content (`DuctSystemScreen.BuildDuctReportItem` / `BuildFittingReportItem` / `BuildNodeReportItem`, also used
+by the PDF), so screen and report cannot disagree; item notes live in `DuctSystemDocument.ItemNotes` (schema 15).
+Analysis page summary: `DuctSystemScreen.Analysis.cs` (`HighestPressureDrops`). Reports page: `ReportPreview`
+(renders `WriteReportPdf` output with the PDFium session used for underlays).
+
 `Program.cs` starts logging and installs the crash handlers. `AutomationOptions` holds test-only switches (dialog
 suppression, storage path); they are internal and reachable only by the interface test assembly.
 

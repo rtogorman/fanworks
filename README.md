@@ -197,7 +197,7 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
-## What changed in 0.96.0 (interface redesign — in progress)
+## What changed in 0.96.0 (interface redesign)
 
 Calculations are unchanged; this release reorganises the window.
 
@@ -214,6 +214,18 @@ Calculations are unchanged; this release reorganises the window.
   underlay, grid scale as a dropdown of feet-per-cell values, view direction, and Labels / Flow / Sizes check boxes
   (Flow shows each duct's airflow).
 - The window frame is a fixed height on any screen, so larger monitors give the drawing more room.
+- **Selection Inspector** (right of the drawing): Description (what the item is, its inputs and outputs; fitting
+  pictures enlarge on click), Calculations (every equation and value — the same content as the item's report page)
+  and Notes (saved with the project, file format 15). Edit Inputs opens the item's editor.
+- **Project Explorer** (left): all items of the system grouped as Equipment, Sources, Sinks, Terminals, Dampers,
+  Fittings, Duct Segments and Calculation Points, with search. Clicking an item selects it on the drawing.
+- **Bottom panel**: System Overview (the former quick view), Errors (every current problem, with a count) and
+  Validation (ducts: size, airflow, velocity, static-pressure rate, loss; fittings: C and loss) for QA/QC.
+- **Analysis tab**: airflow, critical-path pressure drop, fan static pressure and the items in the critical route;
+  the ten highest pressure drops; then the full system table with the Isolate Critical Path filter.
+- **Reports tab**: a page-by-page preview of the project report; **Print Report** saves the PDF and opens it.
+- **Quick Calc tab**: the duct and fitting calculators, usable without a project.
+- Airflow values in the fan-sizing message, fan information and the report's design airflow now show their unit.
 
 ## What changed in 0.95.0
 

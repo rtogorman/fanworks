@@ -355,7 +355,7 @@ Icons drawn in-house (no new packages).
 | R1 | Window shell, top tabs, Project ribbon, canvas toolbar; screens re-hosted (Analysis = Duct System screen, Quick Calc = calculators) | **Done** — laptop build 2026-11-09: 63/63, UI 17/17, 0 warnings, `outputs\FanWorks-win-x64-v0.96.0\FanWorks.exe`; GitHub CI green |
 | R2 | Selection Inspector (Description / Calculations / Notes), notes in file (schema 15) | **Done** — laptop build: 65/65, UI 18/18, 0 warnings; CI green |
 | R3 | Project Explorer, bottom panel (System Overview / Errors / Validation) | **Done** — laptop build: 65/65, UI 19/19, 0 warnings; CI green |
-| R4 | Analysis summary + top 10, Reports preview, Quick Calc polish; interface tests rewritten; v0.96.0 | In progress |
+| R4 | Analysis summary + top 10, Reports preview, Quick Calc polish; interface tests rewritten; v0.96.0 | Done in code (65/65, UI 20/20 Wine); Windows build pending |
 
 ### R1 record
 
@@ -417,6 +417,22 @@ Icons drawn in-house (no new packages).
   connection, sized or not, + off-drawing ducts), Calculation Points. Collapsed by default; search filters and opens
   matching groups. Selecting selects on the drawing, centres it, shows it in the inspector.
   Terminals and Calculation Points are extra groups beyond the owner's list (GRDs and points had no home).
+
+### R4 record
+
+- Analysis page (`DuctSystemScreen.Analysis.cs`): blue title band replaced by a summary — System overview tiles
+  (airflow = fan's required airflow, critical-path pressure drop or "Not available", fan static pressure, items in
+  the critical route) with the existing total/route/count labels, and "Highest pressure drops (top 10)" from
+  `HighestPressureDrops` (SystemSolver.DuctLoss / FittingLoss and entered component drops; NaN items left out;
+  clicking selects the row in the table). Page buttons Auto-size Fan / View Fan Information removed (ribbon
+  Calculate / Fan Information); Isolate Critical Path and Delete all stay.
+- Reports page (`ReportPreview.cs`): `WriteReportPdf` (extracted from Save, unchanged output) to a temp file,
+  rendered with `PdfPageRenderSession` at 1100 px, shown as 820 px pages; rebuilt when the tab opens and on Refresh
+  Preview. Print Report = Save dialog → PDF (atomic temp + move) → opened with the default viewer
+  (`AutomationOptions.ReportPdfPath` for tests).
+- Calculator pages: title bands 88 → 54 px.
+- Unit fix: airflow shows cfm/L/s in the fan-sizing message, fan information and the report's design airflow.
+- Interface checks: 20 groups (new: Analysis summary, report preview and Print Report).
 
 ### Resume notes (update as work proceeds)
 

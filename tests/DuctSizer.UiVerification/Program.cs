@@ -171,8 +171,8 @@ internal static class Program
             var junctionInputs = Find<TableLayoutPanel>(form, "JunctionInputTable");
             var junctionPath = Find<ComboBox>(form, "JunctionPathCombo");
             var deleteAllSystem = Find<Button>(form, "DeleteAllSystemButton");
-            var autoSizeFan = Find<Button>(form, "AutoSizeFanButton");
-            var viewFanInformation = Find<Button>(form, "ViewFanInformationButton");
+            var autoSizeFan = Find<Button>(form, "RibbonAnalysisCalculateButton");
+            var viewFanInformation = Find<Button>(form, "RibbonFanInformationButton");
             var criticalPathFilter = Find<Button>(form, "CriticalPathFilterButton");
             Require(mode.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(new[]
                 { "Check Existing", "Autosize (SP Loss)", "Autosize (Velocity)" }),
@@ -210,12 +210,11 @@ internal static class Program
                     && form.Controls.Find("CopyResultsButton", true).Length == 0
                     && !Descendants<Button>(form).Any(button => button.Text == "Copy system"),
                 "Save Changes actions should be hidden until an existing duct or fitting is opened for editing.");
-            Require(autoSizeFan.Text == "Auto-size Fan"
-                    && form.Controls.Find("CalculateLongestRouteButton", true).Length == 0,
-                "The Duct System should auto-calculate its critical route and expose fan auto-sizing without a manual longest-route button.");
-            Require(TextRenderer.MeasureText(autoSizeFan.Text, autoSizeFan.Font).Width
-                    <= autoSizeFan.ClientSize.Width - 12,
-                "The Auto-size Fan label should fit without clipping.");
+            Require(autoSizeFan.Text == "Calculate"
+                    && form.Controls.Find("CalculateLongestRouteButton", true).Length == 0
+                    && form.Controls.Find("AutoSizeFanButton", true).Length == 0
+                    && form.Controls.Find("ViewFanInformationButton", true).Length == 0,
+                "Fan sizing is the ribbon's Calculate (Project and Analysis tabs); the Analysis page has no separate Auto-size Fan or longest-route button.");
             Require(TextRenderer.MeasureText(criticalPathFilter.Text, criticalPathFilter.Font).Width
                     <= criticalPathFilter.ClientSize.Width - 12,
                 "The Isolate Critical Path label should fit without clipping.");
@@ -355,7 +354,8 @@ internal static class Program
                     && form.Controls.Find("MainNavigationHost", true).Length == 0
                     && form.Controls.Find("DesignerSectionHeader", true).Length == 0
                     && Find<Control>(form, "CalculatorSectionHeader").GetType().Name == "SectionTitlePanel"
-                    && Find<Control>(form, "SystemSectionHeader").GetType().Name == "SectionTitlePanel",
+                    && Find<Control>(form, "CalculatorSectionHeader").Height <= 60
+                    && form.Controls.Find("SystemSectionHeader", true).Length == 0,
                 "The window frame should be a slim top bar (brand, Project/Analysis/Reports/Quick Calc tabs, project identity) over the ribbon, with a fixed height on any screen.");
             Require(projectIdentityHeader is TableLayoutPanel identityLayout
                     && identityLayout.GetColumn(projectHeader) == 3
@@ -643,10 +643,9 @@ internal static class Program
             Require(deleteAllSystem.Text == "Delete all",
                 "The system tab should expose a clearly labeled delete-all action.");
             Require(criticalPathFilter.Text == "Isolate Critical Path"
-                    && ScreenBounds(criticalPathFilter).Left < ScreenBounds(autoSizeFan).Left
-                    && ScreenBounds(autoSizeFan).Left < ScreenBounds(viewFanInformation).Left
-                    && ScreenBounds(deleteAllSystem).Left > ScreenBounds(viewFanInformation).Right,
-                "Isolate Critical Path should precede the fan actions, with Delete all isolated at the far right.");
+                    && ScreenBounds(deleteAllSystem).Left > ScreenBounds(criticalPathFilter).Right
+                    && viewFanInformation.Text.Replace("\n", " ", StringComparison.Ordinal) == "Fan Information",
+                "Isolate Critical Path should stay with the table, with Delete all isolated at the far right; fan information is a ribbon command.");
             form.Size = new Size(1280, 820);
             Application.DoEvents();
             tabs.SelectedTab = tabs.TabPages[1];
@@ -3817,6 +3816,46 @@ internal static class Program
                         : layoutStatus.ForeColor == Color.DarkOrange && !((dynamic)highlightButton).Checked,
                 $"Calculate should size the fan and highlight the critical path, or explain why it cannot. Status={layoutStatus.Text}");
 
+            // Analysis summary and report preview (v0.96 stage 4).
+            ClickButton(Find<Button>(form, "TopTabAnalysis"));
+            Application.DoEvents();
+            var topLossGrid = Find<DataGridView>(form, "AnalysisTopLossGrid");
+            var expectedTop = (System.Collections.IList)UiMember.Method("HighestPressureDrops", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(form, new object[] { 10 })!;
+            Require(topLossGrid.Rows.Count == expectedTop.Count && topLossGrid.Rows.Count <= 10
+                    && Find<Label>(form, "AnalysisAirflowValue").Text.Length > 0
+                    && Find<Label>(form, "AnalysisPressureValue").Text.Length > 0
+                    && Find<Label>(form, "AnalysisRouteValue").Text.Length > 0
+                    && ScreenBounds(Find<Control>(form, "AnalysisSummary")).Bottom <= ScreenBounds(grid).Top,
+                "The Analysis tab should show airflow, critical-path pressure drop and route items, then the top ten pressure drops, above the full table.");
+            var lossValues = expectedTop.Cast<object>()
+                .Select(entry => (double)entry.GetType().GetProperty("LossPa")!.GetValue(entry)!).ToArray();
+            Require(lossValues.Zip(lossValues.Skip(1)).All(pair => pair.First >= pair.Second),
+                "The top pressure drops should be listed from highest to lowest.");
+            ClickButton(Find<Button>(form, "TopTabReports"));
+            Application.DoEvents();
+            var reportPreview = Find<Control>(form, "ReportsPage");
+            var previewPages = (int)reportPreview.GetType().GetProperty("PageCount", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(reportPreview)!;
+            Require(previewPages >= 1 && Find<Control>(form, "ReportPreviewPage1") is PictureBox { Image: not null },
+                $"The Reports tab should preview the report page by page. Status: {Find<Label>(form, "ReportPreviewStatus").Text}");
+            var printedReport = Path.Combine(testDirectory, "printed-report.pdf");
+            AutomationOptions.ReportPdfPath = printedReport;
+            try
+            {
+                ClickButton(Find<Button>(form, "RibbonPrintReportButton"));
+                Application.DoEvents();
+            }
+            finally
+            {
+                AutomationOptions.ReportPdfPath = null;
+            }
+            Require(File.Exists(printedReport) && new FileInfo(printedReport).Length > 10_000
+                    && File.ReadAllBytes(printedReport).Take(5).SequenceEqual("%PDF-"u8.ToArray()),
+                "Print Report should write the report PDF.");
+            ClickButton(Find<Button>(form, "TopTabProject"));
+            Application.DoEvents();
+
             var userBeforeNew = ribbonModel.UserName;
             ClickButton(Find<Button>(form, "RibbonNewProjectButton"));
             Application.DoEvents();
@@ -3845,7 +3884,8 @@ internal static class Program
             Console.WriteLine("PASS  Main tabs and Project ribbon commands");
             Console.WriteLine("PASS  Selection Inspector: description, calculations, notes");
             Console.WriteLine("PASS  Project Explorer, Errors and Validation lists");
-            Console.WriteLine("19/19 UI verification checks passed.");
+            Console.WriteLine("PASS  Analysis summary, report preview and Print Report");
+            Console.WriteLine("20/20 UI verification checks passed.");
             return 0;
         }
         catch (Exception ex)

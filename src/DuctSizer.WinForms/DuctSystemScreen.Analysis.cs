@@ -221,7 +221,7 @@ internal sealed partial class DuctSystemScreen
         }
         _analysisAirflowValue.Text = fan is null
             ? fans.Length > 1 ? "More than one fan" : "No fan"
-            : requiredAirflow > 0 ? FormatSystemAirflow(requiredAirflow) : FormatSystemAirflow(fan.AirflowM3PerS);
+            : requiredAirflow > 0 ? PdfAirflow(requiredAirflow) : PdfAirflow(fan.AirflowM3PerS);
         _analysisPressureValue.Text = !_criticalPathCalculated
             ? "Not calculated"
             : _criticalPathIssues.Count > 0 ? "Not available" : FormatSystemTotal(_criticalPathPressureLossPa);
