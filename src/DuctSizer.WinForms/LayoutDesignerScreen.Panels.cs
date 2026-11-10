@@ -68,7 +68,18 @@ internal sealed partial class LayoutDesignerScreen
             ("Severity", "Type", 80), ("Source", "Found by", 110), ("Item", "Item", 90), ("Message", "Description", 600)
         });
         _layoutErrorsGrid.Columns["Message"]!.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-        _layoutErrorsGrid.SelectionChanged += (_, _) => SelectFromListGrid(_layoutErrorsGrid);
+        // Navigate only on a user's click or arrow key: a grid selects its first row by itself when filled or shown.
+        _layoutErrorsGrid.CellClick += (_, args) =>
+        {
+            if (args.RowIndex >= 0)
+                SelectFromListGrid(_layoutErrorsGrid);
+        };
+        _layoutErrorsGrid.KeyUp += (_, args) =>
+        {
+            if (args.KeyCode is Keys.Up or Keys.Down or Keys.PageUp or Keys.PageDown or Keys.Home or Keys.End)
+                SelectFromListGrid(_layoutErrorsGrid);
+        };
+        _layoutErrorsGrid.VisibleChanged += (_, _) => _layoutErrorsGrid.ClearSelection();
         ConfigureListGrid(_layoutValidationGrid, "LayoutValidationGrid", new[]
         {
             ("Item", "Item", 80), ("Kind", "Kind", 110), ("Size", "Size", 110), ("Airflow", "Airflow", 80),
@@ -76,7 +87,18 @@ internal sealed partial class LayoutDesignerScreen
             ("Loss", "Loss", 90), ("Status", "Status", 200)
         });
         _layoutValidationGrid.Columns["Status"]!.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-        _layoutValidationGrid.SelectionChanged += (_, _) => SelectFromListGrid(_layoutValidationGrid);
+        // Navigate only on a user's click or arrow key: a grid selects its first row by itself when filled or shown.
+        _layoutValidationGrid.CellClick += (_, args) =>
+        {
+            if (args.RowIndex >= 0)
+                SelectFromListGrid(_layoutValidationGrid);
+        };
+        _layoutValidationGrid.KeyUp += (_, args) =>
+        {
+            if (args.KeyCode is Keys.Up or Keys.Down or Keys.PageUp or Keys.PageDown or Keys.Home or Keys.End)
+                SelectFromListGrid(_layoutValidationGrid);
+        };
+        _layoutValidationGrid.VisibleChanged += (_, _) => _layoutValidationGrid.ClearSelection();
 
         panel.Controls.Add(_bottomContent);
         panel.Controls.Add(strip);
@@ -97,13 +119,16 @@ internal sealed partial class LayoutDesignerScreen
         _activeBottomTab = key;
         foreach (var (tabKey, tab) in _bottomTabs)
             tab.Selected = tabKey == key;
-        _bottomContent.Controls.Clear();
-        _bottomContent.Controls.Add(key switch
-        {
-            "Errors" => _layoutErrorsGrid,
-            "Validation" => _layoutValidationGrid,
-            _ => _layoutSystemSummaryGrid
-        });
+        if (_bottomContent.Controls.Count == 0)
+            _bottomContent.Controls.AddRange(new Control[] { _layoutSystemSummaryGrid, _layoutErrorsGrid, _layoutValidationGrid });
+        _layoutSystemSummaryGrid.Visible = key == "Overview";
+        _layoutErrorsGrid.Visible = key == "Errors";
+        _layoutValidationGrid.Visible = key == "Validation";
+        // Lists are rebuilt when shown as well as after each edit, so they can never be out of date when read.
+        if (key == "Errors")
+            RefreshErrorsList();
+        else if (key == "Validation")
+            RefreshValidationList();
     }
 
     private void ConfigureListGrid(DataGridView grid, string name, IEnumerable<(string Name, string Header, int Width)> columns)

@@ -470,15 +470,20 @@ internal static class Program
                 "Escape cancellation should clear the selected toolbox component and canvas placement mode.");
             Require(layoutSummaryGrid.Columns.Cast<DataGridViewColumn>().Select(x => x.Name).SequenceEqual(
                         new[] { "Id", "StaticDrop", "Airflow", "Upstream", "Downstream", "AbsoluteX", "AbsoluteY", "AbsoluteZ" })
-                    && !layoutSummarySplitter.Panel1Collapsed,
-                "The Layout Designer should include the requested resizable Duct System quick view.");
-            layoutSummaryCollapse.PerformClick();
+                    && layoutSummarySplitter.Orientation == Orientation.Horizontal
+                    && !layoutSummarySplitter.Panel2Collapsed
+                    && IsDescendantOf(layoutSummaryGrid, layoutSummarySplitter.Panel2)
+                    && IsDescendantOf(layoutCanvasHost, layoutSummarySplitter.Panel1),
+                "The System Overview (former quick view) should sit in the bottom panel under the drawing.");
+            Require(new[] { "LayoutOverviewTab", "LayoutErrorsTab", "LayoutValidationTab" }
+                        .Select(name => Find<Button>(form, name).Text.Split(' ')[0])
+                        .SequenceEqual(new[] { "System", "Errors", "Validation" })
+                    && form.Controls.Find("LayoutSchedulesTab", true).Length == 0,
+                "The bottom panel should have System Overview, Errors and Validation tabs (no Schedules).");
+            ClickButton(layoutSummaryCollapse);
             Application.DoEvents();
-            Require(layoutSummarySplitter.Panel1Collapsed && layoutSummaryReopen.Visible
-                    && layoutSummaryReopen.Text == "SYSTEM QUICKVIEW"
-                    && layoutSummaryReopen.Width <= 36
-                    && layoutSummaryReopen.GetType().Name == "VerticalTextButton",
-                "The Duct System quick view should collapse to a narrow, vertically lettered SYSTEM QUICKVIEW tab.");
+            Require(layoutSummarySplitter.Panel2Collapsed && layoutSummaryReopen.Visible,
+                "The bottom panel should hide and leave a reopen bar.");
             var quickViewCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_QUICKVIEW_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(quickViewCapturePath))
             {
@@ -486,10 +491,10 @@ internal static class Program
                 form.DrawToBitmap(quickViewPreview, new Rectangle(Point.Empty, form.Size));
                 quickViewPreview.Save(quickViewCapturePath);
             }
-            layoutSummaryReopen.PerformClick();
+            ClickButton(layoutSummaryReopen);
             Application.DoEvents();
-            Require(!layoutSummarySplitter.Panel1Collapsed,
-                "The collapsed Duct System quick view should reopen in place.");
+            Require(!layoutSummarySplitter.Panel2Collapsed && !layoutSummaryReopen.Visible,
+                "The hidden bottom panel should reopen in place.");
             ClickButton(calculatorNavigation);
             Application.DoEvents();
             Require(inputCard.Region is not null && calculateButton.Region is not null,
@@ -1266,6 +1271,56 @@ internal static class Program
             Application.DoEvents();
             Require(inspector.Width >= 300 && !Find<Button>(form, "InspectorReopenButton").Visible,
                 "The collapsed Selection Inspector should reopen.");
+
+            // Project Explorer and the Errors / Validation lists (v0.96 stage 3).
+            var viewOffsetField = layoutCanvas.GetType().GetField("_viewOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var savedViewOffset = viewOffsetField.GetValue(layoutCanvas);
+            var explorerTree = Find<TreeView>(form, "ProjectExplorerTree");
+            var explorerGroups = explorerTree.Nodes.Cast<TreeNode>().ToArray();
+            Require(explorerGroups.Select(node => node.Text.Split(" (")[0]).SequenceEqual(new[]
+                    { "Equipment", "Sources", "Sinks", "Terminals", "Dampers", "Fittings", "Duct Segments", "Calculation Points" })
+                    && explorerGroups.All(node => !node.IsExpanded)
+                    && ScreenBounds(Find<Control>(form, "ProjectExplorer")).Right <= ScreenBounds(layoutCanvasHost).Left + 2,
+                "The Project Explorer should list the system's items by kind in collapsed groups, left of the drawing.");
+            var equipmentGroup = explorerGroups.Single(node => node.Name == "ExplorerGroupEquipment");
+            var fanEntry = equipmentGroup.Nodes.Cast<TreeNode>().Single(node => node.Text.StartsWith(fanNode.Id + " ", StringComparison.Ordinal));
+            layoutCanvas.GetType().GetMethod("SelectNode", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(layoutCanvas, new object?[] { null });
+            Application.DoEvents();
+            explorerTree.SelectedNode = fanEntry;
+            Application.DoEvents();
+            Require((string?)layoutCanvas.GetType().GetField("_selectedNodeId", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .GetValue(layoutCanvas) == fanNode.Id
+                    && Find<Label>(form, "InspectorTitle").Text.StartsWith(fanNode.Id, StringComparison.Ordinal),
+                "Choosing an explorer entry should select it on the drawing and show it in the inspector.");
+            var explorerSearch = Find<TextBox>(form, "ProjectExplorerSearch");
+            explorerSearch.Text = fanNode.Id;
+            Application.DoEvents();
+            Require(explorerTree.Nodes.Count >= 1 && explorerTree.Nodes.Cast<TreeNode>().All(node => node.IsExpanded)
+                    && explorerTree.Nodes.Cast<TreeNode>().SelectMany(node => node.Nodes.Cast<TreeNode>())
+                        .All(node => node.Text.Contains(fanNode.Id, StringComparison.OrdinalIgnoreCase)),
+                "Searching should filter the explorer to matching items and open their groups.");
+            explorerSearch.Text = string.Empty;
+            viewOffsetField.SetValue(layoutCanvas, savedViewOffset);
+            layoutCanvas.Invalidate();
+            Application.DoEvents();
+            var validationGrid = Find<DataGridView>(form, "LayoutValidationGrid");
+            var errorsGrid = Find<DataGridView>(form, "LayoutErrorsGrid");
+            var validationModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            ClickButton(Find<Button>(form, "LayoutValidationTab"));
+            Application.DoEvents();
+            Require(validationGrid.Visible && validationGrid.Rows.Count == validationModel.Ducts.Count + validationModel.Fittings.Count
+                    && validationGrid.Columns.Cast<DataGridViewColumn>().Select(column => column.Name)
+                        .SequenceEqual(new[] { "Item", "Kind", "Size", "Airflow", "Velocity", "Rate", "Coefficient", "Loss", "Status" }),
+                "Validation should list every duct (velocity, static-pressure rate, loss) and fitting (coefficient, loss).");
+            UiMember.Method("RefreshLayoutBottomPanel", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            var issues = (System.Collections.IList)UiMember.Method("BuildProjectIssues", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(form, null)!;
+            Require(errorsGrid.Rows.Count == issues.Count
+                    && Find<Button>(form, "LayoutErrorsTab").Text == $"Errors ({issues.Count})",
+                "The Errors tab should list every current problem and show the count.");
+            ClickButton(Find<Button>(form, "LayoutOverviewTab"));
+            Application.DoEvents();
             Require(layoutRearrange.Text == "Move" && Find<Button>(form, "RibbonSelectButton").Text == "Select"
                     && layoutRearrange.Parent == Find<Button>(form, "RibbonSelectButton").Parent,
                 "The Project ribbon should offer Select and a visual-only Move mode side by side.");
@@ -1313,7 +1368,7 @@ internal static class Program
             var fanCanvasPoint = (Point)gridLocationMethod.Invoke(layoutCanvas, new object[] { fanNode.GridX, fanNode.GridY })!;
             Require(Math.Abs(fanCanvasPoint.X - layoutCanvas.ClientSize.Width / 2) <= 2
                     && Math.Abs(fanCanvasPoint.Y - layoutCanvas.ClientSize.Height / 2) <= 2,
-                "Opening Layout Designer should immediately center the viewport on the first system component.");
+                $"Opening Layout Designer should immediately center the viewport on the first system component. Fan at {fanCanvasPoint}, canvas {layoutCanvas.ClientSize}.");
             layoutViewMode.SelectedIndex = 1;
             Application.DoEvents();
             var viewModeProperty = layoutCanvas.GetType().GetProperty("ViewMode",
@@ -3789,7 +3844,8 @@ internal static class Program
             Console.WriteLine("PASS  Layout rewiring and delete-all workflows");
             Console.WriteLine("PASS  Main tabs and Project ribbon commands");
             Console.WriteLine("PASS  Selection Inspector: description, calculations, notes");
-            Console.WriteLine("18/18 UI verification checks passed.");
+            Console.WriteLine("PASS  Project Explorer, Errors and Validation lists");
+            Console.WriteLine("19/19 UI verification checks passed.");
             return 0;
         }
         catch (Exception ex)

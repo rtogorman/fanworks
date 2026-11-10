@@ -354,7 +354,7 @@ Icons drawn in-house (no new packages).
 |---|---|---|
 | R1 | Window shell, top tabs, Project ribbon, canvas toolbar; screens re-hosted (Analysis = Duct System screen, Quick Calc = calculators) | **Done** — laptop build 2026-11-09: 63/63, UI 17/17, 0 warnings, `outputs\FanWorks-win-x64-v0.96.0\FanWorks.exe`; GitHub CI green |
 | R2 | Selection Inspector (Description / Calculations / Notes), notes in file (schema 15) | **Done** — laptop build: 65/65, UI 18/18, 0 warnings; CI green |
-| R3 | Project Explorer, bottom panel (System Overview / Errors / Validation) | In progress |
+| R3 | Project Explorer, bottom panel (System Overview / Errors / Validation) | Done in code (65/65, UI 19/19 Wine); Windows build pending |
 | R4 | Analysis summary + top 10, Reports preview, Quick Calc polish; interface tests rewritten; v0.96.0 | Not started |
 
 ### R1 record
@@ -400,6 +400,23 @@ Icons drawn in-house (no new packages).
   - Quick-view rows for records not on the drawing show via `ShowRecord`; `EditSystemRecord` opens them in their
     calculator.
 - Decision to confirm with owner: inputs are shown read-only with an Edit Inputs button rather than edited inline.
+
+### R3 record
+
+- Project page columns: `ProjectExplorer` (236 px, collapsible) | drawing over the bottom panel | Selection Inspector.
+  `LayoutWorkspaceSplitter` is now horizontal: Panel1 = drawing, Panel2 = bottom panel (230 px, "Hide" button,
+  reopen bar `LayoutSummaryReopenButton` under the drawing).
+- `LayoutDesignerScreen.Panels.cs` (new partial): bottom panel tabs System Overview (the former quick-view grid,
+  unchanged), Errors (`BuildProjectIssues`: critical-path analysis issues, layout model check, layout geometry
+  check, undefined components, duct/fitting calculation failures; de-duplicated; count in the tab), Validation
+  (every duct: size, airflow, velocity, static-pressure rate via the schedule's formatter, loss; every fitting:
+  category, code, airflow, C, loss). Lists refresh after each edit and when their tab is opened; they navigate
+  only on a user's click/arrow key (a grid auto-selects rows when filled, which used to move the drawing).
+- `ProjectExplorer.cs` (new): TreeView groups Equipment (fan, coil, filter, custom, VAV), Sources, Sinks,
+  Terminals (GRDs, terminal fittings), Dampers, Fittings (+ records not on the drawing), Duct Segments (every
+  connection, sized or not, + off-drawing ducts), Calculation Points. Collapsed by default; search filters and opens
+  matching groups. Selecting selects on the drawing, centres it, shows it in the inspector.
+  Terminals and Calculation Points are extra groups beyond the owner's list (GRDs and points had no home).
 
 ### Resume notes (update as work proceeds)
 
