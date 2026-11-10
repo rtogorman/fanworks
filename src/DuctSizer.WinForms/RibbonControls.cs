@@ -27,7 +27,7 @@ internal enum RibbonIcon
     Project, Analysis, Reports, QuickCalc,
     NewProject, Open, Save, SaveAs, ProjectSettings, SizingCriteria, RoundSizes,
     Select, Move, AutoSize, Calculate, CriticalPath, PrintReport, DuctCalculator, FittingCalculator,
-    Filter, Fan, Undo, Redo, Delete, ZoomIn, ZoomOut, ZoomFit, PdfImport, Grid, Origin, SourceSink
+    Filter, Fan, Warning, Check, Undo, Redo, Delete, ZoomIn, ZoomOut, ZoomFit, PdfImport, Grid, Origin, SourceSink
 }
 
 /// <summary>
@@ -227,6 +227,20 @@ internal static class RibbonIcons
                     graphics.DrawPath(pen, bladePath);
                     graphics.Restore(bladeState);
                 }
+                break;
+            case RibbonIcon.Warning:
+                using (var triangle = new GraphicsPath())
+                {
+                    triangle.AddPolygon(new[] { new PointF(12, 3), new PointF(22, 20.5f), new PointF(2, 20.5f) });
+                    graphics.FillPath(accentFill, triangle);
+                    graphics.DrawPath(pen, triangle);
+                }
+                graphics.DrawLine(pen, 12, 9, 12, 14);
+                graphics.FillEllipse(solid, 11, 16.3f, 2, 2);
+                break;
+            case RibbonIcon.Check:
+                graphics.DrawEllipse(pen, 2.5f, 2.5f, 19, 19);
+                graphics.DrawLines(accentPen, new[] { new PointF(7, 12.5f), new PointF(10.5f, 16), new PointF(17, 8.5f) });
                 break;
             case RibbonIcon.Undo:
             case RibbonIcon.Redo:

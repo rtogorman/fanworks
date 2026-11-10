@@ -18,6 +18,7 @@ internal sealed partial class LayoutDesignerScreen
 
     private LayoutDesignerCanvas? _layoutCanvas;
     private SelectionInspector? _inspector;
+    private ProjectExplorer? _explorer;
 
     /// <summary>The Selection Inspector on the Project tab (null until the page is built).</summary>
     internal SelectionInspector? Inspector => _inspector;
@@ -59,8 +60,9 @@ internal sealed partial class LayoutDesignerScreen
     }
     private readonly DataGridView _layoutSystemSummaryGrid = new();
     private SplitContainer? _layoutWorkspaceSplitter;
-    private readonly VerticalTextButton _layoutSummaryReopenButton = new();
-    private int _layoutSummaryWidth = 330;
+    private readonly Button _layoutSummaryReopenButton = new();
+    /// <summary>Height of the bottom panel (System Overview / Errors / Validation).</summary>
+    private int _layoutSummaryWidth = 230;
     private bool _layoutSummaryInitialized;
     private bool _updatingLayoutSummarySplitter;
     private bool _syncingLayoutSelection;
@@ -86,14 +88,16 @@ internal sealed partial class LayoutDesignerScreen
         // The Project tab's centre. Commands that used to sit in a header and button row now live in the main
         // ribbon (Move, Auto Size, Calculate, Highlight Critical Path, component tools); this page keeps a compact
         // canvas toolbar for view controls. The canvas, its drawing, drag-and-drop and zoom are unchanged.
+        // Columns: Project Explorer | drawing over the bottom panel | Selection Inspector.
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
+            ColumnCount = 3,
             RowCount = 3,
             Padding = new Padding(8, 6, 8, 4),
             BackColor = _host.BackColor
         };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ProjectExplorer.ExpandedWidth));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, SelectionInspector.ExpandedWidth));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
@@ -191,34 +195,31 @@ internal sealed partial class LayoutDesignerScreen
         };
         leftHost.Controls.Add(canvasHost, 0, 0);
 
+        // Centre of the Project page: the drawing above the bottom panel (System Overview / Errors / Validation).
         _layoutWorkspaceSplitter = new SplitContainer
         {
             Name = "LayoutWorkspaceSplitter",
             Dock = DockStyle.Fill,
-            Orientation = Orientation.Vertical,
-            SplitterDistance = 330,
+            Orientation = Orientation.Horizontal,
             SplitterWidth = 6,
-            FixedPanel = FixedPanel.Panel1,
+            FixedPanel = FixedPanel.Panel2,
             BackColor = Color.FromArgb(215, 224, 231)
         };
         _layoutWorkspaceSplitter.SizeChanged += (_, _) =>
         {
-            if (_layoutWorkspaceSplitter.Width < 650)
+            if (_layoutWorkspaceSplitter.Height < 320)
                 return;
-            _layoutWorkspaceSplitter.Panel1MinSize = 180;
             _updatingLayoutSummarySplitter = true;
             try
             {
-                if (!_layoutWorkspaceSplitter.Panel1Collapsed && !_layoutSummaryInitialized)
+                _layoutWorkspaceSplitter.Panel1MinSize = 160;
+                _layoutWorkspaceSplitter.Panel2MinSize = 110;
+                if (!_layoutWorkspaceSplitter.Panel2Collapsed && !_layoutSummaryInitialized)
                 {
-                    _layoutWorkspaceSplitter.SplitterDistance = Math.Clamp(_layoutSummaryWidth, 180,
-                        Math.Max(180, _layoutWorkspaceSplitter.Width - 360 - _layoutWorkspaceSplitter.SplitterWidth));
+                    _layoutWorkspaceSplitter.SplitterDistance = Math.Max(160,
+                        _layoutWorkspaceSplitter.Height - _layoutSummaryWidth - _layoutWorkspaceSplitter.SplitterWidth);
                     _layoutSummaryInitialized = true;
                 }
-                else if (!_layoutWorkspaceSplitter.Panel1Collapsed)
-                    _layoutWorkspaceSplitter.SplitterDistance = Math.Clamp(_layoutSummaryWidth,
-                        180, Math.Max(180, _layoutWorkspaceSplitter.Width - 360 - _layoutWorkspaceSplitter.SplitterWidth));
-                _layoutWorkspaceSplitter.Panel2MinSize = 360;
             }
             finally
             {
@@ -227,34 +228,32 @@ internal sealed partial class LayoutDesignerScreen
         };
         _layoutWorkspaceSplitter.SplitterMoved += (_, _) =>
         {
-            if (_layoutSummaryInitialized && !_updatingLayoutSummarySplitter && !_layoutWorkspaceSplitter.Panel1Collapsed
-                && _layoutWorkspaceSplitter.Width >= 650)
-                _layoutSummaryWidth = _layoutWorkspaceSplitter.SplitterDistance;
+            if (_layoutSummaryInitialized && !_updatingLayoutSummarySplitter && !_layoutWorkspaceSplitter.Panel2Collapsed)
+                _layoutSummaryWidth = Math.Max(110, _layoutWorkspaceSplitter.Height - _layoutWorkspaceSplitter.SplitterDistance
+                                                    - _layoutWorkspaceSplitter.SplitterWidth);
         };
-        _layoutWorkspaceSplitter.Panel1.Controls.Add(BuildLayoutSystemSummaryPanel());
-        var canvasArea = new TableLayoutPanel
+        var canvasArea = new Panel
         {
+            Name = "LayoutCanvasArea",
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
             BackColor = _host.BackColor
         };
-        canvasArea.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));
-        canvasArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         _layoutSummaryReopenButton.Name = "LayoutSummaryReopenButton";
-        _layoutSummaryReopenButton.Text = "SYSTEM QUICKVIEW";
-        _layoutSummaryReopenButton.Dock = DockStyle.Fill;
+        _layoutSummaryReopenButton.Text = "Show System Overview, Errors and Validation";
+        _layoutSummaryReopenButton.Dock = DockStyle.Bottom;
+        _layoutSummaryReopenButton.Height = 26;
         _layoutSummaryReopenButton.Visible = false;
         _layoutSummaryReopenButton.FlatStyle = FlatStyle.Flat;
         _layoutSummaryReopenButton.ForeColor = Color.FromArgb(28, 69, 108);
         _layoutSummaryReopenButton.BackColor = Color.FromArgb(235, 242, 247);
         _layoutSummaryReopenButton.Font = new Font("Segoe UI Semibold", 8.2F);
         _layoutSummaryReopenButton.Click += (_, _) => SetLayoutSummaryCollapsed(false);
-        canvasArea.Controls.Add(_layoutSummaryReopenButton, 0, 0);
-        canvasArea.Controls.Add(leftHost, 1, 0);
-        _layoutWorkspaceSplitter.Panel2.Controls.Add(canvasArea);
+        canvasArea.Controls.Add(leftHost);
+        canvasArea.Controls.Add(_layoutSummaryReopenButton);
+        _layoutWorkspaceSplitter.Panel1.Controls.Add(canvasArea);
+        _layoutWorkspaceSplitter.Panel2.Controls.Add(BuildLayoutBottomPanel());
 
         _layoutStatusLabel.Name = "LayoutDesignerStatus";
         _layoutStatusLabel.Dock = DockStyle.Fill;
@@ -264,13 +263,18 @@ internal sealed partial class LayoutDesignerScreen
         _layoutStatusLabel.AutoEllipsis = true;
 
         root.Controls.Add(toolbar, 0, 0);
-        root.SetColumnSpan(toolbar, 2);
-        root.Controls.Add(_layoutWorkspaceSplitter, 0, 1);
-        root.Controls.Add(_layoutStatusLabel, 0, 2);
+        root.SetColumnSpan(toolbar, 3);
+        _explorer = new ProjectExplorer(_host);
+        _explorer.CollapsedChanged += collapsed =>
+            root.ColumnStyles[0].Width = collapsed ? ProjectExplorer.CollapsedWidth : ProjectExplorer.ExpandedWidth;
+        root.Controls.Add(_explorer, 0, 1);
+        root.SetRowSpan(_explorer, 2);
+        root.Controls.Add(_layoutWorkspaceSplitter, 1, 1);
+        root.Controls.Add(_layoutStatusLabel, 1, 2);
         _inspector = new SelectionInspector(_host);
         _inspector.CollapsedChanged += collapsed =>
-            root.ColumnStyles[1].Width = collapsed ? SelectionInspector.CollapsedWidth : SelectionInspector.ExpandedWidth;
-        root.Controls.Add(_inspector, 1, 1);
+            root.ColumnStyles[2].Width = collapsed ? SelectionInspector.CollapsedWidth : SelectionInspector.ExpandedWidth;
+        root.Controls.Add(_inspector, 2, 1);
         root.SetRowSpan(_inspector, 2);
         return root;
     }
@@ -429,50 +433,9 @@ internal sealed partial class LayoutDesignerScreen
         }
     }
 
+    /// <summary>The System Overview grid (formerly the Duct System quick view), shown in the bottom panel.</summary>
     private Control BuildLayoutSystemSummaryPanel()
     {
-        var panel = new RoundedPanel
-        {
-            Name = "LayoutSystemSummaryPanel",
-            Dock = DockStyle.Fill,
-            BackColor = Color.White,
-            BorderColor = UiPalette.CardBorder,
-            CornerRadius = 10,
-            Padding = new Padding(8)
-        };
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            Margin = Padding.Empty,
-            BackColor = Color.White
-        };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var header = new CardHeaderPanel { Dock = DockStyle.Fill, BackColor = Color.White };
-        header.Controls.Add(new Label
-        {
-            Text = "DUCT SYSTEM QUICK VIEW",
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Segoe UI Semibold", 9.2F),
-            ForeColor = Color.FromArgb(34, 62, 88)
-        });
-        var collapse = new Button
-        {
-            Name = "LayoutSummaryCollapseButton",
-            Text = "‹",
-            Dock = DockStyle.Right,
-            Width = 34,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White,
-            ForeColor = Color.FromArgb(28, 69, 108)
-        };
-        collapse.Click += (_, _) => SetLayoutSummaryCollapsed(true);
-        header.Controls.Add(collapse);
-        layout.Controls.Add(header, 0, 0);
-
         _layoutSystemSummaryGrid.Name = "LayoutSystemSummaryGrid";
         _layoutSystemSummaryGrid.Dock = DockStyle.Fill;
         _layoutSystemSummaryGrid.ReadOnly = true;
@@ -503,9 +466,7 @@ internal sealed partial class LayoutDesignerScreen
         AddColumn("AbsoluteX", "Abs X", 56);
         AddColumn("AbsoluteY", "Abs Y", 56);
         AddColumn("AbsoluteZ", "Abs Z", 56);
-        layout.Controls.Add(_layoutSystemSummaryGrid, 0, 1);
-        panel.Controls.Add(layout);
-        return panel;
+        return _layoutSystemSummaryGrid;
 
         void AddColumn(string name, string headerText, int width)
         {
@@ -523,28 +484,24 @@ internal sealed partial class LayoutDesignerScreen
     {
         if (_layoutWorkspaceSplitter is null)
             return;
-        var restoreWidth = _layoutSummaryWidth;
-        if (collapsed && !_layoutWorkspaceSplitter.Panel1Collapsed)
-        {
-            _layoutSummaryWidth = Math.Max(180, _layoutWorkspaceSplitter.SplitterDistance);
-            restoreWidth = _layoutSummaryWidth;
-        }
+        if (collapsed && !_layoutWorkspaceSplitter.Panel2Collapsed)
+            _layoutSummaryWidth = Math.Max(110, _layoutWorkspaceSplitter.Height - _layoutWorkspaceSplitter.SplitterDistance
+                                                - _layoutWorkspaceSplitter.SplitterWidth);
         _updatingLayoutSummarySplitter = true;
         try
         {
-            _layoutWorkspaceSplitter.Panel1Collapsed = collapsed;
-            if (!collapsed && _layoutWorkspaceSplitter.Width >= 650)
-                _layoutWorkspaceSplitter.SplitterDistance = Math.Clamp(restoreWidth, 180,
-                    Math.Max(180, _layoutWorkspaceSplitter.Width - 360 - _layoutWorkspaceSplitter.SplitterWidth));
+            _layoutWorkspaceSplitter.Panel2Collapsed = collapsed;
+            if (!collapsed && _layoutWorkspaceSplitter.Height >= 320)
+                _layoutWorkspaceSplitter.SplitterDistance = Math.Max(160,
+                    _layoutWorkspaceSplitter.Height - _layoutSummaryWidth - _layoutWorkspaceSplitter.SplitterWidth);
         }
         finally
         {
             _updatingLayoutSummarySplitter = false;
         }
         _layoutSummaryReopenButton.Visible = collapsed;
-        if (_layoutSummaryReopenButton.Parent is TableLayoutPanel canvasArea)
-            canvasArea.ColumnStyles[0].Width = collapsed ? 34 : 0;
     }
+
 
     internal void RefreshLayoutSystemSummary()
     {
@@ -572,6 +529,7 @@ internal sealed partial class LayoutDesignerScreen
             }
         }
         SyncLayoutSummarySelection();
+        RefreshLayoutBottomPanel();
         _inspector?.RefreshContent();
     }
 

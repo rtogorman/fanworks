@@ -1617,7 +1617,7 @@ internal sealed partial class DuctSystemScreen
         ? $"{UnitConversions.CelsiusToFahrenheit(celsius):0.#}"
         : $"{celsius:0.#}";
 
-    private string FormatSystemPressureRate(DuctCalculationResult result)
+    internal string FormatSystemPressureRate(DuctCalculationResult result)
     {
         if (_host._currentUnits == UnitSystem.Imperial)
             return result.Friction.Regime == FlowRegime.Transitional
