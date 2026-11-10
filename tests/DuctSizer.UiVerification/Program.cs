@@ -56,39 +56,41 @@ internal static class Program
             var rectangularSizingValue = Find<TextBox>(form, "RectangularSizingDimensionText");
             var rectangularSizingUnit = Find<Label>(form, "RectangularSizingDimensionUnitLabel");
             var tabs = Find<TabControl>(form, "MainTabs");
-            var calculatorNavigation = Find<Button>(form, "NavCalculatorButton");
-            var fittingNavigation = Find<Button>(form, "NavFittingButton");
-            var systemNavigation = Find<Button>(form, "NavSystemButton");
-            var layoutNavigation = Find<Button>(form, "NavLayoutButton");
+            // Navigation (v0.96): top tabs Project / Analysis / Reports / Quick Calc; the Quick Calc ribbon chooses the
+            // duct or fitting calculator. ClickButton invokes a button even when its ribbon page is not showing.
+            var calculatorNavigation = Find<Button>(form, "RibbonDuctCalculatorButton");
+            var fittingNavigation = Find<Button>(form, "RibbonFittingCalculatorButton");
+            var systemNavigation = Find<Button>(form, "TopTabAnalysis");
+            var layoutNavigation = Find<Button>(form, "TopTabProject");
             var layoutCanvasHost = Find<Panel>(form, "LayoutCanvasHost");
-            var saveSystem = Find<Button>(form, "SaveSystemButton");
-            var settingsButton = Find<Button>(form, "SettingsButton");
-            var layoutToolList = Find<FlowLayoutPanel>(form, "LayoutToolList");
-            var layoutToolPalette = Find<Control>(form, "LayoutToolPalette");
+            var saveSystem = Find<Button>(form, "RibbonSaveButton");
+            var settingsButton = Find<Button>(form, "RibbonProjectSettingsButton");
+            var ribbon = Find<Control>(form, "MainRibbon");
+            var ribbonComponentTools = new[] { "RibbonSpacesGroup", "RibbonEquipmentGroup", "RibbonFittingsGroup",
+                    "RibbonTerminalsGroup", "RibbonPointsGroup" }
+                .SelectMany(name => Descendants<Control>(Find<Control>(form, name))
+                    .Where(control => control.GetType().Name == "LayoutToolCard"))
+                .ToArray();
             var layoutToolTips = PrivateField<ToolTip>(form, "_layoutToolTips");
             var layoutSummaryGrid = Find<DataGridView>(form, "LayoutSystemSummaryGrid");
             var layoutSummarySplitter = Find<SplitContainer>(form, "LayoutWorkspaceSplitter");
             var layoutSummaryCollapse = Find<Button>(form, "LayoutSummaryCollapseButton");
             var layoutSummaryReopen = Find<Button>(form, "LayoutSummaryReopenButton");
-            var layoutToolboxSplitter = Find<SplitContainer>(form, "LayoutToolboxSplitter");
-            var layoutToolboxCollapse = Find<Button>(form, "LayoutToolboxCollapseButton");
-            var layoutToolboxReopen = Find<Button>(form, "LayoutToolboxReopenButton");
             var layoutCanvas = Find<Control>(form, "LayoutDesignerCanvas");
             var zoomValue = Find<Label>(form, "LayoutZoomValue");
-            var layoutScaleTitle = Find<Label>(form, "LayoutScaleTitleLabel");
-            var layoutScale = Find<TextBox>(form, "LayoutScaleInput");
+            var layoutScale = Find<ComboBox>(form, "LayoutScaleSelector");
             var layoutPdfBackground = Find<Button>(form, "LayoutPdfBackgroundButton");
             var layoutSourceSinkEditor = Find<Button>(form, "LayoutSourceSinkEditorButton");
-            var layoutSizeUndefined = Find<Button>(form, "LayoutSizeUndefinedButton");
-            var layoutRecalculateDuctwork = Find<Button>(form, "LayoutRecalculateDuctworkButton");
-            var layoutCriticalPath = Find<Button>(form, "LayoutCriticalPathButton");
+            var layoutAutoSize = Find<Button>(form, "RibbonAutoSizeButton");
+            var layoutCriticalPath = Find<Button>(form, "RibbonHighlightCriticalPathButton");
             var layoutViewMode = Find<ComboBox>(form, "LayoutViewModeSelector");
             var layoutUndo = Find<Button>(form, "LayoutUndoButton");
             var layoutRedo = Find<Button>(form, "LayoutRedoButton");
             var layoutDelete = Find<Button>(form, "LayoutDeleteButton");
-            var layoutRearrange = Find<Button>(form, "LayoutRearrangeButton");
-            var layoutLabels = Find<Button>(form, "LayoutLabelsButton");
-            var layoutDuctSizes = Find<Button>(form, "LayoutDuctSizesButton");
+            var layoutRearrange = Find<Button>(form, "RibbonMoveButton");
+            var layoutLabels = Find<CheckBox>(form, "LayoutShowLabelsCheck");
+            var layoutDuctSizes = Find<CheckBox>(form, "LayoutShowSizesCheck");
+            var layoutFlow = Find<CheckBox>(form, "LayoutShowFlowCheck");
             var layoutCenter = Find<Button>(form, "LayoutCenterButton");
             var layoutCoordinateOrigin = Find<Button>(form, "LayoutCoordinateOriginButton");
             var sourceSpaceTool = Find<Control>(form, "LayoutToolSpaceSource");
@@ -177,9 +179,21 @@ internal static class Program
                 "The calculation dropdown should use the requested concise labels.");
             Require(mode.SelectedIndex == 1,
                 "New duct calculations should default to Autosize (SP Loss).");
-            Require(settingsButton.Text.StartsWith("Settings", StringComparison.Ordinal)
-                    && form.Controls.Find("SolverSettingsButton", true).Length == 0,
-                "Calculation Method Inputs should be moved into Settings instead of using a separate ribbon button.");
+            Require(tabs.SelectedTab?.Name == "LayoutDesignerTab"
+                    && ((dynamic)Find<Button>(form, "TopTabProject")).Selected
+                    && Find<Control>(form, "RibbonProjectPage").Visible,
+                "FanWorks should open on the Project tab (Layout Designer) with the Project ribbon showing.");
+            Require(settingsButton.Text.Replace("\n", " ", StringComparison.Ordinal) == "Project Settings"
+                    && Find<Button>(form, "RibbonSizingCriteriaButton").Parent?.Parent == settingsButton.Parent?.Parent
+                    && Find<Button>(form, "RibbonRoundSizesButton").Parent?.Parent == settingsButton.Parent?.Parent
+                    && form.Controls.Find("SolverSettingsButton", true).Length == 0
+                    && form.Controls.Find("SettingsButton", true).Length == 0,
+                "Project Settings, Sizing Criteria and Round Sizes should share the ribbon's Settings group; the old Settings menu is gone.");
+            ClickButton(calculatorNavigation);
+            Application.DoEvents();
+            Require(tabs.SelectedTab?.Name == "CalculatorTab" && Find<Control>(form, "RibbonQuickCalcPage").Visible
+                    && ((dynamic)Find<Button>(form, "TopTabQuickCalc")).Selected,
+                "Quick Calc's Duct Calculator command should show the duct calculator.");
             Require(material.Items[^1]?.ToString() == "Legacy Reference"
                     && material.SelectedItem?.ToString() == "Legacy Reference",
                 "Legacy Reference should remain the selected default at the bottom of the material dropdown.");
@@ -226,18 +240,33 @@ internal static class Program
                 DefaultEquivalentDiameterMethod = EquivalentDiameterMethod.HydraulicDiameter,
                 DefaultPressureLossBasis = PressureLossBasis.ActualDuctArea
             };
+            var calculationPage = Enum.Parse(settingsType.GetNestedType("Page", BindingFlags.NonPublic)!, "CalculationSettings");
             using (var settingsDialog = (Form?)Activator.CreateInstance(
                        settingsType,
                        BindingFlags.Instance | BindingFlags.NonPublic,
                        binder: null,
-                       args: new object[] { settingsDocument, UnitSystem.Imperial },
+                       args: new object[] { settingsDocument, UnitSystem.Imperial, calculationPage },
                        culture: null)
                    ?? throw new InvalidOperationException("Could not create the project settings dialog."))
             {
+                var pages = Find<TabControl>(settingsDialog, "ProjectSettingsPages");
                 var logoPreview = Find<PictureBox>(settingsDialog, "SettingsCompanyLogoPreview");
-                Require(logoPreview.Image is not null
-                        && settingsDialog.Controls.Find("SettingsSizingIncrementText", true).Length == 0,
-                    "Project settings should contain project identity and logo fields only.");
+                var increment = Find<TextBox>(settingsDialog, "SettingsSizingIncrementText");
+                var roundingMethod = Find<ComboBox>(settingsDialog, "SettingsRoundingMethodCombo");
+                var method = Find<ComboBox>(settingsDialog, "SettingsEquivalentMethodCombo");
+                var basis = Find<ComboBox>(settingsDialog, "SettingsPressureBasisCombo");
+                Require(pages.TabPages.Cast<TabPage>().Select(page => page.Text)
+                            .SequenceEqual(new[] { "Project Information", "Units", "Calculation Settings" })
+                        && pages.SelectedTab?.Name == "CalculationSettingsPage"
+                        && logoPreview.Image is not null
+                        && Find<RadioButton>(settingsDialog, "SettingsImperialUnitsRadio").Checked
+                        && !Find<RadioButton>(settingsDialog, "SettingsMetricUnitsRadio").Checked,
+                    "Project Settings should combine project information, units and calculation settings in one form.");
+                Require(increment.Text == "0.5" && roundingMethod.SelectedItem?.ToString() == "Round Down"
+                        && method.SelectedItem?.ToString() == "Hydraulic Diameter"
+                        && basis.SelectedItem?.ToString() == "Actual Duct Area"
+                        && Descendants<Label>(settingsDialog).Any(label => label.Text == "Duct Area Calculation Method"),
+                    "Calculation Settings should own and restore the autosize increment, rounding, equivalent-diameter and duct-area methods.");
                 var settingsCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_SETTINGS_CAPTURE_PATH");
                 if (!string.IsNullOrWhiteSpace(settingsCapturePath))
                 {
@@ -249,27 +278,8 @@ internal static class Program
                     settingsDialog.Hide();
                 }
             }
-            var solverSettingsType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.SolverSettingsDialog")
-                                     ?? throw new InvalidOperationException("Could not find the solver settings dialog.");
-            using (var solverDialog = (Form?)Activator.CreateInstance(solverSettingsType,
-                       BindingFlags.Instance | BindingFlags.NonPublic, null,
-                       new object[] { settingsDocument, UnitSystem.Imperial }, null)
-                   ?? throw new InvalidOperationException("Could not create the solver settings dialog."))
-            {
-                var increment = Find<TextBox>(solverDialog, "SolverSettingsSizingIncrementText");
-                var roundingMethod = Find<ComboBox>(solverDialog, "SolverSettingsRoundingMethodCombo");
-                var method = Find<ComboBox>(solverDialog, "SolverSettingsEquivalentMethodCombo");
-                var basis = Find<ComboBox>(solverDialog, "SolverSettingsPressureBasisCombo");
-                Require(increment.Text == "0.5" && roundingMethod.SelectedItem?.ToString() == "Round Down"
-                        && method.SelectedItem?.ToString() == "Hydraulic Diameter"
-                        && basis.SelectedItem?.ToString() == "Actual Duct Area",
-                    "Calculation Method Inputs should own and restore the autosize and calculation methods.");
-                Require(solverDialog.Text == "Calculation Method Inputs",
-                    "The calculation-method dialog should use the requested title.");
-                Require(Descendants<Label>(solverDialog).Any(label =>
-                        label.Text == "Duct Area Calculation Method"),
-                    "Calculation Method Inputs should use the requested Duct Area Calculation Method label.");
-            }
+            Require(typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.SolverSettingsDialog") is null,
+                "The separate Calculation Method Inputs dialog should be folded into Project Settings.");
             var automaticSizingDialogType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.AutomaticSizingInputsDialog")
                                             ?? throw new InvalidOperationException("Could not find automatic sizing inputs.");
             using (var automaticSizingDialog = (Form?)Activator.CreateInstance(automaticSizingDialogType,
@@ -331,27 +341,27 @@ internal static class Program
             Require(Math.Abs(ductOutputsHeader.Font.Size - ductInputsTitle.Font.Size) < 0.1F
                     && Math.Abs(fittingOutputsHeader.Font.Size - fittingInputsTitle.Font.Size) < 0.1F,
                 "OUTPUTS headings should use the same title size as their calculator INPUTS headings.");
-            Require(projectHeader.Text.Contains("Untitled Project", StringComparison.Ordinal),
-                "The application shell should include a project identity header above the tabs.");
-            Require(projectIdentityHeader.Height >= 90 && projectHeaderLogo.Width >= 220
-                    && projectHeaderBrand.Text == "FanWorks" && projectHeaderBrand.Font.Size >= 20
+            Require(projectHeader.Text.Contains("Untitled Project", StringComparison.Ordinal)
+                    && form.Text.Contains("Untitled Project", StringComparison.Ordinal),
+                "The top bar and window title should show the project identity.");
+            Require(projectIdentityHeader.Height <= 50 && ribbon.Height <= 104
+                    && projectHeaderBrand.Text == "FanWorks"
                     && projectHeaderAppIcon.Image is not null
                     && projectIdentityHeader.GetType().Name == "ProjectIdentityHeaderPanel"
-                    && Find<Label>(form, "ProjectHeaderTagline").Text == "HVAC AIRSIDE DESIGN"
-                    && Find<Control>(form, "ProjectHeaderIconFrame").GetType().Name == "BrandIconFramePanel"
-                    && Find<Control>(form, "MainNavigationHost").GetType().Name == "NavigationChromePanel"
+                    && Find<Control>(form, "MainTopTabs").Parent == projectIdentityHeader
+                    && new[] { "TopTabProject", "TopTabAnalysis", "TopTabReports", "TopTabQuickCalc" }
+                        .Select(name => Find<Button>(form, name).Text)
+                        .SequenceEqual(new[] { "Project", "Analysis", "Reports", "Quick Calc" })
+                    && form.Controls.Find("MainNavigationHost", true).Length == 0
+                    && form.Controls.Find("DesignerSectionHeader", true).Length == 0
                     && Find<Control>(form, "CalculatorSectionHeader").GetType().Name == "SectionTitlePanel"
-                    && Find<Control>(form, "FittingSectionHeader").GetType().Name == "SectionTitlePanel"
-                    && Find<Control>(form, "SystemSectionHeader").GetType().Name == "SectionTitlePanel"
-                    && Find<Control>(form, "DesignerSectionHeader").GetType().Name == "SectionTitlePanel",
-                "The project identity area should prominently show the detailed DuctSizer brand, polished ribbon chrome, company logo, and project settings.");
-            var projectTagline = Find<Label>(form, "ProjectHeaderTagline");
-            Require(projectTagline.Padding.Left >= 10
-                    && projectIdentityHeader is TableLayoutPanel identityLayout
+                    && Find<Control>(form, "SystemSectionHeader").GetType().Name == "SectionTitlePanel",
+                "The window frame should be a slim top bar (brand, Project/Analysis/Reports/Quick Calc tabs, project identity) over the ribbon, with a fixed height on any screen.");
+            Require(projectIdentityHeader is TableLayoutPanel identityLayout
                     && identityLayout.GetColumn(projectHeader) == 3
                     && identityLayout.GetColumn(projectHeaderLogo) == 4
                     && projectHeader.TextAlign == ContentAlignment.MiddleRight,
-                "The ribbon tagline should align with FanWorks while project metadata remains right-aligned beside the company logo.");
+                "Project metadata should stay right-aligned beside the company logo in the top bar.");
             Require(IsDescendantOf(ductSummary, inputCard), "The duct summary should remain in the input card.");
             Require(Descendants<Label>(resultsCard).Any(label => label.Text == "CALCULATIONS"),
                 "The detail pane should retain its CALCULATIONS heading.");
@@ -439,21 +449,13 @@ internal static class Program
             Require(ScreenBounds(airflowInput).Top < ScreenBounds(temperatureInput).Top
                     && ScreenBounds(temperatureInput).Top < ScreenBounds(lengthInput).Top,
                 "Airflow, air temperature, and duct length should use a clear vertical Calculation column.");
-            Require(calculatorNavigation.Width >= 160 && calculatorNavigation.Height >= 40
-                    && fittingNavigation.Region is not null && systemNavigation.Region is not null,
-                "Main tab titles should use the roomier rounded navigation layout.");
-            layoutNavigation.PerformClick();
+            ClickButton(layoutNavigation);
             Application.DoEvents();
-            Require(ScreenBounds(layoutToolPalette).Left >= ScreenBounds(layoutCanvasHost).Right
-                    && layoutToolList.FlowDirection == FlowDirection.TopDown
-                    && !layoutToolList.WrapContents && layoutToolList.AutoScroll,
-                "The Layout Designer toolbox should run as a vertically scrolling single-column drawer beside the workspace.");
-            var layoutToolCards = layoutToolList.Controls.Cast<Control>().ToArray();
-            Require(layoutToolPalette.Width <= 120
-                    && layoutToolCards.Length >= 10
-                    && layoutToolCards.All(card => card.Width <= 46 && card.Height <= 46)
-                    && layoutToolCards.Skip(1).All(card => card.Margin.Left <= 1),
-                "The Layout Designer toolbox should use a tight, evenly spaced compact icon column.");
+            Require(ribbonComponentTools.Length == 19
+                    && ribbonComponentTools.All(card => IsDescendantOf(card, ribbon) && card.Height <= 40)
+                    && ScreenBounds(ribbon).Bottom <= ScreenBounds(layoutCanvasHost).Top
+                    && form.Controls.Find("LayoutToolPalette", true).Length == 0,
+                "The component toolbox should live in the Project ribbon, grouped by kind, above the drawing.");
             sourceSpaceTool.GetType().GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(sourceSpaceTool, new object[] { EventArgs.Empty });
             Require((LayoutNodeType?)UiMember.Field("_selectedLayoutTool", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -488,7 +490,7 @@ internal static class Program
             Application.DoEvents();
             Require(!layoutSummarySplitter.Panel1Collapsed,
                 "The collapsed Duct System quick view should reopen in place.");
-            calculatorNavigation.PerformClick();
+            ClickButton(calculatorNavigation);
             Application.DoEvents();
             Require(inputCard.Region is not null && calculateButton.Region is not null,
                 "Primary cards and actions should use rounded edges.");
@@ -610,8 +612,9 @@ internal static class Program
                 $"The duct system should be saved to the local JSON file. Path={systemPath}; status={Find<Label>(form, "SystemStorageStatusLabel").Text}");
             Require(tabs.TabPages[1].Text == "Fitting Calculator", "The fitting calculator should have its own tab.");
             Require(tabs.TabPages[2].Text == "Duct System", "The system tab title should not contain a duct count.");
-            Require(tabs.TabPages.Count == 4 && tabs.TabPages[3].Text == "Layout Designer",
-                "The graphical Layout Designer should have its own fourth tab.");
+            Require(tabs.TabPages.Count == 5 && tabs.TabPages[3].Text == "Layout Designer"
+                    && tabs.TabPages[4].Name == "ReportsTab",
+                "The Layout Designer (Project tab) and the Reports page should each have their own page.");
             Require(grid.Columns[2].Name == "StaticDrop", "Static pressure drop should be near the front of the system table.");
             Require(grid.Columns.Contains("AirSystem") && grid.Columns.Contains("BranchId")
                     && Convert.ToString(grid.Rows[0].Cells["AirSystem"].Value) == "Supply Air"
@@ -622,12 +625,11 @@ internal static class Program
             Require(form.Controls.Find("ExportSystemButton", true).Length == 0
                     && form.Controls.Find("ImportSystemButton", true).Length == 0,
                 "Project export and import should be removed from the Duct System action row.");
-            var settingsMenu = (ContextMenuStrip)UiMember.Field("_settingsMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
-            Require(settingsMenu.Items.Find("ImportProjectMenuItem", true).Length == 1
-                    && settingsMenu.Items.Find("AutomaticSizingInputsMenuItem", true).Length == 1
-                    && settingsMenu.Items.Find("CalculationMethodInputsMenuItem", true).Single().Text
-                        == "Calculation Method Inputs…",
-                "Settings should expose Import Project, Automatic Sizing Inputs, and Calculation Method Inputs.");
+            Require(new[] { "RibbonNewProjectButton", "RibbonOpenButton", "RibbonSaveButton", "RibbonSaveAsButton" }
+                        .All(name => Find<Button>(form, name).Parent?.Parent?.Name == "RibbonProjectGroup")
+                    && Find<Button>(form, "RibbonSizingCriteriaButton").Text.Replace("\n", " ", StringComparison.Ordinal) == "Sizing Criteria"
+                    && UiMember.Field("_settingsMenu", BindingFlags.Instance | BindingFlags.NonPublic) is null,
+                "The Project ribbon should expose New Project, Open, Save, Save As and Sizing Criteria in place of the Settings menu.");
             Require(form.Controls.Find("EditDuctButton", true).Length == 0
                     && form.Controls.Find("RemoveDuctButton", true).Length == 0
                     && editSystemItem.Text == "Edit item"
@@ -1135,7 +1137,7 @@ internal static class Program
                     && Find<Control>(form, "FittingInputCard").RectangleToScreen(
                         Find<Control>(form, "FittingInputCard").ClientRectangle).Right - ScreenBounds(addFitting).Right <= 28,
                 "Fitting Calculate and Save Fitting Changes should share the bottom-right action row of the left card.");
-            fittingNavigation.PerformClick();
+            ClickButton(fittingNavigation);
             Application.DoEvents();
             Require(!addFitting.Visible && !Find<Label>(form, "FittingEditingLabel").Visible,
                 "Opening Fitting Loss directly should clear the selected fitting and hide Save Fitting Changes.");
@@ -1198,7 +1200,7 @@ internal static class Program
             document.LayoutNodes.Add(filterNode);
             UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
-            layoutNavigation.PerformClick();
+            ClickButton(layoutNavigation);
             form.Size = new Size(1280, 820);
             Application.DoEvents();
             Require(tabs.SelectedTab?.Name == "LayoutDesignerTab" && layoutCanvas.Visible,
@@ -1223,46 +1225,47 @@ internal static class Program
                 BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(layoutCanvas);
             Require(selectedNodeId == fanNode.Id,
                 "Selecting a quick-view row should highlight the matching Designer component.");
-            Require(layoutRearrange.Text == "Move",
-                "The Designer should expose a clearly labeled visual-only rearrangement mode.");
+            Require(layoutRearrange.Text == "Move" && Find<Button>(form, "RibbonSelectButton").Text == "Select"
+                    && layoutRearrange.Parent == Find<Button>(form, "RibbonSelectButton").Parent,
+                "The Project ribbon should offer Select and a visual-only Move mode side by side.");
             Require(string.IsNullOrEmpty(layoutUndo.Text) && string.IsNullOrEmpty(layoutRedo.Text)
                     && layoutUndo.AccessibleName == "Undo" && layoutRedo.AccessibleName == "Redo"
                     && layoutUndo.Width < 56 && layoutRedo.Width < 56,
-                "Designer Undo and Redo should use compact, accessible arrow-icon buttons instead of letter labels.");
-            Require(layoutCenter.Text == "Center",
-                "The Designer should expose a clearly labeled command for returning to the system start.");
-            Require(new Control[] { layoutUndo, layoutRedo, layoutDelete, layoutRearrange, layoutLabels, layoutDuctSizes, layoutCenter, layoutCoordinateOrigin, layoutSourceSinkEditor, layoutSizeUndefined, layoutRecalculateDuctwork, layoutCriticalPath }
-                        .Select(control => ScreenBounds(control).Top).Max()
-                    - new Control[] { layoutUndo, layoutRedo, layoutDelete, layoutRearrange, layoutLabels, layoutDuctSizes, layoutCenter, layoutCoordinateOrigin, layoutSourceSinkEditor, layoutSizeUndefined, layoutRecalculateDuctwork, layoutCriticalPath }
-                        .Select(control => ScreenBounds(control).Top).Min() <= 8,
-                "All Layout Designer graph controls should align on one toolbar row.");
-            Require(layoutSizeUndefined.Text == "Size Undefined Components"
-                    && layoutSizeUndefined.Width >= 240
-                    && TextRenderer.MeasureText(layoutSizeUndefined.Text, layoutSizeUndefined.Font).Width <= layoutSizeUndefined.ClientSize.Width - 12
-                    && layoutSourceSinkEditor.Text == "Source/Sink Editor"
-                    && layoutRecalculateDuctwork.Text == "Recalculate All Ductwork"
-                    && layoutLabels.Text == "Hide Labels"
-                    && layoutDuctSizes.Text == "Show Duct Sizes"
-                    && layoutScaleTitle.Text == "Grid Scale:"
+                "Designer Undo and Redo should use compact, accessible icon buttons.");
+            var canvasToolbar = Find<Control>(form, "LayoutCanvasToolbar");
+            var zoomIn = Find<Button>(form, "LayoutZoomInButton");
+            var zoomOut = Find<Button>(form, "LayoutZoomOutButton");
+            Require(new Control[] { layoutUndo, layoutRedo, layoutDelete, zoomOut, zoomIn, layoutCenter, layoutPdfBackground,
+                            layoutScale, layoutViewMode, layoutLabels, layoutFlow, layoutDuctSizes, layoutCoordinateOrigin,
+                            layoutSourceSinkEditor }
+                        .All(control => control.Parent == canvasToolbar)
+                    && canvasToolbar.Controls.IndexOf(layoutPdfBackground) < canvasToolbar.Controls.IndexOf(Find<Control>(form, "LayoutGridIcon"))
+                    && canvasToolbar.Controls.IndexOf(Find<Control>(form, "LayoutGridIcon")) < canvasToolbar.Controls.IndexOf(layoutScale)
+                    && layoutLabels.Text == "Labels" && layoutFlow.Text == "Flow" && layoutDuctSizes.Text == "Sizes"
+                    && layoutLabels.Checked && !layoutFlow.Checked && !layoutDuctSizes.Checked
+                    && layoutScale.DropDownStyle == ComboBoxStyle.DropDownList
+                    && form.Controls.Find("LayoutScaleInput", true).Length == 0
                     && form.Controls.Find("LayoutShowToScaleCheckBox", true).Length == 0
                     && form.Controls.Find("ClearLayoutButton", true).Length == 0,
-                "The Designer should always use coordinate scale, expose Grid Scale, provide batch sizing, and omit the obsolete scale and Clear controls.");
-            Require(layoutPdfBackground.Text == "Upload PDF" && layoutPdfBackground.Visible,
-                "The Designer should expose a visible PDF-background import action in its view controls.");
-            Require(layoutToolPalette.Parent == layoutToolboxSplitter.Panel2
-                    && layoutToolboxSplitter.Panel2.Right <= layoutToolboxSplitter.Right
-                    && !layoutToolList.WrapContents
-                    && layoutToolList.FlowDirection == FlowDirection.TopDown
-                    && layoutToolboxCollapse.Visible,
-                "The component toolbox should be a compact right-side drawer that retains its drag-and-drop tool list.");
-            layoutToolboxCollapse.PerformClick();
+                "The canvas toolbar should hold undo/redo/delete, zoom buttons, PDF import left of the grid-scale dropdown, the view direction, and Labels/Flow/Sizes check boxes.");
+            var zoomBefore = (float)layoutCanvas.GetType().GetProperty("ZoomFactor",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(layoutCanvas)!;
+            ClickButton(zoomIn);
             Application.DoEvents();
-            Require(layoutToolboxSplitter.Panel2Collapsed && layoutToolboxReopen.Visible,
-                "The right-side toolbox should collapse to a reopen tab.");
-            layoutToolboxReopen.PerformClick();
+            var zoomAfter = (float)layoutCanvas.GetType().GetProperty("ZoomFactor",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(layoutCanvas)!;
+            ClickButton(zoomOut);
             Application.DoEvents();
-            Require(!layoutToolboxSplitter.Panel2Collapsed && !layoutToolboxReopen.Visible,
-                "The collapsed toolbox should reopen from its right-side vertical tab.");
+            Require(zoomAfter > zoomBefore + 0.05F
+                    && Math.Abs((float)layoutCanvas.GetType().GetProperty("ZoomFactor",
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(layoutCanvas)! - zoomBefore) < 0.001F,
+                "The zoom buttons should zoom in and back out (mouse-wheel zoom is unchanged).");
+            Require(layoutAutoSize.Text == "Auto Size" && Find<Button>(form, "RibbonCalculateButton").Text == "Calculate"
+                    && form.Controls.Find("LayoutSizeUndefinedButton", true).Length == 0
+                    && form.Controls.Find("LayoutRecalculateDuctworkButton", true).Length == 0,
+                "Auto Size should replace Size Undefined Components and Recalculate All Ductwork, beside Calculate.");
+            Require(layoutPdfBackground.AccessibleName == "PDF underlay" && layoutPdfBackground.Visible,
+                "The Designer should expose a visible PDF-underlay import action in its canvas toolbar.");
             var gridLocationMethod = layoutCanvas.GetType().GetMethod("GridLocation",
                                          BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
                                      ?? throw new InvalidOperationException("Could not inspect Designer grid locations.");
@@ -1344,14 +1347,14 @@ internal static class Program
                 .Invoke(form, new object[] { true });
             Application.DoEvents();
             coilNode.DeltaXM = UnitConversions.FeetToM(18);
-            systemNavigation.PerformClick();
+            ClickButton(systemNavigation);
             Application.DoEvents();
             Require(Math.Abs(document.Ducts.Single(x => x.Sequence == coilNode.ConnectionDuctSequence).DeltaXM
                              - UnitConversions.FeetToM(18)) < 1e-12,
                 "Opening Duct System should synchronize linked rows from the previously edited Designer.");
             var synchronizedDuct = document.Ducts.Single(x => x.Sequence == coilNode.ConnectionDuctSequence);
             synchronizedDuct.AirSystemType = "Return Air";
-            layoutNavigation.PerformClick();
+            ClickButton(layoutNavigation);
             Application.DoEvents();
             Require(coilNode.AirSystemType == "Return Air",
                 "Opening Layout Designer should synchronize linked component metadata from Duct System.");
@@ -1378,12 +1381,10 @@ internal static class Program
                         .All(tool => tool.Visible && tool.Cursor == Cursors.Hand)
                     && form.Controls.Find("LayoutToolDuct", true).Length == 0,
                 "The layout toolbox should expose source/sink spaces, equipment, grouped fittings, and four calculation points without a duct icon.");
-            Require(layoutToolList.Controls.Count == 19 && !layoutToolList.WrapContents
-                    && layoutToolList.FlowDirection == FlowDirection.TopDown
-                    && layoutToolList.Width <= 220
-                    && layoutToolList.Controls.Cast<Control>().All(tool => tool.Size == new Size(46, 46)
+            Require(ribbonComponentTools.Length == 19
+                    && ribbonComponentTools.All(tool => tool.Height <= 40
                         && (layoutToolTips.GetToolTip(tool) ?? "").Contains("\r\n", StringComparison.Ordinal)),
-                $"The layout components should appear as compact, borderless icon selectors in a vertically scrolling right drawer, with names and explanations retained as hover help. Count={layoutToolList.Controls.Count}, Wrap={layoutToolList.WrapContents}, Flow={layoutToolList.FlowDirection}, Width={layoutToolList.Width}, Sizes={string.Join(',', layoutToolList.Controls.Cast<Control>().Select(tool => tool.Size))}.");
+                $"The ribbon components should be compact captioned tools with names and explanations as hover help. Count={ribbonComponentTools.Length}.");
             Require(settingsButton.Visible && grid.AllowUserToOrderColumns
                     && grid.RowTemplate.Height <= 26 && grid.ColumnHeadersHeight <= 52
                     && grid.Columns["Airflow"].ReadOnly == false
@@ -1412,31 +1413,37 @@ internal static class Program
                 .Invoke(form, new object[] { -0.00001 })!;
             Require(formattedNegativeZero == "0" && !formattedNegativeZero.StartsWith("-", StringComparison.Ordinal),
                 "Static pressure in/out formatting should normalize rounded negative zero to zero.");
-            Require(layoutCriticalPath.Text == "Highlight Critical Path"
+            Require(layoutCriticalPath.Text.Replace("\n", " ", StringComparison.Ordinal) == "Highlight Critical Path"
                     && layoutCriticalPath.Height >= 32,
-                "The Layout Designer should expose a fully visible critical-path highlight action.");
+                "The Project ribbon should expose a fully visible Highlight Critical Path toggle.");
             var showLabelsProperty = layoutCanvas.GetType().GetProperty("ShowLabels",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
             var showDuctSizesProperty = layoutCanvas.GetType().GetProperty("ShowDuctSizes",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
-            layoutLabels.PerformClick();
-            layoutDuctSizes.PerformClick();
+            layoutLabels.Checked = false;
+            layoutDuctSizes.Checked = true;
             Application.DoEvents();
             Require(!(bool)showLabelsProperty.GetValue(layoutCanvas)!
-                    && (bool)showDuctSizesProperty.GetValue(layoutCanvas)!
-                    && layoutLabels.Text == "Show Labels"
-                    && layoutDuctSizes.Text == "Hide Duct Sizes",
+                    && (bool)showDuctSizesProperty.GetValue(layoutCanvas)!,
                 "The Designer should independently hide item labels and show duct-size annotations.");
-            layoutLabels.PerformClick();
-            layoutDuctSizes.PerformClick();
-            layoutCriticalPath.PerformClick();
+            layoutDuctSizes.Checked = false;
+            layoutFlow.Checked = true;
+            Application.DoEvents();
+            Require((bool)showDuctSizesProperty.GetValue(layoutCanvas)!,
+                "The Flow check box should show duct captions (airflow) even with sizes off.");
+            layoutFlow.Checked = false;
+            layoutLabels.Checked = true;
+            Application.DoEvents();
+            Require((bool)showLabelsProperty.GetValue(layoutCanvas)! && !(bool)showDuctSizesProperty.GetValue(layoutCanvas)!,
+                "Clearing Flow and Sizes should hide duct captions again.");
+            ClickButton(layoutCriticalPath);
             Application.DoEvents();
             Require((bool)(layoutCanvas.GetType().GetProperty("HighlightCriticalPath",
                                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
                            .GetValue(layoutCanvas) ?? false)
-                    && layoutCriticalPath.Text == "Unhighlight Critical Path",
-                "The Layout Designer critical-path action should enable route highlighting.");
-            layoutCriticalPath.PerformClick();
+                    && ((dynamic)layoutCriticalPath).Checked,
+                "The ribbon critical-path toggle should enable route highlighting and show as on.");
+            ClickButton(layoutCriticalPath);
             Application.DoEvents();
             Require(!(bool)(layoutCanvas.GetType().GetProperty("HighlightCriticalPath",
                                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
@@ -1885,7 +1892,7 @@ internal static class Program
                     && !grid.Rows.Cast<DataGridViewRow>().Any(row =>
                         string.Equals(Convert.ToString(row.Cells["Id"].Value), undefinedPlacementNode.Id, StringComparison.OrdinalIgnoreCase)),
                 "An undefined newly placed component should remain off the populated schedule and should not automatically size its connection duct.");
-            layoutSizeUndefined.PerformClick();
+            ClickButton(layoutAutoSize);
             Application.DoEvents();
             Require(undefinedPlacementNode.IsDefined
                     && undefinedPlacementNode.LinkedFittingSequence is not null
@@ -1916,13 +1923,8 @@ internal static class Program
             });
             Application.DoEvents();
             Require(zoomValue.Text == "100%", "Scrolling the mouse wheel down should restore the Designer grid view.");
-            Require(form.Controls.Find("LayoutZoomOutButton", true).Length == 0
-                    && form.Controls.Find("LayoutZoomInButton", true).Length == 0,
-                "The Designer should use mouse-wheel zoom without separate plus/minus buttons.");
             var originalFanDeltaX = fanNode.DeltaXM;
-            layoutScale.Text = "2";
-            UiMember.Method("ApplyLayoutScaleInput", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(form, null);
+            layoutScale.SelectedItem = layoutScale.Items.Cast<object>().Single(item => item.ToString()!.StartsWith("2 ft", StringComparison.Ordinal));
             Application.DoEvents();
             Require(document.LayoutShowToScale && Math.Abs(document.LayoutFeetPerGridCell - 2.0) < 1e-9
                     && Math.Abs(fanNode.DeltaXM - originalFanDeltaX) < 1e-12,
@@ -2145,8 +2147,9 @@ internal static class Program
             document.CoordinateOriginXM = priorCoordinateX;
             document.CoordinateOriginYM = priorCoordinateY;
             document.CoordinateOriginZM = priorCoordinateZ;
-            Require(layoutScale.Width >= 70 && layoutScale is { ReadOnly: false },
-                "The drawing scale should be an editable text field wide enough for a two-digit value.");
+            Require(layoutScale.Width >= 90 && layoutScale.Items.Count >= 8
+                    && layoutScale.Items.Cast<object>().Any(item => item.ToString() == "1 ft / cell"),
+                "The grid scale should be a clean dropdown of feet-per-cell choices.");
 
             var fanCountBeforeDuplicate = document.LayoutNodes.Count(node => node.Type == LayoutNodeType.Fan);
             UiMember.Method("PlaceLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -2414,9 +2417,9 @@ internal static class Program
             var movedFilterX = originalFilterX - 2;
             var originalFilterParent = filterNode.ParentNodeId;
             var originalFilterDuct = filterNode.ConnectionDuctSequence;
-            layoutRearrange.PerformClick();
+            ClickButton(layoutRearrange);
             Application.DoEvents();
-            Require(layoutRearrange.Text == "Done"
+            Require(((dynamic)layoutRearrange).Checked
                     && (bool)(layoutCanvas.GetType().GetProperty("RearrangeMode", BindingFlags.Instance | BindingFlags.NonPublic)!
                         .GetValue(layoutCanvas) ?? false),
                 "Clicking Move should enter a visible, toggleable move-only mode.");
@@ -2463,10 +2466,10 @@ internal static class Program
             restoredFilter = restoredDocument.LayoutNodes.FirstOrDefault(x => x.Sequence == filterNode.Sequence);
             Require(restoredFilter is not null && restoredFilter.GridX == movedFilterX,
                 "Ctrl+Y should restore the reapplied Designer component position.");
-            layoutRearrange.PerformClick();
+            ClickButton(layoutRearrange);
             Application.DoEvents();
-            Require(layoutRearrange.Text == "Move",
-                "Clicking Done should return the Designer to normal editing mode.");
+            Require(!((dynamic)layoutRearrange).Checked && ((dynamic)Find<Button>(form, "RibbonSelectButton")).Checked,
+                "Clicking Move again should return the Designer to normal (Select) editing mode.");
             document = restoredDocument;
             fanNode = document.LayoutNodes.Single(x => x.Sequence == fanNode.Sequence);
             coilNode = document.LayoutNodes.Single(x => x.Sequence == coilNode.Sequence);
@@ -2704,7 +2707,7 @@ internal static class Program
             var pdfBackgroundCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_PDF_BACKGROUND_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(pdfBackgroundCapturePath))
             {
-                layoutNavigation.PerformClick();
+                ClickButton(layoutNavigation);
                 Application.DoEvents();
                 using var preview = new Bitmap(form.Width, form.Height);
                 form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
@@ -2758,7 +2761,7 @@ internal static class Program
             var zoomedOutCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_ZOOMED_OUT_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(zoomedOutCapturePath))
             {
-                layoutNavigation.PerformClick();
+                ClickButton(layoutNavigation);
                 Application.DoEvents();
                 using var zoomedPreview = new Bitmap(form.Width, form.Height);
                 form.DrawToBitmap(zoomedPreview, new Rectangle(Point.Empty, form.Size));
@@ -2997,7 +3000,7 @@ internal static class Program
             var layoutCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_LAYOUT_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(layoutCapturePath))
             {
-                layoutNavigation.PerformClick();
+                ClickButton(layoutNavigation);
                 Application.DoEvents();
                 using var layoutPreview = new Bitmap(form.Width, form.Height);
                 form.DrawToBitmap(layoutPreview, new Rectangle(Point.Empty, form.Size));
@@ -3391,7 +3394,7 @@ internal static class Program
                 "A second split connection should automatically use the only remaining main or branch outlet.");
             document.LayoutNodes.AddRange(new[] { splitPreviewNode, splitSameBranch, splitNewBranch });
             UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
-            layoutNavigation.PerformClick();
+            ClickButton(layoutNavigation);
             Application.DoEvents();
             var splitCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_SPLIT_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(splitCapturePath))
@@ -3547,7 +3550,7 @@ internal static class Program
             var portCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_PORT_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(portCapturePath))
             {
-                layoutNavigation.PerformClick();
+                ClickButton(layoutNavigation);
                 form.Size = new Size(1280, 820);
                 Application.DoEvents();
                 using var portPreview = new Bitmap(form.Width, form.Height);
@@ -3707,6 +3710,11 @@ internal static class Program
             throw new InvalidOperationException($"Could not find {typeof(T).Name} named {name}.");
         return typed;
     }
+
+    /// <summary>Invokes a button's click handlers whether or not its ribbon page is on screen.</summary>
+    private static void ClickButton(Control button) =>
+        typeof(Control).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(button, new object[] { EventArgs.Empty });
 
     private static T PrivateField<T>(object instance, string name) where T : class
     {

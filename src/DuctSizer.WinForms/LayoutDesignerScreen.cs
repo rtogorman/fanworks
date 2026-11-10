@@ -996,8 +996,8 @@ internal sealed partial class LayoutDesignerScreen
         var background = _host.DuctSystemScreen._ductSystem.LayoutPdfBackground;
         _layoutPdfButton.Text = background is null ? "Upload PDF"
             : background.Visible ? "PDF Background" : "PDF Hidden";
-        _layoutPdfButton.BackColor = background is null ? Color.White
-            : background.Visible ? Color.FromArgb(225, 239, 247) : Color.FromArgb(239, 241, 243);
+        // The icon button shows as "on" while a visible PDF underlay is loaded; its text names the state.
+        _layoutPdfButton.Checked = background is { Visible: true };
         _layoutToolTips.SetToolTip(_layoutPdfButton, background is null
             ? "Import a PDF sheet as a scaled Top-Down background"
             : "Show, hide, move, rescale, replace, or delete the imported PDF background");
