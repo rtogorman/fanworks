@@ -434,6 +434,29 @@ Icons drawn in-house (no new packages).
 - Unit fix: airflow shows cfm/L/s in the fan-sizing message, fan information and the report's design airflow.
 - Interface checks: 20 groups (new: Analysis summary, report preview and Print Report).
 
+### Polish round (P1–P5) — requested 2026-11-09 after R4
+
+Ryan's requests (verbatim intent):
+- P1 Ribbon: no cut-off words; groups spread to fill the whole ribbon width (Project tab especially). Logo symbol
+  bigger; "FanWorks" title not cut off. Quick Calc duct calculator icon = a duct, not a calculator.
+- P2 Explorer (left), inspector (right) and bottom panel draggable to resize. Bottom lists: add more useful columns
+  to fill the width.
+- P3 Selection Inspector: fixed values/outputs as labels (not text boxes); editable inputs as the proper control
+  (dropdown/text) editable in place; Update/Save + Cancel at the bottom instead of Edit Inputs.
+- P4 Report PDF: keep borders, title block, colours, symbols and equations; ONE page per duct / fitting / component
+  (now two); title page keeps title block but centre redesigned (fuller, professional); view sheets unchanged except
+  better placement of the graphic scale and grid-spacing note.
+- P5 Canvas toolbar: PDF underlay button obvious (text + dropdown; may sit far right); Source/Sink editor button
+  gets text; remove the crosshair "set coordinate origin" tool and function.
+
+| Stage | Status |
+|---|---|
+| P1 | Pending |
+| P2 | Pending |
+| P3 | Pending |
+| P4 | Pending |
+| P5 | Pending |
+
 ### Resume notes (update as work proceeds)
 
 - Work in `/home/claude/fanworks` (git, origin = GitHub). Commit and push after every working sub-step so nothing
