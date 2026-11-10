@@ -1225,6 +1225,47 @@ internal static class Program
                 BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(layoutCanvas);
             Require(selectedNodeId == fanNode.Id,
                 "Selecting a quick-view row should highlight the matching Designer component.");
+
+            // Selection Inspector (v0.96 stage 2).
+            var inspector = Find<Control>(form, "SelectionInspector");
+            Require(ScreenBounds(inspector).Left >= ScreenBounds(layoutCanvasHost).Right - 2
+                    && new[] { "InspectorDescriptionTab", "InspectorCalculationsTab", "InspectorNotesTab" }
+                        .Select(name => Find<Button>(form, name).Text)
+                        .SequenceEqual(new[] { "Description", "Calculations", "Notes" })
+                    && Find<Label>(form, "InspectorTitle").Text.StartsWith(fanNode.Id, StringComparison.Ordinal)
+                    && (string?)inspector.GetType().GetProperty("CurrentItemKey", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .GetValue(inspector) == $"L:{fanNode.Sequence}",
+                "Selecting an item should show it in the Selection Inspector on the right, with Description, Calculations and Notes tabs.");
+            var inspectorDescription = Find<Control>(form, "InspectorDescriptionPage");
+            Require(Descendants<Control>(inspectorDescription).Any(control => control.Name == "InspectorInputsSection")
+                    && Descendants<Control>(inspectorDescription).Any(control => control.Name == "InspectorOutputsSection")
+                    && Descendants<Control>(inspectorDescription).Any(control => control.Name == "InspectorEditButton")
+                    && Descendants<TextBox>(inspectorDescription).Any(box => box.Text == fanNode.Id),
+                "The Description tab should list the item's details, inputs (with Edit Inputs) and outputs.");
+            ClickButton(Find<Button>(form, "InspectorCalculationsTab"));
+            Application.DoEvents();
+            Require(Find<RichTextBox>(form, "InspectorCalculations").Text.Length > 20,
+                "The Calculations tab should show the item's calculation (or say it is a manual entry).");
+            ClickButton(Find<Button>(form, "InspectorNotesTab"));
+            Application.DoEvents();
+            var inspectorNotes = Find<TextBox>(form, "InspectorNotes");
+            inspectorNotes.Text = "Confirm fan selection with the supplier.";
+            Application.DoEvents();
+            var notesModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            Require(notesModel.ItemNotes.TryGetValue($"L:{fanNode.Sequence}", out var savedNote)
+                    && savedNote == "Confirm fan selection with the supplier.",
+                "Notes typed in the inspector should be kept with the item in the project.");
+            inspector.GetType().GetMethod("SaveNotesNow", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(inspector, null);
+            ClickButton(Find<Button>(form, "InspectorDescriptionTab"));
+            Application.DoEvents();
+            ClickButton(Find<Button>(form, "InspectorCollapseButton"));
+            Application.DoEvents();
+            Require(Find<Button>(form, "InspectorReopenButton").Visible && inspector.Width <= 40,
+                "The Selection Inspector should collapse to a narrow tab.");
+            ClickButton(Find<Button>(form, "InspectorReopenButton"));
+            Application.DoEvents();
+            Require(inspector.Width >= 300 && !Find<Button>(form, "InspectorReopenButton").Visible,
+                "The collapsed Selection Inspector should reopen.");
             Require(layoutRearrange.Text == "Move" && Find<Button>(form, "RibbonSelectButton").Text == "Select"
                     && layoutRearrange.Parent == Find<Button>(form, "RibbonSelectButton").Parent,
                 "The Project ribbon should offer Select and a visual-only Move mode side by side.");
@@ -2593,6 +2634,12 @@ internal static class Program
                     && File.Exists(greenSaveCsvPath) && new FileInfo(greenSaveCsvPath).Length > 100
                     && File.Exists(greenSaveProjectPath),
                 "The green Save button should create the project file, PDF, and CSV at the selected base path.");
+            var sampleProjectCopy = Environment.GetEnvironmentVariable("DUCTSIZER_SAMPLE_PROJECT_PATH");
+            if (!string.IsNullOrWhiteSpace(sampleProjectCopy))
+            {
+                File.Copy(greenSaveProjectPath, sampleProjectCopy, overwrite: true);
+                File.Copy(greenSavePdfPath, Path.ChangeExtension(sampleProjectCopy, ".pdf"), overwrite: true);
+            }
             {
                 var savedModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
                 var expectedNodes = savedModel.LayoutNodes.Count;
@@ -3741,7 +3788,8 @@ internal static class Program
             Console.WriteLine("PASS  Snap-grid layout designer and system branch metadata");
             Console.WriteLine("PASS  Layout rewiring and delete-all workflows");
             Console.WriteLine("PASS  Main tabs and Project ribbon commands");
-            Console.WriteLine("17/17 UI verification checks passed.");
+            Console.WriteLine("PASS  Selection Inspector: description, calculations, notes");
+            Console.WriteLine("18/18 UI verification checks passed.");
             return 0;
         }
         catch (Exception ex)

@@ -2179,6 +2179,20 @@ internal sealed partial class DuctSystemScreen
     {
         var duct = SelectedDuct();
         var fitting = SelectedFitting();
+        if (fitting is not null)
+            EditSystemRecord(isFitting: true, fitting.Sequence);
+        else if (duct is not null)
+            EditSystemRecord(isFitting: false, duct.Sequence);
+    }
+
+    /// <summary>
+    /// Opens a duct or fitting record in its calculator for editing (system grid "Edit item", and the Selection
+    /// Inspector for records that are not on the drawing).
+    /// </summary>
+    internal void EditSystemRecord(bool isFitting, int sequence)
+    {
+        var duct = isFitting ? null : _ductSystem.Ducts.FirstOrDefault(x => x.Sequence == sequence);
+        var fitting = isFitting ? _ductSystem.Fittings.FirstOrDefault(x => x.Sequence == sequence) : null;
         if (duct is null && fitting is null)
             return;
 
@@ -3818,6 +3832,7 @@ internal sealed partial class DuctSystemScreen
     /// <summary>Makes <paramref name="document"/> the working system and resets all editing state.</summary>
     internal void ReplaceCurrentSystem(DuctSystemDocument document)
     {
+        _host.LayoutScreen.Inspector?.ShowNothing();
         _ductSystem = document;
         _lastExportBasePath = string.Empty;
         ResetCriticalPath();

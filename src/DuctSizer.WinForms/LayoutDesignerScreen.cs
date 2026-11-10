@@ -17,6 +17,10 @@ internal sealed partial class LayoutDesignerScreen
     }
 
     private LayoutDesignerCanvas? _layoutCanvas;
+    private SelectionInspector? _inspector;
+
+    /// <summary>The Selection Inspector on the Project tab (null until the page is built).</summary>
+    internal SelectionInspector? Inspector => _inspector;
     internal readonly Label _layoutStatusLabel = new();
     private LayoutNodeType? _selectedLayoutTool;
     private string? _selectedLayoutFittingGroup;
@@ -85,12 +89,13 @@ internal sealed partial class LayoutDesignerScreen
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1,
+            ColumnCount = 2,
             RowCount = 3,
             Padding = new Padding(8, 6, 8, 4),
             BackColor = _host.BackColor
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, SelectionInspector.ExpandedWidth));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
@@ -144,6 +149,8 @@ internal sealed partial class LayoutDesignerScreen
         _layoutCanvas.NodeDeleteRequested += RemoveLayoutNode;
         _layoutCanvas.SelectionChanged += node =>
         {
+            if (node is not null)
+                _inspector?.ShowNode(node);
             _layoutDeleteButton.Enabled = node is not null;
             _layoutCoordinateOriginButton.Enabled = node is not null && node.Type != LayoutNodeType.CalculationPoint;
             SyncLayoutSummarySelection(node);
@@ -152,6 +159,10 @@ internal sealed partial class LayoutDesignerScreen
         };
         _layoutCanvas.ConnectionSelectionChanged += connection =>
         {
+            if (connection is LayoutConnectionRef selectedConnection)
+                _inspector?.ShowConnection(selectedConnection);
+            else if (_layoutCanvas.SelectedNode is null)
+                _inspector?.ShowNothing();
             if (connection is LayoutConnectionRef selected)
             {
                 SyncLayoutSummarySelection(connection: selected);
@@ -253,8 +264,14 @@ internal sealed partial class LayoutDesignerScreen
         _layoutStatusLabel.AutoEllipsis = true;
 
         root.Controls.Add(toolbar, 0, 0);
+        root.SetColumnSpan(toolbar, 2);
         root.Controls.Add(_layoutWorkspaceSplitter, 0, 1);
         root.Controls.Add(_layoutStatusLabel, 0, 2);
+        _inspector = new SelectionInspector(_host);
+        _inspector.CollapsedChanged += collapsed =>
+            root.ColumnStyles[1].Width = collapsed ? SelectionInspector.CollapsedWidth : SelectionInspector.ExpandedWidth;
+        root.Controls.Add(_inspector, 1, 1);
+        root.SetRowSpan(_inspector, 2);
         return root;
     }
 
@@ -555,6 +572,7 @@ internal sealed partial class LayoutDesignerScreen
             }
         }
         SyncLayoutSummarySelection();
+        _inspector?.RefreshContent();
     }
 
     private void SelectLayoutItemFromSummary()
@@ -578,7 +596,11 @@ internal sealed partial class LayoutDesignerScreen
                 }
             }
 
-            _layoutCanvas.SelectNode(LayoutNodeForSystemTag(tag));
+            var node = LayoutNodeForSystemTag(tag);
+            _layoutCanvas.SelectNode(node);
+            // A duct or fitting record that is not on the drawing still shows in the Selection Inspector.
+            if (node is null && tag is DuctSystemScreen.SystemRowTag record)
+                _inspector?.ShowRecord(record.IsFitting, record.Sequence);
         }
         finally
         {
@@ -748,6 +770,8 @@ internal sealed partial class LayoutDesignerScreen
         var restored = JsonSerializer.Deserialize<DuctSystemDocument>(state, LayoutHistoryJsonOptions)
                        ?? new DuctSystemDocument();
         restored.LayoutPdfBackground = pdfBackground;
+        // Item notes are not drawing edits: undo and redo keep the notes as they are now.
+        restored.ItemNotes = _host.DuctSystemScreen._ductSystem.ItemNotes;
         restored.UserName = _host.DuctSystemScreen._ductSystem.UserName;
         restored.ProjectName = _host.DuctSystemScreen._ductSystem.ProjectName;
         restored.ProjectNumber = _host.DuctSystemScreen._ductSystem.ProjectNumber;
@@ -3558,7 +3582,14 @@ internal sealed partial class LayoutDesignerScreen
         ApplyLayoutScaleSettings();
         UpdateLayoutPdfButton();
         _layoutCanvas?.Invalidate();
+        _inspector?.RefreshContent();
     }
+
+    /// <summary>Opens the editor of a drawing component (Selection Inspector "Edit Inputs", same as double-click).</summary>
+    internal void EditLayoutNode(SavedLayoutNode node) => ActivateLayoutNode(node);
+
+    /// <summary>Opens the duct editor of a drawing connection (Selection Inspector "Edit Inputs").</summary>
+    internal void EditLayoutConnection(LayoutConnectionRef connection) => ActivateLayoutConnection(connection);
 
     private bool EnsureExplicitElbowsForAxisChanges()
     {
