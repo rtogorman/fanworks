@@ -355,7 +355,7 @@ Icons drawn in-house (no new packages).
 | R1 | Window shell, top tabs, Project ribbon, canvas toolbar; screens re-hosted (Analysis = Duct System screen, Quick Calc = calculators) | **Done** — laptop build 2026-11-09: 63/63, UI 17/17, 0 warnings, `outputs\FanWorks-win-x64-v0.96.0\FanWorks.exe`; GitHub CI green |
 | R2 | Selection Inspector (Description / Calculations / Notes), notes in file (schema 15) | **Done** — laptop build: 65/65, UI 18/18, 0 warnings; CI green |
 | R3 | Project Explorer, bottom panel (System Overview / Errors / Validation) | **Done** — laptop build: 65/65, UI 19/19, 0 warnings; CI green |
-| R4 | Analysis summary + top 10, Reports preview, Quick Calc polish; interface tests rewritten; v0.96.0 | Done in code (65/65, UI 20/20 Wine); Windows build pending |
+| R4 | Analysis summary + top 10, Reports preview, Quick Calc polish; interface tests rewritten; v0.96.0 | Done — laptop build 0 warnings, 65/65, UI 20/20; CI green; FanWorks-win-x64-v0.96.0 |
 
 ### R1 record
 
@@ -438,6 +438,8 @@ Icons drawn in-house (no new packages).
 
 - Work in `/home/claude/fanworks` (git, origin = GitHub). Commit and push after every working sub-step so nothing
   is lost; the laptop folder gets changed files copied at the end of each stage.
-- R1 synced to the laptop at commit 1920f58 (SolverSettingsDialog.cs stubbed there). R2 synced at b911839, R3 synced at 2cf58d1; both verified on the laptop. Now: R4.
+- R1 synced to the laptop at commit 1920f58 (SolverSettingsDialog.cs stubbed there). R2 synced at b911839, R3 at 2cf58d1, R4 at 3cce1f1; all verified on the laptop. Redesign (R1–R4) complete.
+- Open for Ryan: inline editing in the Selection Inspector (now read-only + Edit Inputs); extra explorer groups
+  Terminals and Calculation Points kept (not in the original list).
 - Sample project for screenshots: run the UI tests with `SAMPLE='Z:\tmp\sample.fanworks'`, copy it to the Wine prefix's `AppData/Local/DuctSizer/duct-system.json`. Linux helpers: `/home/claude/shot.sh` (screenshot of the app under Wine),
   `/home/claude/tour.sh` + `xclick.py` (click through tabs), `/home/claude/run-uitests.sh`.
