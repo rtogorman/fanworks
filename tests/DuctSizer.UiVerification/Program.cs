@@ -33,7 +33,12 @@ internal static class Program
                 return 0;
             }
             var openingArea = Screen.FromControl(form).WorkingArea;
-            Require(form.Size == MainForm.OpeningSize(new Size(1200, 1200), openingArea)
+            // The designed 1200 x 1200 window is scaled to the display (its frame is not), then fitted to the screen.
+            var designedOpening = DpiScaling.Scale(new Size(1200, 1200));
+            bool OpeningFits(int actual, int designed, int available) =>
+                actual == available || (actual <= available && Math.Abs(actual - designed) <= Math.Max(2, designed / 40));
+            Require(OpeningFits(form.Width, designedOpening.Width, openingArea.Width)
+                    && OpeningFits(form.Height, designedOpening.Height, openingArea.Height)
                     && openingArea.Contains(form.Bounds),
                 $"The application should open at 1200 x 1200, or fitted to a smaller working area ({openingArea.Width} x {openingArea.Height}); it opened at {form.Width} x {form.Height}.");
             Require(MainForm.OpeningSize(new Size(1200, 1200), new Rectangle(0, 0, 1366, 728)) == new Size(1200, 728)
@@ -334,7 +339,7 @@ internal static class Program
                     "Wide dropdowns should resize safely without reversing their minimum and maximum limits.");
             }
 
-            form.Size = new Size(1280, 820);
+            form.Size = Sz(form, 1280, 820);
             form.PerformLayout();
             Application.DoEvents();
             Require(content.ColumnCount == 2, "Wide layout should display inputs and outputs side by side.");
@@ -363,7 +368,7 @@ internal static class Program
             Require(projectHeader.Text.Contains("Untitled Project", StringComparison.Ordinal)
                     && form.Text.Contains("Untitled Project", StringComparison.Ordinal),
                 "The top bar and window title should show the project identity.");
-            Require(projectIdentityHeader.Height <= 50 && ribbon.Height <= 104
+            Require(projectIdentityHeader.Height <= Px(50) && ribbon.Height <= Px(104)
                     && projectHeaderBrand.Text == "FanWorks"
                     && projectHeaderAppIcon.Image is not null
                     && projectIdentityHeader.GetType().Name == "ProjectIdentityHeaderPanel"
@@ -374,7 +379,7 @@ internal static class Program
                     && form.Controls.Find("MainNavigationHost", true).Length == 0
                     && form.Controls.Find("DesignerSectionHeader", true).Length == 0
                     && Find<Control>(form, "CalculatorSectionHeader").GetType().Name == "SectionTitlePanel"
-                    && Find<Control>(form, "CalculatorSectionHeader").Height <= 60
+                    && Find<Control>(form, "CalculatorSectionHeader").Height <= Px(60)
                     && form.Controls.Find("SystemSectionHeader", true).Length == 0,
                 "The window frame should be a slim top bar (brand, Project/Analysis/Reports/Quick Calc tabs, project identity) over the ribbon, with a fixed height on any screen.");
             Require(projectIdentityHeader is TableLayoutPanel identityLayout
@@ -397,7 +402,9 @@ internal static class Program
                     && (ductCalculationDetails.Rtf ?? "").Contains("\\emfblip", StringComparison.Ordinal)
                     && (ductCalculationDetails.Rtf ?? "").Contains("\\red190\\green44\\blue44", StringComparison.Ordinal)
                     && (ductCalculationDetails.Rtf ?? "").Contains("\\red0\\green105\\blue154", StringComparison.Ordinal),
-                "The Duct Calculator should show equations first, organized parameters, red inputs, and blue solved equation substitutions.");
+                "The Duct Calculator should show equations first, organized parameters, red inputs, and blue solved equation substitutions. "
+                + $"Headings={ductCalculationDetails.Text.Contains("REQUIRED EQUATIONS", StringComparison.Ordinal)}/{ductCalculationDetails.Text.Contains("PARAMETERS AND SUB-EQUATIONS", StringComparison.Ordinal)}/{ductCalculationDetails.Text.Contains("INPUT VALUES", StringComparison.Ordinal)}/{ductCalculationDetails.Text.Contains("SOLVED PARAMETERS — EQUATION SUBSTITUTIONS", StringComparison.Ordinal)}, "
+                + $"emf={(ductCalculationDetails.Rtf ?? "").Contains("\\emfblip", StringComparison.Ordinal)}, red={(ductCalculationDetails.Rtf ?? "").Contains("\\red190\\green44\\blue44", StringComparison.Ordinal)}, blue={(ductCalculationDetails.Rtf ?? "").Contains("\\red0\\green105\\blue154", StringComparison.Ordinal)}, length={ductCalculationDetails.TextLength}.");
             Require(ductCalculationDetails.Text.Contains("1. FINAL DUCT GEOMETRY", StringComparison.Ordinal)
                     && ductCalculationDetails.Text.Contains("2. AIR PROPERTIES", StringComparison.Ordinal)
                     && ductCalculationDetails.Text.Contains("Sutherland relation", StringComparison.Ordinal)
@@ -453,7 +460,7 @@ internal static class Program
             var ductPageCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_DUCT_PAGE_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(ductPageCapturePath))
             {
-                form.Size = new Size(1800, 1200);
+                form.Size = Sz(form, 1800, 1200);
                 form.PerformLayout();
                 Application.DoEvents();
                 using var preview = new Bitmap(form.Width, form.Height);
@@ -463,7 +470,7 @@ internal static class Program
                     $"Expanded Duct Calculator inputs should fit without a vertical scrollbar. " +
                     $"Panel={ductInputScroll.ClientSize}, table={ductInputTable.Size}, preferred={ductInputTable.PreferredSize}, " +
                     $"rows={string.Join(',', ductInputTable.GetRowHeights())}, styles={string.Join(',', ductInputTable.RowStyles.Cast<RowStyle>().Select(style => $"{style.SizeType}:{style.Height}"))}.");
-                form.Size = new Size(1280, 820);
+                form.Size = Sz(form, 1280, 820);
                 Application.DoEvents();
             }
             Require(ScreenBounds(airflowInput).Top < ScreenBounds(temperatureInput).Top
@@ -472,7 +479,7 @@ internal static class Program
             ClickButton(layoutNavigation);
             Application.DoEvents();
             Require(ribbonComponentTools.Length == 19
-                    && ribbonComponentTools.All(card => IsDescendantOf(card, ribbon) && card.Height <= 40)
+                    && ribbonComponentTools.All(card => IsDescendantOf(card, ribbon) && card.Height <= Px(40))
                     && ScreenBounds(ribbon).Bottom <= ScreenBounds(layoutCanvasHost).Top
                     && form.Controls.Find("LayoutToolPalette", true).Length == 0,
                 "The component toolbox should live in the Project ribbon, grouped by kind, above the drawing.");
@@ -521,8 +528,8 @@ internal static class Program
             Application.DoEvents();
             Require(inputCard.Region is not null && calculateButton.Region is not null,
                 "Primary cards and actions should use rounded edges.");
-            Require(mode.Width <= 250 && airflowInput.Width <= 135
-                    && ScreenBounds(mode).Left - ScreenBounds(Find<Label>(form, "InputLabel_mode")).Right <= 12,
+            Require(mode.Width <= Px(250) && airflowInput.Width <= Px(135)
+                    && ScreenBounds(mode).Left - ScreenBounds(Find<Label>(form, "InputLabel_mode")).Right <= Px(12),
                 $"Duct-calculator dropdowns and text inputs should use compact widths close to their labels. " +
                 $"Mode={mode.Width}, airflow={airflowInput.Width}, gap=" +
                 $"{ScreenBounds(mode).Left - ScreenBounds(Find<Label>(form, "InputLabel_mode")).Right}.");
@@ -535,7 +542,7 @@ internal static class Program
                     && form.Icon is { Width: > 0, Height: > 0 },
                 "The application should embed and display the HVAC application icon and open-source designer icon set.");
 
-            form.Size = new Size(800, 900);
+            form.Size = Sz(form, 800, 900);
             form.PerformLayout();
             Application.DoEvents();
             Require(content.ColumnCount == 1, "Narrow layout should stack inputs and outputs.");
@@ -575,8 +582,8 @@ internal static class Program
             Application.DoEvents();
             Require(targetFrictionInput.Visible && !maximumVelocityInput.Visible
                     && ScreenBounds(targetFrictionInput).Top > ScreenBounds(lengthInput).Top
-                    && ScreenBounds(targetFrictionInput).Top - ScreenBounds(lengthInput).Bottom <= 16,
-                "SP autosizing should show its target directly below duct length in the Calculation section.");
+                    && ScreenBounds(targetFrictionInput).Top - ScreenBounds(lengthInput).Bottom <= Px(16),
+                $"SP autosizing should show its target directly below duct length in the Calculation section. Length={ScreenBounds(lengthInput)}, target={ScreenBounds(targetFrictionInput)}, visible={targetFrictionInput.Visible}/{maximumVelocityInput.Visible}, form={form.Size}.");
             Require(rectangularSizingDimension.Visible && rectangularSizingValue.Visible
                     && rectangularSizingDimension.Items.Cast<object>().Select(item => item.ToString())
                         .SequenceEqual(new[] { "Width", "Height" })
@@ -596,7 +603,7 @@ internal static class Program
             if (!string.IsNullOrWhiteSpace(rectangularCapturePath))
             {
                 var priorSize = form.Size;
-                form.Size = new Size(1200, 1200);
+                form.Size = Sz(form, 1200, 1200);
                 form.PerformLayout();
                 Application.DoEvents();
                 using var rectangularPreview = new Bitmap(form.Width, form.Height);
@@ -618,7 +625,7 @@ internal static class Program
             Application.DoEvents();
             Require(maximumVelocityInput.Visible && !targetFrictionInput.Visible
                     && ScreenBounds(maximumVelocityInput).Top > ScreenBounds(lengthInput).Top
-                    && ScreenBounds(maximumVelocityInput).Top - ScreenBounds(lengthInput).Bottom <= 16,
+                    && ScreenBounds(maximumVelocityInput).Top - ScreenBounds(lengthInput).Bottom <= Px(16),
                 "Velocity autosizing should show its target directly below duct length in the Calculation section.");
             Require(!Descendants<Label>(inputCard).Any(label => label.Text == "DESIGN TARGET"),
                 "Autosize target inputs should remain in Calculation without a separate Design Target section.");
@@ -668,7 +675,7 @@ internal static class Program
                     && ScreenBounds(deleteAllSystem).Left > ScreenBounds(criticalPathFilter).Right
                     && viewFanInformation.Text.Replace("\n", " ", StringComparison.Ordinal) == "Fan Information",
                 "Isolate Critical Path should stay with the table, with Delete all isolated at the far right; fan information is a ribbon command.");
-            form.Size = new Size(1280, 820);
+            form.Size = Sz(form, 1280, 820);
             Application.DoEvents();
             tabs.SelectedTab = tabs.TabPages[1];
             Application.DoEvents();
@@ -735,7 +742,7 @@ internal static class Program
             var fittingPageCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_FITTING_PAGE_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(fittingPageCapturePath))
             {
-                form.Size = new Size(1800, 1200);
+                form.Size = Sz(form, 1800, 1200);
                 form.PerformLayout();
                 Application.DoEvents();
                 using var preview = new Bitmap(form.Width, form.Height);
@@ -745,7 +752,7 @@ internal static class Program
                     $"Expanded Fitting Calculator inputs should fit without a vertical scrollbar. " +
                     $"Panel={fittingInputScroll.ClientSize}, table={fittingBaseInputs.Size}, preferred={fittingBaseInputs.PreferredSize}, " +
                     $"rows={string.Join(',', fittingBaseInputs.GetRowHeights())}.");
-                form.Size = new Size(1280, 820);
+                form.Size = Sz(form, 1280, 820);
                 Application.DoEvents();
             }
             var fittingSelectorInputs = fittingSelectorPanel.Controls.Cast<Control>()
@@ -763,9 +770,9 @@ internal static class Program
                 $"Rows={fittingBaseInputs.GetRow(fittingAirflow)}/{fittingBaseInputs.GetRow(fittingShape)}/{fittingBaseInputs.GetRow(fittingDiameter)}, " +
                 $"Heights={string.Join(',', fittingBaseInputs.GetRowHeights())}, " +
                 $"Local={fittingAirflow.Bounds}/{fittingShape.Bounds}/{fittingDiameter.Bounds}.");
-            Require(fittingGroup.Width <= 180 && fittingType.Width <= 125
-                    && fittingAirflow.Width <= 120 && fittingShape.Width <= 165
-                    && ScreenBounds(fittingAirflow).Left - ScreenBounds(PrivateField<Label>(form, "_fittingAirflowLabel")).Right <= 12,
+            Require(fittingGroup.Width <= Px(180) && fittingType.Width <= Px(125)
+                    && fittingAirflow.Width <= Px(120) && fittingShape.Width <= Px(165)
+                    && ScreenBounds(fittingAirflow).Left - ScreenBounds(PrivateField<Label>(form, "_fittingAirflowLabel")).Right <= Px(12),
                 "Fitting dropdowns and text inputs should use compact widths close to their labels.");
             var groupedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var groupName in FittingCatalog.SelectionGroups)
@@ -1227,7 +1234,7 @@ internal static class Program
             UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             UiMember.Method("RefreshDuctSystemGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             ClickButton(layoutNavigation);
-            form.Size = new Size(1280, 820);
+            form.Size = Sz(form, 1280, 820);
             Application.DoEvents();
             Require(tabs.SelectedTab?.Name == "LayoutDesignerTab" && layoutCanvas.Visible,
                 "The Layout Designer navigation button should open the graphical canvas.");
@@ -1503,11 +1510,11 @@ internal static class Program
                     && form.Controls.Find("LayoutToolDuct", true).Length == 0,
                 "The layout toolbox should expose source/sink spaces, equipment, grouped fittings, and four calculation points without a duct icon.");
             Require(ribbonComponentTools.Length == 19
-                    && ribbonComponentTools.All(tool => tool.Height <= 40
+                    && ribbonComponentTools.All(tool => tool.Height <= Px(40)
                         && (layoutToolTips.GetToolTip(tool) ?? "").Contains("\r\n", StringComparison.Ordinal)),
                 $"The ribbon components should be compact captioned tools with names and explanations as hover help. Count={ribbonComponentTools.Length}.");
             Require(settingsButton.Visible && grid.AllowUserToOrderColumns
-                    && grid.RowTemplate.Height <= 26 && grid.ColumnHeadersHeight <= 52
+                    && grid.RowTemplate.Height <= Px(26) && grid.ColumnHeadersHeight <= Px(52)
                     && grid.Columns["Airflow"].ReadOnly == false
                     && grid.Columns["AirSystem"] is DataGridViewComboBoxColumn
                     && ((DataGridViewComboBoxColumn)grid.Columns["AirSystem"]).DisplayStyle
@@ -3678,7 +3685,7 @@ internal static class Program
             if (!string.IsNullOrWhiteSpace(portCapturePath))
             {
                 ClickButton(layoutNavigation);
-                form.Size = new Size(1280, 820);
+                form.Size = Sz(form, 1280, 820);
                 Application.DoEvents();
                 using var portPreview = new Bitmap(form.Width, form.Height);
                 form.DrawToBitmap(portPreview, new Rectangle(Point.Empty, form.Size));
@@ -3690,7 +3697,7 @@ internal static class Program
             {
                 tabs.SelectedTab = tabs.TabPages[0];
                 mode.SelectedIndex = 1;
-                form.Size = new Size(1280, 820);
+                form.Size = Sz(form, 1280, 820);
                 form.Show();
                 Application.DoEvents();
                 using var preview = new Bitmap(form.Width, form.Height);
@@ -3701,7 +3708,7 @@ internal static class Program
             if (!string.IsNullOrWhiteSpace(systemCapturePath))
             {
                 tabs.SelectedTab = tabs.TabPages[2];
-                form.Size = new Size(1280, 820);
+                form.Size = Sz(form, 1280, 820);
                 Application.DoEvents();
                 using var preview = new Bitmap(form.Width, form.Height);
                 form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
@@ -3716,7 +3723,7 @@ internal static class Program
                 fittingType.SelectedIndex = fittingType.Items.Cast<object>()
                     .Select((item, index) => (item, index))
                     .First(x => x.item.ToString()?.StartsWith("5-24 ", StringComparison.Ordinal) == true).index;
-                form.Size = new Size(1280, 820);
+                form.Size = Sz(form, 1280, 820);
                 UiMember.Method("ResetFittingInputScroll", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(form, null);
                 Application.DoEvents();
@@ -3744,7 +3751,7 @@ internal static class Program
                 fittingType.SelectedIndex = fittingType.Items.Cast<FittingDefinition>()
                     .Select((definition, index) => (definition, index))
                     .First(item => item.definition.Code == "3-5").index;
-                form.Size = new Size(1280, 820);
+                form.Size = Sz(form, 1280, 820);
                 Application.DoEvents();
                 fittingInputScroll.AutoScrollPosition = new Point(0, 255);
                 Application.DoEvents();
@@ -4065,10 +4072,27 @@ internal static class Program
         }
     }
 
+    /// <summary>A 96-DPI pixel length at the display scale the checks run at (100 % in CI, 150 % on a laptop).</summary>
+    private static int Px(int pixels) => DpiScaling.Scale(pixels);
+
+    /// <summary>A designed window size at the display scale, kept within the screen's working area.</summary>
+    private static Size Sz(Form form, int width, int height)
+    {
+        var area = Screen.FromControl(form).WorkingArea;
+        return new Size(Math.Min(Px(width), area.Width), Math.Min(Px(height), area.Height));
+    }
+
     private static void Require(bool condition, string message)
     {
-        if (!condition)
-            throw new InvalidOperationException(message);
+        if (condition)
+            return;
+        // Review aid: FANWORKS_UI_CONTINUE lists every failed check in one run instead of stopping at the first.
+        if (Environment.GetEnvironmentVariable("FANWORKS_UI_CONTINUE") is { Length: > 0 })
+        {
+            Console.WriteLine($"SOFTFAIL {message}");
+            return;
+        }
+        throw new InvalidOperationException(message);
     }
 }
 

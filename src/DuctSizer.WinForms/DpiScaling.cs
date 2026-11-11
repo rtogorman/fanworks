@@ -58,11 +58,28 @@ internal static class DpiScaling
     {
         if (!IsScaled)
             return;
+        // WinForms scales "no limit" (0) in a minimum or maximum size as if it were a length, which left controls
+        // with a maximum height of a couple of pixels. Remember the unlimited sides and restore them afterwards.
+        var limits = new List<(Control Control, Size Minimum, Size Maximum)>();
+        CollectSizeLimits(root, limits);
         root.Scale(new SizeF(Factor, Factor));
+        foreach (var (control, minimum, maximum) in limits)
+        {
+            control.MaximumSize = new Size(maximum.Width == 0 ? 0 : Scale(maximum.Width), maximum.Height == 0 ? 0 : Scale(maximum.Height));
+            control.MinimumSize = new Size(minimum.Width == 0 ? 0 : Scale(minimum.Width), minimum.Height == 0 ? 0 : Scale(minimum.Height));
+        }
         ScaleExtras(root);
         // Docked children of containers that were not laid out after scaling (pages not yet shown) keep their
         // scaled size; lay every container out again so they fit their parents.
         RelayoutTree(root);
+    }
+
+    private static void CollectSizeLimits(Control control, List<(Control, Size, Size)> limits)
+    {
+        if (control is not Form && (!control.MinimumSize.IsEmpty || !control.MaximumSize.IsEmpty))
+            limits.Add((control, control.MinimumSize, control.MaximumSize));
+        foreach (Control child in control.Controls)
+            CollectSizeLimits(child, limits);
     }
 
     private static void RelayoutTree(Control control)

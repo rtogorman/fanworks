@@ -953,7 +953,7 @@ internal sealed partial class DuctCalculatorScreen
 
     internal void ApplyResponsiveLayout(bool force = false)
     {
-        var shouldStack = _host.ClientSize.Width < 980;
+        var shouldStack = _host.ClientSize.Width < DpiScaling.Scale(980);
         if (!force && _host._contentLayout.Controls.Count > 0 && shouldStack == _stackedLayout)
             return;
 
