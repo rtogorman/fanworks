@@ -675,6 +675,11 @@ internal sealed class SelectionInspector : Panel
                 text = text[..bracket];
             return new string(text.ToLowerInvariant().Where(char.IsLetter).ToArray());
         }
+        // The editable position row ("Offset from Fan-001 ΔX / ΔY / ΔZ" or "Location X / Y / Z") replaces the
+        // three fixed "Relative delta" rows.
+        if (fixedLabel.StartsWith("Relative delta", StringComparison.OrdinalIgnoreCase)
+            && (editable.Contains('Δ', StringComparison.Ordinal) || editable.Contains("X / Y / Z", StringComparison.OrdinalIgnoreCase)))
+            return true;
         var a = Key(editable);
         var b = Key(fixedLabel);
         if (a.Length == 0 || b.Length == 0)
@@ -1246,7 +1251,14 @@ internal sealed class SelectionInspector : Panel
             if (input is not (TextBox or ComboBox or Label) && DpiScaling.IsScaled && !ScaledInputs.TryGetValue(input, out _))
             {
                 ScaledInputs.Add(input, new object());
-                input.Scale(new SizeF(DpiScaling.Factor, DpiScaling.Factor));
+                foreach (var table in new[] { input }.Concat(Descendants(input)).OfType<TableLayoutPanel>())
+                {
+                    foreach (ColumnStyle column in table.ColumnStyles)
+                    {
+                        if (column.SizeType == SizeType.Absolute)
+                            column.Width = DpiScaling.Scale(column.Width);
+                    }
+                }
             }
             Style(input);
             Controls.Add(_caption);
@@ -1256,8 +1268,10 @@ internal sealed class SelectionInspector : Panel
                 TextBox or ComboBox => Math.Max(DpiScaling.Scale(28), input.PreferredSize.Height + DpiScaling.Scale(4)),
                 Label label => Math.Max(DpiScaling.Scale(26), TextRenderer.MeasureText(label.Text, label.Font,
                     new Size(DpiScaling.Scale(170), 0), TextFormatFlags.WordBreak).Height + DpiScaling.Scale(6)),
-                _ => DpiScaling.Scale(30)
+                _ => Descendants(input).OfType<TextBox>().Select(box => box.PreferredHeight + 6)
+                    .DefaultIfEmpty(DpiScaling.Scale(30)).Max()
             };
+            _baseHeight = Height;
         }
 
         internal Control Input { get; }
@@ -1270,8 +1284,12 @@ internal sealed class SelectionInspector : Panel
             var captionWidth = Math.Max(1, (int)(width * 0.46) - DpiScaling.Scale(8));
             var captionHeight = TextRenderer.MeasureText(_caption.Text, _caption.Font, new Size(captionWidth, 0),
                 TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height + DpiScaling.Scale(6);
-            return Math.Max(Height, captionHeight);
+            // From the designed height, never from the current one: a first layout at a tiny width must not
+            // leave the row permanently tall.
+            return width < DpiScaling.Scale(120) ? _baseHeight : Math.Max(_baseHeight, captionHeight);
         }
+
+        private int _baseHeight;
 
         private static void Style(Control input)
         {
@@ -1286,6 +1304,11 @@ internal sealed class SelectionInspector : Panel
                         fixedText.TabStop = false;
                         break;
                     case TextBox text:
+                        if (text.Parent is TableLayoutPanel)
+                        {
+                            // Inside X / Y / Z or value-with-unit groups: the group is as tall as the box, so labels line up.
+                            text.Margin = new Padding(1, 2, DpiScaling.Scale(4), 2);
+                        }
                         text.BorderStyle = BorderStyle.FixedSingle;
                         text.BackColor = Color.White;
                         text.ForeColor = RibbonPalette.Ink;
@@ -1313,7 +1336,8 @@ internal sealed class SelectionInspector : Panel
             var inputHeight = Input switch
             {
                 TextBox or ComboBox => Input.PreferredSize.Height,
-                _ => ClientSize.Height - DpiScaling.Scale(2)
+                Label => ClientSize.Height - DpiScaling.Scale(2),
+                _ => Math.Min(_baseHeight, ClientSize.Height) // a group keeps its own height, centred on the row
             };
             Input.SetBounds(captionWidth, Math.Max(0, (ClientSize.Height - inputHeight) / 2), inputWidth, inputHeight);
         }
