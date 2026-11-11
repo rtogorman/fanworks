@@ -35,7 +35,8 @@ public sealed partial class MainForm : DpiScaledForm
         var fitted = OpeningSize(Size, workingArea);
         // A design tool wants the whole screen: open maximized whenever the designed window does not fit
         // (interface checks keep the plain window so its size is predictable).
-        if (fitted != Size && !AutomationOptions.SuppressDialogs)
+        var fillsScreen = fitted != Size || Height >= workingArea.Height || Width >= workingArea.Width;
+        if (fillsScreen && !AutomationOptions.SuppressDialogs)
         {
             WindowState = FormWindowState.Maximized;
             return;

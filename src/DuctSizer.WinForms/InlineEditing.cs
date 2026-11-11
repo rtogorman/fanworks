@@ -118,7 +118,7 @@ internal static class InlineText
             if (word.Length == 0)
                 continue;
             // Item IDs (Fan-001) and short acronyms (GRD, SP) stay as written.
-            if (word.Any(char.IsDigit))
+            if (word.Any(char.IsDigit) || word.Any(character => character > 127)) // Fan-001, ΔX
                 continue;
             var letters = word.Where(char.IsLetter).ToArray();
             var acronym = !shouting && letters.Length is > 1 and <= 3 && letters.All(char.IsUpper);

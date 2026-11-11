@@ -1241,6 +1241,13 @@ internal sealed class SelectionInspector : Panel
             toolTips.SetToolTip(_caption, caption);
             input.Dock = DockStyle.None;
             input.Margin = Padding.Empty;
+            // A composite input (X / Y / Z boxes, a value with its unit) comes from an editor window that was
+            // never shown, so it has not been scaled to the display yet. Scale it once.
+            if (input is not (TextBox or ComboBox or Label) && DpiScaling.IsScaled && !ScaledInputs.TryGetValue(input, out _))
+            {
+                ScaledInputs.Add(input, new object());
+                input.Scale(new SizeF(DpiScaling.Factor, DpiScaling.Factor));
+            }
             Style(input);
             Controls.Add(_caption);
             Controls.Add(input);
@@ -1254,6 +1261,8 @@ internal sealed class SelectionInspector : Panel
         }
 
         internal Control Input { get; }
+
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Control, object> ScaledInputs = new();
 
         /// <summary>Tall enough for the control and for a caption that wraps onto two lines.</summary>
         internal int MeasureHeight(int width)
