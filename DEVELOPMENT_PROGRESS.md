@@ -459,6 +459,12 @@ Ryan's requests (verbatim intent):
 
 Also fixed at 175 %: drawing table had no column style (canvas grew off-screen); bottom panel set up after Shown. v0.97.0.
 
+**Polish round complete — v0.97.0** (synced at 16c63fe; laptop build 0 warnings, 65/65, UI 21/21 at the laptop's 150 % scale; viewed on the laptop).
+Lessons: interface checks must run at a scaled display too (`/home/claude/ui150.sh`; `UICONTINUE=1` lists all failures);
+`TextBoxBase.AppendText` restores the caret when the box has no size, so rich text is written with `EngineeringMathRichText.AppendAtEnd`;
+`Control.Scale` scales "no limit" size limits (handled in `DpiScaling.ScaleControlTree`); laptop build is started with `outputs\_RunBuild.cmd`.
+CI check "Designer workspace should pan upward and leftward" failed once on 0095a9a and passed on the next push — watch for repeats.
+
 Wine DPI test: `/home/claude/dpi.sh 168` then screenshot at 2688x1680 (`/home/claude/shotboth.sh prefix`); always set back to 96 for UI tests.
 
 ### Resume notes (update as work proceeds)
