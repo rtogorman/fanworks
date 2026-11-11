@@ -47,9 +47,7 @@ internal static class Program
             var openingCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_OPENING_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(openingCapturePath))
             {
-                using var openingPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(openingPreview, new Rectangle(Point.Empty, form.Size));
-                openingPreview.Save(openingCapturePath);
+                CaptureForm(form, openingCapturePath);
             }
 
             // Report-only run (Linux review aid): write the report of the loaded project and stop.
@@ -296,9 +294,7 @@ internal static class Program
                 {
                     settingsDialog.Show(form);
                     Application.DoEvents();
-                    using var settingsPreview = new Bitmap(settingsDialog.Width, settingsDialog.Height);
-                    settingsDialog.DrawToBitmap(settingsPreview, new Rectangle(Point.Empty, settingsDialog.Size));
-                    settingsPreview.Save(settingsCapturePath);
+                    CaptureForm(settingsDialog, settingsCapturePath);
                     settingsDialog.Hide();
                 }
             }
@@ -320,6 +316,21 @@ internal static class Program
                 Require(string.IsNullOrWhiteSpace(Find<TextBox>(automaticSizingDialog, "DuctDiameter").Text)
                         && string.IsNullOrWhiteSpace(Find<TextBox>(automaticSizingDialog, "DuctWidth").Text),
                     "Automatic duct sizing should not prefill a round diameter or rectangular width that the solver must calculate.");
+                var sizingCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_SIZING_CAPTURE_PATH");
+                if (!string.IsNullOrWhiteSpace(sizingCapturePath))
+                {
+                    automaticSizingDialog.Show(form);
+                    Application.DoEvents();
+                    Application.DoEvents();
+                    CaptureForm(automaticSizingDialog, sizingCapturePath);
+                    componentList.SelectedItem = "Elbow";
+                    Application.DoEvents();
+                    Application.DoEvents();
+                    CaptureForm(automaticSizingDialog, Path.ChangeExtension(sizingCapturePath, ".elbow.png"));
+                    componentList.SelectedItem = "Duct";
+                    Application.DoEvents();
+                    automaticSizingDialog.Hide();
+                }
                 componentList.SelectedItem = "Elbow";
                 Application.DoEvents();
                 Require(Find<ComboBox>(automaticSizingDialog, "AutomaticFittingDefinition").Items.Count > 0
@@ -463,9 +474,7 @@ internal static class Program
                 form.Size = Sz(form, 1800, 1200);
                 form.PerformLayout();
                 Application.DoEvents();
-                using var preview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
-                preview.Save(ductPageCapturePath);
+                CaptureForm(form, ductPageCapturePath);
                 Require(!ductInputScroll.VerticalScroll.Visible,
                     $"Expanded Duct Calculator inputs should fit without a vertical scrollbar. " +
                     $"Panel={ductInputScroll.ClientSize}, table={ductInputTable.Size}, preferred={ductInputTable.PreferredSize}, " +
@@ -516,9 +525,7 @@ internal static class Program
             var quickViewCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_QUICKVIEW_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(quickViewCapturePath))
             {
-                using var quickViewPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(quickViewPreview, new Rectangle(Point.Empty, form.Size));
-                quickViewPreview.Save(quickViewCapturePath);
+                CaptureForm(form, quickViewCapturePath);
             }
             ClickButton(layoutSummaryReopen);
             Application.DoEvents();
@@ -606,9 +613,7 @@ internal static class Program
                 form.Size = Sz(form, 1200, 1200);
                 form.PerformLayout();
                 Application.DoEvents();
-                using var rectangularPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(rectangularPreview, new Rectangle(Point.Empty, form.Size));
-                rectangularPreview.Save(rectangularCapturePath);
+                CaptureForm(form, rectangularCapturePath);
                 form.Size = priorSize;
                 form.PerformLayout();
                 Application.DoEvents();
@@ -745,9 +750,7 @@ internal static class Program
                 form.Size = Sz(form, 1800, 1200);
                 form.PerformLayout();
                 Application.DoEvents();
-                using var preview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
-                preview.Save(fittingPageCapturePath);
+                CaptureForm(form, fittingPageCapturePath);
                 Require(!fittingInputScroll.VerticalScroll.Visible,
                     $"Expanded Fitting Calculator inputs should fit without a vertical scrollbar. " +
                     $"Panel={fittingInputScroll.ClientSize}, table={fittingBaseInputs.Size}, preferred={fittingBaseInputs.PreferredSize}, " +
@@ -811,9 +814,7 @@ internal static class Program
             var titus350RCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_GRILLE_FITTING_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(titus350RCapturePath))
             {
-                using var titus350RPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(titus350RPreview, new Rectangle(Point.Empty, form.Size));
-                titus350RPreview.Save(titus350RCapturePath);
+                CaptureForm(form, titus350RCapturePath);
             }
             var priceDiffuserIndex = fittingType.Items.Cast<FittingDefinition>()
                 .Select((definition, index) => (definition, index))
@@ -836,9 +837,7 @@ internal static class Program
             var grdCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_GRD_FITTING_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(grdCapturePath))
             {
-                using var grdPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(grdPreview, new Rectangle(Point.Empty, form.Size));
-                grdPreview.Save(grdCapturePath);
+                CaptureForm(form, grdCapturePath);
             }
             var titusIndex = fittingType.Items.Cast<FittingDefinition>()
                 .Select((definition, index) => (definition, index))
@@ -865,9 +864,7 @@ internal static class Program
             var titusCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_TITUS_FITTING_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(titusCapturePath))
             {
-                using var titusPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(titusPreview, new Rectangle(Point.Empty, form.Size));
-                titusPreview.Save(titusCapturePath);
+                CaptureForm(form, titusCapturePath);
             }
             fittingGroup.SelectedItem = FittingCatalog.VavSelectionGroup;
             Application.DoEvents();
@@ -1019,9 +1016,7 @@ internal static class Program
                 var galleryCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_GALLERY_CAPTURE_PATH");
                 if (!string.IsNullOrWhiteSpace(galleryCapturePath))
                 {
-                    using var galleryPreview = new Bitmap(galleryForm.Width, galleryForm.Height);
-                    galleryForm.DrawToBitmap(galleryPreview, new Rectangle(Point.Empty, galleryForm.Size));
-                    galleryPreview.Save(galleryCapturePath);
+                    CaptureForm(galleryForm, galleryCapturePath);
                 }
                 galleryForm.Close();
             }
@@ -1050,9 +1045,7 @@ internal static class Program
                 var viewerCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_VIEWER_CAPTURE_PATH");
                 if (!string.IsNullOrWhiteSpace(viewerCapturePath))
                 {
-                    using var viewerPreview = new Bitmap(viewerForm.Width, viewerForm.Height);
-                    viewerForm.DrawToBitmap(viewerPreview, new Rectangle(Point.Empty, viewerForm.Size));
-                    viewerPreview.Save(viewerCapturePath);
+                    CaptureForm(viewerForm, viewerCapturePath);
                 }
                 viewerForm.Close();
             }
@@ -1432,9 +1425,7 @@ internal static class Program
             var negativeViewCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_NEGATIVE_VIEW_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(negativeViewCapturePath))
             {
-                using var negativeViewPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(negativeViewPreview, new Rectangle(Point.Empty, form.Size));
-                negativeViewPreview.Save(negativeViewCapturePath);
+                CaptureForm(form, negativeViewCapturePath);
             }
             layoutViewMode.SelectedIndex = 2;
             Application.DoEvents();
@@ -1624,7 +1615,7 @@ internal static class Program
                         && locationX.Text == "12"
                         && locationX.Parent == locationY.Parent && locationY.Parent == locationZ.Parent
                         && locationX.Top == locationY.Top && locationY.Top == locationZ.Top
-                        && Descendants<Label>(grdDialog).Any(label => label.Text == "RELATIVE DELTA (ft)")
+                        && Descendants<Label>(grdDialog).Any(label => label.Text == "Relative ΔX / ΔY / ΔZ (ft)")
                         && grdDialog.ClientSize.Width <= 520,
                     "The GRD popup should provide generic and manufacturer-table GRD choices, airflow, published selection inputs/results, pressure drop, air system, and coordinates.");
             }
@@ -1961,7 +1952,7 @@ internal static class Program
                 };
                 Require(coordinateInputs.All(input => !input.ReadOnly)
                         && Descendants<Label>(connectedEquipmentDialog)
-                            .Any(label => label.Text == "ABSOLUTE X / Y / Z (ft)"),
+                            .Any(label => label.Text == "Absolute position X / Y / Z (ft)"),
                     "A connected component editor should expose editable absolute X, Y, and Z coordinates.");
             }
             var placementDialogType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutComponentPlacementDialog")
@@ -1979,7 +1970,7 @@ internal static class Program
                 Require(placementDialog.Text == "Confirm Relative Coordinates"
                         && placementInputs.Length == 3
                         && Descendants<ComboBox>(placementDialog).Count() == 0
-                        && Descendants<Label>(placementDialog).Any(label => label.Text == "RELATIVE Δ (ft)")
+                        && Descendants<Label>(placementDialog).Any(label => label.Text == "Relative ΔX / ΔY / ΔZ (ft)")
                         && undefinedPlacementNode.AirflowM3PerS == 0
                         && !undefinedPlacementNode.IsDefined,
                     "Initial component placement should request only X/Y/Z location and leave the component undefined without airflow or sizing data.");
@@ -1988,9 +1979,7 @@ internal static class Program
                 {
                     placementDialog.Show(form);
                     Application.DoEvents();
-                    using var placementPreview = new Bitmap(placementDialog.Width, placementDialog.Height);
-                    placementDialog.DrawToBitmap(placementPreview, new Rectangle(Point.Empty, placementDialog.Size));
-                    placementPreview.Save(placementCapturePath);
+                    CaptureForm(placementDialog, placementCapturePath);
                     placementDialog.Hide();
                 }
             }
@@ -2411,9 +2400,7 @@ internal static class Program
             var snapPreviewCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_SNAP_PREVIEW_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(snapPreviewCapturePath))
             {
-                using var snapPreview = new Bitmap(layoutCanvas.Width, layoutCanvas.Height);
-                layoutCanvas.DrawToBitmap(snapPreview, new Rectangle(Point.Empty, layoutCanvas.Size));
-                snapPreview.Save(snapPreviewCapturePath);
+                CaptureForm(layoutCanvas, snapPreviewCapturePath);
             }
             setSnapPreview.Invoke(layoutCanvas, new object?[] { null });
             var undefinedCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_UNDEFINED_CAPTURE_PATH");
@@ -2428,9 +2415,7 @@ internal static class Program
                 document.LayoutNodes.Add(undefinedNode);
                 UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
                 Application.DoEvents();
-                using var undefinedPreview = new Bitmap(layoutCanvas.Width, layoutCanvas.Height);
-                layoutCanvas.DrawToBitmap(undefinedPreview, new Rectangle(Point.Empty, layoutCanvas.Size));
-                undefinedPreview.Save(undefinedCapturePath);
+                CaptureForm(layoutCanvas, undefinedCapturePath);
                 document.LayoutNodes.Remove(undefinedNode);
                 UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             }
@@ -2518,9 +2503,7 @@ internal static class Program
             var ductSelectionCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_DUCT_SELECTION_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(ductSelectionCapturePath))
             {
-                using var ductSelectionPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(ductSelectionPreview, new Rectangle(Point.Empty, form.Size));
-                ductSelectionPreview.Save(ductSelectionCapturePath);
+                CaptureForm(form, ductSelectionCapturePath);
             }
 
             var isolatedNode = new SavedLayoutNode
@@ -2843,9 +2826,7 @@ internal static class Program
             {
                 ClickButton(layoutNavigation);
                 Application.DoEvents();
-                using var preview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
-                preview.Save(pdfBackgroundCapturePath);
+                CaptureForm(form, pdfBackgroundCapturePath);
             }
             var pdfDialogCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_PDF_DIALOG_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(pdfDialogCapturePath))
@@ -2858,9 +2839,7 @@ internal static class Program
                     ?? throw new InvalidOperationException("Could not create the PDF import dialog.");
                 importDialog.Show(form);
                 Application.DoEvents();
-                using var dialogPreview = new Bitmap(importDialog.Width, importDialog.Height);
-                importDialog.DrawToBitmap(dialogPreview, new Rectangle(Point.Empty, importDialog.Size));
-                dialogPreview.Save(pdfDialogCapturePath);
+                CaptureForm(importDialog, pdfDialogCapturePath);
                 importDialog.Hide();
             }
             var pdfBoundsMethod = layoutCanvas.GetType().GetMethod("PdfBackgroundBounds",
@@ -2897,9 +2876,7 @@ internal static class Program
             {
                 ClickButton(layoutNavigation);
                 Application.DoEvents();
-                using var zoomedPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(zoomedPreview, new Rectangle(Point.Empty, form.Size));
-                zoomedPreview.Save(zoomedOutCapturePath);
+                CaptureForm(form, zoomedOutCapturePath);
             }
             zoomProperty.SetValue(layoutCanvas, originalZoom);
             layoutCanvas.GetType().GetField("_viewOffset", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -3136,9 +3113,7 @@ internal static class Program
             {
                 ClickButton(layoutNavigation);
                 Application.DoEvents();
-                using var layoutPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(layoutPreview, new Rectangle(Point.Empty, form.Size));
-                layoutPreview.Save(layoutCapturePath);
+                CaptureForm(form, layoutCapturePath);
             }
             var directDuctEditorType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutDuctEditDialog")
                                        ?? throw new InvalidOperationException("Could not find the direct designer duct editor.");
@@ -3171,9 +3146,7 @@ internal static class Program
                 {
                     directDuctEditor.Show(form);
                     Application.DoEvents();
-                    using var preview = new Bitmap(directDuctEditor.Width, directDuctEditor.Height);
-                    directDuctEditor.DrawToBitmap(preview, new Rectangle(Point.Empty, directDuctEditor.Size));
-                    preview.Save(directDuctCapturePath);
+                    CaptureForm(directDuctEditor, directDuctCapturePath);
                     directDuctEditor.Hide();
                 }
             }
@@ -3206,9 +3179,7 @@ internal static class Program
                 {
                     equipmentDialog.Show(form);
                     Application.DoEvents();
-                    using var equipmentDialogPreview = new Bitmap(equipmentDialog.Width, equipmentDialog.Height);
-                    equipmentDialog.DrawToBitmap(equipmentDialogPreview, new Rectangle(Point.Empty, equipmentDialog.Size));
-                    equipmentDialogPreview.Save(equipmentDialogCapturePath);
+                    CaptureForm(equipmentDialog, equipmentDialogCapturePath);
                     equipmentDialog.Hide();
                 }
             }
@@ -3230,8 +3201,8 @@ internal static class Program
                         null)!;
                     var caption = Find<Label>(offsetDialog, "LayoutLocationCaption");
                     var xBox = Descendants<TextBox>(offsetDialog).First(box => box.Text == "10");
-                    Require(caption.Text.StartsWith("OFFSET FROM REF-1", StringComparison.Ordinal)
-                            && caption.Text.Contains("DOWNSTREAM", StringComparison.Ordinal) == downstreamReference,
+                    Require(caption.Text.StartsWith("Offset from REF-1", StringComparison.Ordinal)
+                            && caption.Text.Contains("downstream", StringComparison.Ordinal) == downstreamReference,
                         $"The equipment dialog should label the position as an offset from the reference component. Caption: {caption.Text}");
                     xBox.Text = "14";
                     var save = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutEquipmentDialog")!
@@ -3281,7 +3252,7 @@ internal static class Program
                 Application.DoEvents();
                 var description = Descendants<Label>(fittingDialog).Single(label =>
                     label.Text.Contains(longDefinition.Description, StringComparison.Ordinal));
-                var locationLabel = Descendants<Label>(fittingDialog).Single(label => label.Text == "RELATIVE DELTA (ft)");
+                var locationLabel = Descendants<Label>(fittingDialog).Single(label => label.Text == "Relative ΔX / ΔY / ΔZ (ft)");
                 var note = Descendants<Label>(fittingDialog).Single(label =>
                     label.Text.StartsWith("Changing the upstream item", StringComparison.Ordinal));
                 var editFitting = Find<Button>(fittingDialog, "LayoutFittingEditButton");
@@ -3304,9 +3275,7 @@ internal static class Program
                 var fittingDialogCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_FITTING_LAYOUT_DIALOG_CAPTURE_PATH");
                 if (!string.IsNullOrWhiteSpace(fittingDialogCapturePath))
                 {
-                    using var fittingDialogPreview = new Bitmap(fittingDialog.Width, fittingDialog.Height);
-                    fittingDialog.DrawToBitmap(fittingDialogPreview, new Rectangle(Point.Empty, fittingDialog.Size));
-                    fittingDialogPreview.Save(fittingDialogCapturePath);
+                    CaptureForm(fittingDialog, fittingDialogCapturePath);
                 }
                 fittingDialog.Hide();
             }
@@ -3342,9 +3311,7 @@ internal static class Program
                 {
                     directFittingEditor.Show(form);
                     Application.DoEvents();
-                    using var preview = new Bitmap(directFittingEditor.Width, directFittingEditor.Height);
-                    directFittingEditor.DrawToBitmap(preview, new Rectangle(Point.Empty, directFittingEditor.Size));
-                    preview.Save(directFittingCapturePath);
+                    CaptureForm(directFittingEditor, directFittingCapturePath);
                     directFittingEditor.Hide();
                 }
             }
@@ -3533,9 +3500,7 @@ internal static class Program
             var splitCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_SPLIT_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(splitCapturePath))
             {
-                using var splitPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(splitPreview, new Rectangle(Point.Empty, form.Size));
-                splitPreview.Save(splitCapturePath);
+                CaptureForm(form, splitCapturePath);
             }
             document.LayoutNodes.Remove(splitPreviewNode);
             document.LayoutNodes.Remove(splitSameBranch);
@@ -3687,9 +3652,7 @@ internal static class Program
                 ClickButton(layoutNavigation);
                 form.Size = Sz(form, 1280, 820);
                 Application.DoEvents();
-                using var portPreview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(portPreview, new Rectangle(Point.Empty, form.Size));
-                portPreview.Save(portCapturePath);
+                CaptureForm(form, portCapturePath);
             }
 
             var capturePath = Environment.GetEnvironmentVariable("DUCTSIZER_UI_CAPTURE_PATH");
@@ -3700,9 +3663,7 @@ internal static class Program
                 form.Size = Sz(form, 1280, 820);
                 form.Show();
                 Application.DoEvents();
-                using var preview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
-                preview.Save(capturePath);
+                CaptureForm(form, capturePath);
             }
             var systemCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_SYSTEM_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(systemCapturePath))
@@ -3710,9 +3671,7 @@ internal static class Program
                 tabs.SelectedTab = tabs.TabPages[2];
                 form.Size = Sz(form, 1280, 820);
                 Application.DoEvents();
-                using var preview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
-                preview.Save(systemCapturePath);
+                CaptureForm(form, systemCapturePath);
             }
             var fittingCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_FITTING_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(fittingCapturePath))
@@ -3738,9 +3697,7 @@ internal static class Program
                     $"The fitting selector row must not collapse and clip its group, number, common inputs, or preview image. " +
                     $"Selector row={fittingBaseInputs.GetRow(fittingSelectorPanel)}, height={ScreenBounds(fittingSelectorPanel).Height}, " +
                     $"rows={string.Join(',', fittingBaseInputs.GetRowHeights())}, styles={string.Join(',', fittingBaseInputs.RowStyles.Cast<RowStyle>().Select(style => $"{style.SizeType}:{style.Height}"))}.");
-                using var preview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
-                preview.Save(fittingCapturePath);
+                CaptureForm(form, fittingCapturePath);
             }
             var spacingCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_SPACING_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(spacingCapturePath))
@@ -3755,9 +3712,7 @@ internal static class Program
                 Application.DoEvents();
                 fittingInputScroll.AutoScrollPosition = new Point(0, 255);
                 Application.DoEvents();
-                using var preview = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(preview, new Rectangle(Point.Empty, form.Size));
-                preview.Save(spacingCapturePath);
+                CaptureForm(form, spacingCapturePath);
             }
             UiMember.Method("ClearAllSystemData", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             Application.DoEvents();
@@ -4080,6 +4035,21 @@ internal static class Program
     {
         var area = Screen.FromControl(form).WorkingArea;
         return new Size(Math.Min(Px(width), area.Width), Math.Min(Px(height), area.Height));
+    }
+
+    /// <summary>Saves what is on screen inside a window (review aid; DrawToBitmap misses child windows under Wine).</summary>
+    private static void CaptureForm(Control window, string path)
+    {
+        window.FindForm()?.BringToFront();
+        window.Refresh();
+        Application.DoEvents();
+        Thread.Sleep(300);
+        Application.DoEvents();
+        var bounds = window is Form ? window.Bounds : window.RectangleToScreen(window.ClientRectangle);
+        using var bitmap = new Bitmap(bounds.Width, bounds.Height);
+        using (var graphics = Graphics.FromImage(bitmap))
+            graphics.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
+        bitmap.Save(path);
     }
 
     private static void Require(bool condition, string message)

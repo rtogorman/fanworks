@@ -13,6 +13,8 @@ public sealed partial class MainForm : DpiScaledForm
     private LayoutDesignerScreen? _layoutScreen;
     internal LayoutDesignerScreen LayoutScreen => _layoutScreen ??= new LayoutDesignerScreen(this);
 
+    protected override bool UsesDialogStyle => false;
+
     protected override bool ProcessCmdKey(ref Message message, Keys keyData) =>
         LayoutScreen.TryHandleCommandKey(keyData) || base.ProcessCmdKey(ref message, keyData);
 

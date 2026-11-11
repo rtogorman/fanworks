@@ -141,6 +141,9 @@ public class DpiScaledForm : Form
 {
     private bool _scaledToDisplay;
 
+    /// <summary>Whether the shared pop-up field layout (<see cref="DialogStyle"/>) applies. The main window lays out its own pages.</summary>
+    protected virtual bool UsesDialogStyle => true;
+
     protected override void OnLoad(EventArgs e)
     {
         if (!_scaledToDisplay)
@@ -158,6 +161,8 @@ public class DpiScaledForm : Form
                     CenterToScreen();
             }
         }
+        if (UsesDialogStyle)
+            DialogStyle.Attach(this);
         base.OnLoad(e);
     }
 }

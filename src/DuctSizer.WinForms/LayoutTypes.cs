@@ -28,11 +28,11 @@ internal readonly record struct LayoutEditableAxes(bool X, bool Y, bool Z);
 internal sealed record LayoutPositionReference(string Id, LayoutCoordinate Coordinate, bool IsDownstream)
 {
     internal string Caption => IsDownstream
-        ? $"OFFSET FROM {Id} (DOWNSTREAM) ΔX / ΔY / ΔZ (ft)"
-        : $"OFFSET FROM {Id} ΔX / ΔY / ΔZ (ft)";
+        ? $"Offset from {Id} (downstream), ΔX / ΔY / ΔZ (ft)"
+        : $"Offset from {Id}, ΔX / ΔY / ΔZ (ft)";
 
     internal static string CaptionFor(LayoutPositionReference? reference) =>
-        reference?.Caption ?? "ABSOLUTE X / Y / Z (ft)";
+        reference?.Caption ?? "Absolute position X / Y / Z (ft)";
 
     /// <summary>Converts an absolute position to the offset shown to the user.</summary>
     internal static LayoutCoordinate ToDisplay(LayoutCoordinate absolute, LayoutPositionReference? reference) =>

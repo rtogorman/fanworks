@@ -13,7 +13,7 @@ internal sealed record InlineEditRow(string Label, Control Input, Func<bool>? Is
     internal string[] AxisLabels { get; init; } = { "X", "Y", "Z" };
 
     /// <summary>
-    /// A position row from the editor's caption: "OFFSET FROM C-039 ΔX / ΔY / ΔZ (ft)" becomes the caption
+    /// A position row from the editor's caption: "Offset from C-039, ΔX / ΔY / ΔZ (ft)" becomes the caption
     /// "Offset from C-039 (ft)" with the boxes labelled ΔX, ΔY and ΔZ.
     /// </summary>
     internal static InlineEditRow ForPosition(string editorCaption, Control group, TextBox x, TextBox y, TextBox z)
@@ -23,7 +23,7 @@ internal sealed record InlineEditRow(string Label, Control Input, Func<bool>? Is
                      || editorCaption.Contains("OFFSET", StringComparison.OrdinalIgnoreCase);
         var caption = editorCaption.Replace("ΔX / ΔY / ΔZ", string.Empty, StringComparison.Ordinal)
             .Replace("X / Y / Z", string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Replace("  ", " ", StringComparison.Ordinal).Trim();
+            .Replace(", (", " (", StringComparison.Ordinal).Replace("  ", " ", StringComparison.Ordinal).Trim().TrimEnd(',');
         return new InlineEditRow(InlineText.SentenceCase(caption), group)
         {
             Axes = new[] { x, y, z },

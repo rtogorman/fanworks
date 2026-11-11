@@ -79,7 +79,7 @@ internal sealed class LayoutComponentPlacementDialog : DpiScaledForm
             ForeColor = Color.FromArgb(28, 69, 108),
             Font = new Font("Segoe UI Semibold", 9F)
         });
-        AddRow(table, 1, units == UnitSystem.Imperial ? "RELATIVE Δ (ft)" : "RELATIVE Δ (m)",
+        AddRow(table, 1, units == UnitSystem.Imperial ? "Relative ΔX / ΔY / ΔZ (ft)" : "Relative ΔX / ΔY / ΔZ (m)",
             LayoutDialogControls.CreateLocationEditor(_deltaX, _deltaY, _deltaZ));
         var buttonRow = 2;
         if (gridIncrement > 0)
