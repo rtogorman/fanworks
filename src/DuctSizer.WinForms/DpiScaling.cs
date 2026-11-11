@@ -60,6 +60,16 @@ internal static class DpiScaling
             return;
         root.Scale(new SizeF(Factor, Factor));
         ScaleExtras(root);
+        // Docked children of containers that were not laid out after scaling (pages not yet shown) keep their
+        // scaled size; lay every container out again so they fit their parents.
+        RelayoutTree(root);
+    }
+
+    private static void RelayoutTree(Control control)
+    {
+        control.PerformLayout();
+        foreach (Control child in control.Controls)
+            RelayoutTree(child);
     }
 
     private static void ScaleExtras(Control control)

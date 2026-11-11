@@ -11,7 +11,7 @@
     <AssemblyName>FanWorks</AssemblyName>
     <Product>FanWorks</Product>
     <Description>Standalone HVAC duct sizing and pressure-loss calculator.</Description>
-    <Version>0.96.0</Version>
+    <Version>0.97.0</Version>
     <ApplicationIcon>Assets\DuctSizerCentrifugalIcon.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>

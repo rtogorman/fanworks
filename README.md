@@ -30,7 +30,7 @@ FanWorks is an independent, standalone Windows HVAC duct-sizing, fitting-loss, a
 - Click selection with a visible highlight and Delete action; components can be dragged onto an existing connection to insert them between its endpoints
 - Automatically inferred connections that serve as duct segments: new ducts default to target-static-pressure autosizing from the upstream component airflow, while any connection that cannot be sized remains a valid red graphical link
 - Signed one-row Relative ΔX/ΔY/ΔZ inputs are confirmed when a newly placed component becomes connected to a defined component. The proposed X/Y values are populated from the selected grid location in real drawing units and Z defaults to zero. The first component is the `0,0,0` origin, and the system grid also resolves read-only absolute X/Y/Z coordinates through the connection graph
-- A selected Designer component can become a new coordinate reference through **Set Coordinate Origin**; its entered absolute coordinate offsets the resolved coordinates of the connected system without changing duct geometry
+- Projects saved with a coordinate origin keep it: its absolute coordinate offsets the resolved coordinates of the connected system without changing duct geometry (the command to set a new origin was removed in 0.97)
 - Automatic two-way refresh when opening Duct System or Layout Designer keeps linked airflow, coordinates, air-system metadata, and geometry synchronized
 - Canvas selections and the collapsible Duct System quick view stay synchronized in both directions, including exact duct-connection selection
 - Full-lattice grid-intersection snapping with a visible blue drop-target dot at every isometric intersection, a boundary-free virtual viewport with stable grab-and-drag panning, mouse-wheel zoom, compact component editors, and selectable highlighted duct segments
@@ -196,6 +196,31 @@ Version 0.78.0 adds the complete Titus 350R grille performance catalog with 78 n
 Version 0.44 adds signed relative-coordinate confirmation for newly connected components, graph-resolved absolute X/Y/Z schedule coordinates, first-component origin handling, and a selected-component **Set Coordinate Origin** workflow. Project identity and calculation defaults are separated into **Settings** and **Solver Settings**. The critical-path pressure audit now verifies loss-column summation and fan-to-sink pressure balance, while coil, filter, transition, terminal, elbow, and airflow symbols use locally embedded openly licensed HVAC-oriented artwork.
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
+
+## What changed in 0.97.0 (polish)
+
+- **Display scaling**: FanWorks now scales to the Windows display setting (125 %, 150 %, 175 % ...). Before, text
+  grew with the setting but buttons, columns and panels did not, so captions were cut off on high-resolution
+  laptops. Every window is scaled once when it opens; the main window opens maximized.
+- **Ribbon**: every caption is measured so it is never cut off, and on the Project tab the groups spread across
+  the whole ribbon. Larger logo; the FanWorks name is never clipped. The Quick Calc duct calculator shows a duct.
+- **Resizable panels**: drag the bars beside the Project Explorer and the Selection Inspector (double-click a bar
+  to reset it) and the grip above the bottom panel.
+- **System Overview**: 16 columns across the full panel (description, branch, size, airflow, velocity, SP rate,
+  SP drop, SP in/out, length, upstream/downstream, X/Y/Z), with units from the System table.
+- **Edit in the Selection Inspector**: fixed values and results are plain text; inputs you can change appear as
+  their own text boxes and drop-downs. **Update Component / Duct / Fitting** checks and applies the change exactly
+  as the editor window does (same checks, undo, save), **Cancel** discards it, and a refused value is explained
+  under the inputs with the item left unchanged. Ducts also offer Reverse Flow Direction.
+- **Drawing toolbar**: labelled **Insert PDF Underlay / PDF Underlay ▾** and **Source / Sink Editor** buttons.
+  The "set coordinate origin" command is removed (projects that already have an origin keep it).
+- **Report**: one sheet per component, duct and fitting (inputs, outputs and quick check on the left; the full
+  worksheet with required equations, substitutions, solved results and assumptions on the right; fitting figure
+  under the inputs). A sheet that would overflow continues on a "(continued)" sheet rather than dropping lines.
+  New title sheet with project block, fan-selection figures, critical path, report contents and system summary.
+  View sheets carry a labelled strip with graphic scale, grid spacing, sheet scale and view.
+- **Fixed**: the component editor showed the pressure drop as read-only for coils, filters, custom components,
+  fan static pressure and source pressure (a GRD-only setting applied to every type).
 
 ## What changed in 0.96.0 (interface redesign)
 

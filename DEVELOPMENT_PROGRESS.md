@@ -454,8 +454,10 @@ Ryan's requests (verbatim intent):
 | P1 | Done in code (0ba1f8b): root cause of cut-off text was Windows display scaling (Ryan's laptop 175 %): fonts grew, pixel sizes did not. `DpiScaling` + `DpiScaledForm` scale every window once; ribbon `RibbonPage`/`RibbonGroup`/`RibbonToolGrid` measure captions and fill the width; header logo 36 px, title auto-sized; duct icon. |
 | P2 | Done in code: `PanelSplitter` drag bars (double-click resets); bottom splitter grip; System Overview 16 columns, Fill. |
 | P3 | Done in code (4352cba): `IInlineEditable` on the 5 editors, `InlineEditSession`, shared Begin/Apply methods (`LayoutDesignerScreen.InlineEdit.cs`). Also fixed: component editor locked the pressure drop for all non-GRD types. |
-| P4 | Pending (report one page per item, title page, scale/grid notes) |
+| P4 | Done in code (70e50f3): `BuildItemSheets` one sheet per item with continuation; title sheet with contents; scale strip. Sample report 20 -> 16 pages. |
 | P5 | Done in code (ea63ab6): captioned toolbar buttons; origin command + dialog removed (laptop copy of LayoutCoordinateOriginDialog.cs must be stubbed). |
+
+Also fixed at 175 %: drawing table had no column style (canvas grew off-screen); bottom panel set up after Shown. v0.97.0.
 
 Wine DPI test: `/home/claude/dpi.sh 168` then screenshot at 2688x1680 (`/home/claude/shotboth.sh prefix`); always set back to 96 for UI tests.
 

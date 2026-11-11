@@ -62,6 +62,7 @@ internal sealed partial class LayoutDesignerScreen
     private readonly Button _layoutSummaryReopenButton = new();
     /// <summary>Height of the bottom panel (System Overview / Errors / Validation).</summary>
     private int _layoutSummaryWidth = 230;
+    private bool _hostShown;
     private bool _layoutSummaryInitialized;
     private bool _updatingLayoutSummarySplitter;
     private bool _syncingLayoutSelection;
@@ -120,6 +121,7 @@ internal sealed partial class LayoutDesignerScreen
             Padding = Padding.Empty,
             BackColor = _host.BackColor
         };
+        leftHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // without it the column sized to the drawing
         leftHost.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         UpdateLayoutHistoryButtons();
 
@@ -212,9 +214,15 @@ internal sealed partial class LayoutDesignerScreen
         _layoutWorkspaceSplitter.SizeChanged += (_, _) => InitializeLayoutSummarySplitter();
         // Set up once the page is on screen, i.e. after the window has been scaled to the display.
         _layoutWorkspaceSplitter.VisibleChanged += (_, _) => InitializeLayoutSummarySplitter();
+        _host.Shown += (_, _) =>
+        {
+            // After the window has been scaled and laid out at its final size.
+            _hostShown = true;
+            _host.BeginInvoke(new Action(InitializeLayoutSummarySplitter));
+        };
         void InitializeLayoutSummarySplitter()
         {
-            if (!_layoutWorkspaceSplitter.Visible || _layoutWorkspaceSplitter.FindForm() is not { Visible: true }
+            if (!_hostShown || !_layoutWorkspaceSplitter.Visible
                 || _layoutWorkspaceSplitter.Height < DpiScaling.Scale(320))
                 return;
             _updatingLayoutSummarySplitter = true;

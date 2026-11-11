@@ -22,6 +22,16 @@ internal static class Program
             form.CreateControl();
             form.Show();
             Application.DoEvents();
+            if (Environment.GetEnvironmentVariable("FANWORKS_DUMP_LAYOUT") is { Length: > 0 })
+            {
+                foreach (var name in new[] { "LayoutCanvasArea", "LayoutCanvasHost", "LayoutDesignerCanvas", "LayoutWorkspaceSplitter" })
+                {
+                    var control = form.Controls.Find(name, true).FirstOrDefault();
+                    Console.WriteLine($"DUMP {name}: bounds={control?.Bounds} client={control?.ClientSize} visible={control?.Visible} dock={control?.Dock}");
+                }
+                Console.WriteLine($"DUMP dpi={form.DeviceDpi}");
+                return 0;
+            }
             var openingArea = Screen.FromControl(form).WorkingArea;
             Require(form.Size == MainForm.OpeningSize(new Size(1200, 1200), openingArea)
                     && openingArea.Contains(form.Bounds),

@@ -124,3 +124,24 @@ suppression, storage path); they are internal and reachable only by the interfac
   project), and the two system screens are large (about 4,000 lines each). Further splitting should follow the
   feature seams inside them (report building, project files, Designer editing operations).
 - The interface test reaches private members by name through `UiMember`, which looks on the window and its screens.
+
+## Display scaling (v0.97)
+
+Windows are built in code with sizes in 96-DPI pixels; text is in points. `DpiScaledForm` (base of every form)
+scales the whole window once in `OnLoad` (`DpiScaling.ScaleControlTree`: bounds, margins, table styles, grid
+columns and rows, tree rows). Controls created or painted later use `DpiScaling.Scale`. The app is system-DPI
+aware, so one factor applies to the process. At 100 % the factor is 1 and nothing changes.
+
+## In-place editing (v0.97)
+
+Editor windows implement `IInlineEditable` (rows of their own controls, a status line, `TryAcceptInline` = the OK
+checks). `LayoutDesignerScreen.CreateInlineEditSession` builds an `InlineEditSession` from the same Begin/Apply
+methods the editor windows use (`LayoutDesignerScreen.InlineEdit.cs`), so the inspector and the windows cannot
+apply edits differently. The inspector rebuilds its rows when an editor's rows change and defers its own refresh
+while an edit is being applied.
+
+## Report sheets (v0.97)
+
+`DuctSystemPdf.BuildItemSheets` lays out one item per sheet (left column `DrawSideRows`, worksheet
+`DrawCalculationBlocks` in two columns) and continues on extra sheets when needed; page numbers are counted in a
+first pass. `BuildTitleSheet` receives the report contents for its page list.
