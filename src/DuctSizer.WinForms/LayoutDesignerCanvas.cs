@@ -61,6 +61,23 @@ internal sealed class LayoutDesignerCanvas : Panel
     internal event Action<LayoutConnectionRef>? ConnectionDeleteRequested;
     internal event Action<SavedLayoutNode, SavedLayoutNode, int, int>? PortConnectionRequested;
     internal event Action<SavedLayoutNode>? NodeDeleteRequested;
+
+    /// <summary>Raised when the selected item was right-clicked, with the pointer position on the drawing.</summary>
+    internal event Action<Point>? ItemMenuRequested;
+
+    internal bool HasSelection => _selectedNodeId is not null && NodeSource().Any(node => node.Id == _selectedNodeId)
+                                  || _selectedConnection is not null;
+
+    /// <summary>Deselects the selected component or duct. False when nothing was selected.</summary>
+    internal bool ClearSelection()
+    {
+        if (!HasSelection)
+            return false;
+        SetSelectedNode(null);
+        SetSelectedConnection(null);
+        Invalidate();
+        return true;
+    }
     internal event Action<SavedLayoutNode?>? SelectionChanged;
     internal event Action<LayoutConnectionRef?>? ConnectionSelectionChanged;
     internal event Action<Point>? EmptyGridClicked;
@@ -355,10 +372,21 @@ internal sealed class LayoutDesignerCanvas : Panel
             Capture = true;
             return;
         }
-        if (e.Button == MouseButtons.Right && _dragNode is not null)
+        if (e.Button == MouseButtons.Right)
         {
-            NodeDeleteRequested?.Invoke(_dragNode);
-            _dragNode = null;
+            // Right-click selects the item under the pointer and offers Edit / Delete.
+            if (_dragNode is not null)
+            {
+                var node = _dragNode;
+                _dragNode = null;
+                SetSelectedNode(node);
+                ItemMenuRequested?.Invoke(e.Location);
+            }
+            else if (HitTestConnection(e.Location) is LayoutConnectionRef rightClicked)
+            {
+                SetSelectedConnection(rightClicked);
+                ItemMenuRequested?.Invoke(e.Location);
+            }
         }
     }
 

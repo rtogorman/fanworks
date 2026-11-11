@@ -263,7 +263,12 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
         AddRow(table, row++, _absoluteLocation ? LayoutPositionReference.CaptionFor(_reference) : "RELATIVE DELTA (ft)",
             LayoutDialogControls.CreateLocationEditor(_deltaX, _deltaY, _deltaZ));
         if (table.GetControlFromPosition(0, row - 1) is Label locationCaption)
+        {
             locationCaption.Name = "LayoutLocationCaption";
+            // Replace the generic row recorded by AddRow with a position row for the inspector.
+            _inlineRows.RemoveAt(_inlineRows.Count - 1);
+            _inlineRows.Add(InlineEditRow.ForPosition(locationCaption.Text, table.GetControlFromPosition(1, row - 1)!, _deltaX, _deltaY, _deltaZ));
+        }
         if (showTopology)
         {
             AddRow(table, row++, "Upstream Item / Fitting", _upstream);

@@ -158,6 +158,7 @@ internal sealed partial class LayoutDesignerScreen
         _layoutCanvas.ConnectionDeleteRequested += RemoveLayoutConnection;
         _layoutCanvas.PortConnectionRequested += ConnectLayoutPorts;
         _layoutCanvas.NodeDeleteRequested += RemoveLayoutNode;
+        _layoutCanvas.ItemMenuRequested += ShowLayoutItemMenu;
         _layoutCanvas.SelectionChanged += node =>
         {
             if (node is not null)
@@ -4399,8 +4400,49 @@ internal sealed partial class LayoutDesignerScreen
             }
             if (keyData == Keys.Escape && CancelSelectedLayoutTool())
                 return true;
+            // Esc deselects and Delete removes the selected (for example just-dropped) item wherever the keyboard
+            // focus is on the Project page, except while typing in a text box or list.
+            if (keyData == Keys.Escape && _layoutCanvas?.ClearSelection() == true)
+            {
+                _layoutStatusLabel.Text = "Selection cleared.";
+                _layoutStatusLabel.ForeColor = Color.FromArgb(72, 92, 110);
+                return true;
+            }
+            if (keyData == Keys.Delete && _layoutCanvas?.HasSelection == true && !RearrangeModeActive)
+            {
+                _layoutCanvas.DeleteSelectedItem();
+                return true;
+            }
         }
         return false;
+    }
+
+    private bool RearrangeModeActive => _layoutCanvas?.RearrangeMode == true;
+
+    private ContextMenuStrip? _layoutItemMenu;
+
+    /// <summary>The right-click menu of the selected component or duct: Edit (in the Selection Inspector) / Delete.</summary>
+    private void ShowLayoutItemMenu(Point location)
+    {
+        if (_layoutCanvas is null)
+            return;
+        _layoutItemMenu?.Dispose();
+        var menu = new ContextMenuStrip { Name = "LayoutItemMenu", Font = new Font("Segoe UI", 9F), ShowImageMargin = false };
+        _layoutItemMenu = menu;
+        menu.Items.Add(new ToolStripMenuItem("Edit", null, (_, _) => EditSelectedItemInInspector()) { Name = "LayoutItemMenuEdit" });
+        menu.Items.Add(new ToolStripMenuItem("Delete", null, (_, _) => _layoutCanvas?.DeleteSelectedItem()) { Name = "LayoutItemMenuDelete" });
+        if (!AutomatedLayoutVerification)
+            menu.Show(_layoutCanvas, location);
+    }
+
+    /// <summary>Opens the Selection Inspector (if hidden) on the selected item, on its Description tab, ready to edit.</summary>
+    internal void EditSelectedItemInInspector()
+    {
+        if (_inspector is null)
+            return;
+        _inspector.ShowForEditing();
+        _layoutStatusLabel.Text = "Edit the inputs in the Selection Inspector, then choose Update.";
+        _layoutStatusLabel.ForeColor = Color.FromArgb(72, 92, 110);
     }
 
     private bool CancelSelectedLayoutTool()

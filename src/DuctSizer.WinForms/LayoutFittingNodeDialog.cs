@@ -130,7 +130,7 @@ internal sealed class LayoutFittingNodeDialog : DpiScaledForm, IInlineEditable
                 new InlineEditRow("Air system", _airSystem),
                 new InlineEditRow("Upstream item", _upstream),
                 new InlineEditRow("Downstream item(s)", downstream),
-                new InlineEditRow(InlineText.SentenceCase(locationCaption.Text), table.GetControlFromPosition(1, row - 1)!)
+                InlineEditRow.ForPosition(locationCaption.Text, table.GetControlFromPosition(1, row - 1)!, _deltaX, _deltaY, _deltaZ)
             });
         }
 

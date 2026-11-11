@@ -6,6 +6,31 @@ namespace DuctSizer.WinForms;
 /// <param name="IsShown">Whether the row applies at the moment (for example Diameter only for round ducts).</param>
 internal sealed record InlineEditRow(string Label, Control Input, Func<bool>? IsShown = null)
 {
+    /// <summary>For a position row: the X, Y and Z boxes, laid out by the inspector with a label beside each.</summary>
+    internal TextBox[]? Axes { get; init; }
+
+    /// <summary>Labels of the three boxes ("ΔX", "ΔY", "ΔZ" for an offset; "X", "Y", "Z" for a location).</summary>
+    internal string[] AxisLabels { get; init; } = { "X", "Y", "Z" };
+
+    /// <summary>
+    /// A position row from the editor's caption: "OFFSET FROM C-039 ΔX / ΔY / ΔZ (ft)" becomes the caption
+    /// "Offset from C-039 (ft)" with the boxes labelled ΔX, ΔY and ΔZ.
+    /// </summary>
+    internal static InlineEditRow ForPosition(string editorCaption, Control group, TextBox x, TextBox y, TextBox z)
+    {
+        var offset = editorCaption.Contains('Δ', StringComparison.Ordinal)
+                     || editorCaption.Contains("DELTA", StringComparison.OrdinalIgnoreCase)
+                     || editorCaption.Contains("OFFSET", StringComparison.OrdinalIgnoreCase);
+        var caption = editorCaption.Replace("ΔX / ΔY / ΔZ", string.Empty, StringComparison.Ordinal)
+            .Replace("X / Y / Z", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("  ", " ", StringComparison.Ordinal).Trim();
+        return new InlineEditRow(InlineText.SentenceCase(caption), group)
+        {
+            Axes = new[] { x, y, z },
+            AxisLabels = offset ? new[] { "ΔX", "ΔY", "ΔZ" } : new[] { "X", "Y", "Z" }
+        };
+    }
+
     internal bool Shown => IsShown?.Invoke() ?? true;
 }
 

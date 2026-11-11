@@ -224,6 +224,20 @@ internal sealed class SelectionInspector : Panel
         tabs.Controls.Add(button, column, 0);
     }
 
+    /// <summary>
+    /// Shows the panel (reopening it if it was collapsed) on the Description tab and puts the cursor in the first
+    /// editable input, so the selected item can be edited straight away (right-click → Edit on the drawing).
+    /// </summary>
+    internal void ShowForEditing()
+    {
+        SetCollapsed(false);
+        SelectTab(InspectorTab.Description);
+        var first = _inputsSection?.Controls.OfType<InspectorEditRow>()
+            .SelectMany(row => new[] { row.Input }.Concat(Descendants(row.Input)))
+            .FirstOrDefault(control => control is TextBox { ReadOnly: false, Enabled: true } or ComboBox { Enabled: true });
+        first?.Focus();
+    }
+
     private void SelectTab(InspectorTab tab)
     {
         if (_activeTab == InspectorTab.Notes && tab != InspectorTab.Notes)
@@ -548,6 +562,7 @@ internal sealed class SelectionInspector : Panel
         }
 
         var editableLabels = new List<string>();
+        var hasPositionRow = false;
         if (_session is not null)
         {
             foreach (var editor in _session.Editors)
@@ -557,16 +572,19 @@ internal sealed class SelectionInspector : Panel
                     editableLabels.Add(row.Label);
                     if (!row.Shown)
                         continue;
-                    var editRow = new InspectorEditRow(row.Label, row.Input, _toolTips);
-                    HookDirtyTracking(row.Input);
+                    var input = row.Axes is null ? row.Input : new InspectorAxisGroup(row.Axes, row.AxisLabels);
+                    hasPositionRow |= row.Axes is not null;
+                    var editRow = new InspectorEditRow(row.Label, input, _toolTips);
+                    HookDirtyTracking(input);
                     section.Controls.Add(editRow);
                 }
             }
         }
         foreach (var field in _fixedInputs)
         {
-            if (editableLabels.Any(label => SameInput(label, field.Label)))
-                continue;
+            if (editableLabels.Any(label => SameInput(label, field.Label))
+                || (hasPositionRow && field.Label.StartsWith("Relative delta", StringComparison.OrdinalIgnoreCase)))
+                continue; // shown above as an editable input (the position row replaces the three delta rows)
             section.Controls.Add(new InspectorFieldRow(field.Label, DisplayUnits(field.Value), _toolTips) { Fixed = _session is not null });
         }
 
@@ -695,7 +713,14 @@ internal sealed class SelectionInspector : Panel
         foreach (var editor in _session.Editors)
         {
             foreach (var row in editor.InlineRows)
+            {
                 row.Input.Parent?.Controls.Remove(row.Input);
+                foreach (var axis in row.Axes ?? Array.Empty<TextBox>())
+                {
+                    if (axis.Parent is InspectorAxisGroup group)
+                        group.Controls.Remove(axis);
+                }
+            }
             if (editor.InlineStatus is Control status)
                 status.Parent?.Controls.Remove(status);
         }
@@ -1268,6 +1293,7 @@ internal sealed class SelectionInspector : Panel
                 TextBox or ComboBox => Math.Max(DpiScaling.Scale(28), input.PreferredSize.Height + DpiScaling.Scale(4)),
                 Label label => Math.Max(DpiScaling.Scale(26), TextRenderer.MeasureText(label.Text, label.Font,
                     new Size(DpiScaling.Scale(170), 0), TextFormatFlags.WordBreak).Height + DpiScaling.Scale(6)),
+                InspectorAxisGroup group => group.Height + DpiScaling.Scale(4),
                 _ => Descendants(input).OfType<TextBox>().Select(box => box.PreferredHeight + 6)
                     .DefaultIfEmpty(DpiScaling.Scale(30)).Max()
             };
@@ -1337,9 +1363,71 @@ internal sealed class SelectionInspector : Panel
             {
                 TextBox or ComboBox => Input.PreferredSize.Height,
                 Label => ClientSize.Height - DpiScaling.Scale(2),
+                InspectorAxisGroup group => group.Height,
                 _ => Math.Min(_baseHeight, ClientSize.Height) // a group keeps its own height, centred on the row
             };
             Input.SetBounds(captionWidth, Math.Max(0, (ClientSize.Height - inputHeight) / 2), inputWidth, inputHeight);
+        }
+    }
+
+    /// <summary>
+    /// The three boxes of a position, each with its label directly to its left on the same line:
+    /// ΔX [ 2.5 ]  ΔY [ 0 ]  ΔZ [ 0 ]. Laid out here (not by the editor window's table) so labels and boxes
+    /// always line up at any display scale and panel width.
+    /// </summary>
+    private sealed class InspectorAxisGroup : Panel
+    {
+        private readonly TextBox[] _boxes;
+        private readonly Label[] _labels;
+
+        internal InspectorAxisGroup(TextBox[] boxes, string[] labels)
+        {
+            _boxes = boxes;
+            BackColor = Color.White;
+            Margin = Padding.Empty;
+            _labels = labels.Select(text => new Label
+            {
+                Text = text,
+                AutoSize = false,
+                UseMnemonic = false,
+                TextAlign = ContentAlignment.MiddleRight,
+                AutoEllipsis = false,
+                Padding = Padding.Empty,
+                ForeColor = Color.FromArgb(48, 65, 80),
+                Font = new Font("Segoe UI Semibold", 8.25F)
+            }).ToArray();
+            for (var index = 0; index < boxes.Length; index++)
+            {
+                boxes[index].Parent?.Controls.Remove(boxes[index]);
+                boxes[index].Dock = DockStyle.None;
+                boxes[index].Anchor = AnchorStyles.Top | AnchorStyles.Left;
+                boxes[index].Margin = Padding.Empty;
+                boxes[index].MinimumSize = Size.Empty;
+                boxes[index].MaximumSize = Size.Empty;
+                Controls.Add(_labels[index]);
+                Controls.Add(boxes[index]);
+            }
+            Height = boxes.Max(box => box.PreferredHeight) + DpiScaling.Scale(4);
+        }
+
+        protected override void OnLayout(LayoutEventArgs levent)
+        {
+            base.OnLayout(levent);
+            if (_boxes is null || Controls.Count < _boxes.Length * 2)
+                return;
+            var gap = DpiScaling.Scale(3);
+            // A Label draws with the default text padding, so measure it that way (plus a little air).
+            var labelWidth = _labels.Max(label => TextRenderer.MeasureText(label.Text, label.Font).Width) + gap;
+            var cell = ClientSize.Width / (double)_boxes.Length;
+            for (var index = 0; index < _boxes.Length; index++)
+            {
+                var left = (int)Math.Round(index * cell);
+                var boxHeight = _boxes[index].PreferredHeight;
+                var top = Math.Max(0, (ClientSize.Height - boxHeight) / 2);
+                _labels[index].SetBounds(left, top, labelWidth, boxHeight);
+                _boxes[index].SetBounds(left + labelWidth + gap, top,
+                    Math.Max(DpiScaling.Scale(24), (int)Math.Round(cell) - labelWidth - 2 * gap), boxHeight);
+            }
         }
     }
 
