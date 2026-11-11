@@ -28,6 +28,9 @@ public sealed partial class MainForm : DpiScaledForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        // The opening calculation ran before the window had its final (display-scaled) layout, when the worksheet
+        // box could still have no usable size and its text formatting was lost. Show it again now.
+        CalculatorScreen.CalculateAndDisplay();
         var workingArea = Screen.FromControl(this).WorkingArea;
         var fitted = OpeningSize(Size, workingArea);
         // A design tool wants the whole screen: open maximized whenever the designed window does not fit
