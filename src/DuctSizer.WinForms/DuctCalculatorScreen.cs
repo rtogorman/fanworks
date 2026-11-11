@@ -344,10 +344,10 @@ internal sealed partial class DuctCalculatorScreen
         void Heading(string text)
         {
             if (box.TextLength > 0)
-                box.AppendText(Environment.NewLine);
+                EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
             box.SelectionColor = Color.FromArgb(28, 69, 108);
-            box.AppendText(text + Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionFont = box.Font;
             box.SelectionColor = box.ForeColor;
         }
@@ -358,9 +358,9 @@ internal sealed partial class DuctCalculatorScreen
             {
                 box.SelectionColor = part.Input ? Color.FromArgb(190, 44, 44) : box.ForeColor;
                 box.SelectionFont = part.Input ? new Font(box.Font, FontStyle.Bold) : box.Font;
-                box.AppendText(part.Text);
+                EngineeringMathRichText.AppendAtEnd(box, part.Text);
             }
-            box.AppendText(Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionColor = box.ForeColor;
             box.SelectionFont = box.Font;
         }
@@ -376,18 +376,18 @@ internal sealed partial class DuctCalculatorScreen
             box.SelectionTabs = new[] { Math.Max(250, box.ClientSize.Width / 2) };
             box.SelectionColor = box.ForeColor;
             box.SelectionFont = box.Font;
-            box.AppendText($"{left}\t{right}{Environment.NewLine}");
+            EngineeringMathRichText.AppendAtEnd(box, $"{left}\t{right}{Environment.NewLine}");
         }
 
         void Step(string title, string explanation)
         {
-            box.AppendText(Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionColor = Color.FromArgb(28, 69, 108);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            box.AppendText(title + Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, title + Environment.NewLine);
             box.SelectionColor = box.ForeColor;
             box.SelectionFont = box.Font;
-            box.AppendText(explanation + Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, explanation + Environment.NewLine);
         }
 
         void NarrativeLine(params (string Text, EngineeringMathRichText.MathTone Tone)[] parts)
@@ -403,9 +403,9 @@ internal sealed partial class DuctCalculatorScreen
                 box.SelectionFont = part.Tone == EngineeringMathRichText.MathTone.Formula
                     ? box.Font
                     : new Font(box.Font, FontStyle.Bold);
-                box.AppendText(part.Text);
+                EngineeringMathRichText.AppendAtEnd(box, part.Text);
             }
-            box.AppendText(Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionColor = box.ForeColor;
             box.SelectionFont = box.Font;
         }
@@ -499,7 +499,7 @@ internal sealed partial class DuctCalculatorScreen
         Line(("Entered values are red; solved results are blue.", false), ("  INPUT", true), ("  ", false));
         box.SelectionColor = Color.FromArgb(0, 105, 154);
         box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-        box.AppendText("SOLVED" + Environment.NewLine);
+        EngineeringMathRichText.AppendAtEnd(box, "SOLVED" + Environment.NewLine);
         box.SelectionColor = box.ForeColor;
         box.SelectionFont = box.Font;
         Step("1. FINAL DUCT GEOMETRY",

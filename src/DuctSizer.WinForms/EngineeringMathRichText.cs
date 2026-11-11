@@ -37,6 +37,18 @@ internal static class EngineeringMathRichText
         internal float Height => Ascent + Descent;
     }
 
+    /// <summary>
+    /// Appends text and leaves the caret at the end. <see cref="TextBoxBase.AppendText"/> puts the caret back where
+    /// it was when the box has no width or height (a pane not laid out yet, or collapsed); the colour and font set
+    /// for the next piece then applied at the old position and were lost, leaving an unformatted worksheet.
+    /// </summary>
+    internal static void AppendAtEnd(RichTextBox box, string text)
+    {
+        box.AppendText(text);
+        if (box.SelectionStart != box.TextLength || box.SelectionLength != 0)
+            box.Select(box.TextLength, 0);
+    }
+
     internal static void AppendEquation(RichTextBox box, params (string Markup, bool Highlight)[] parts)
         => AppendStyledEquation(box, parts.Select(part =>
             (part.Markup, part.Highlight ? MathTone.Input : MathTone.Formula)).ToArray());

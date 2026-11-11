@@ -1357,10 +1357,10 @@ internal sealed partial class FittingCalculatorScreen
         box.Clear();
         void Heading(string text)
         {
-            if (box.TextLength > 0) box.AppendText(Environment.NewLine);
+            if (box.TextLength > 0) EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
             box.SelectionColor = Color.FromArgb(28, 69, 108);
-            box.AppendText(text + Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionFont = box.Font;
             box.SelectionColor = box.ForeColor;
         }
@@ -1368,7 +1368,7 @@ internal sealed partial class FittingCalculatorScreen
         {
             box.SelectionColor = color ?? box.ForeColor;
             box.SelectionFont = new Font(box.Font, style);
-            box.AppendText(text + Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionColor = box.ForeColor;
             box.SelectionFont = box.Font;
         }
@@ -1381,14 +1381,14 @@ internal sealed partial class FittingCalculatorScreen
 
         Heading("RECREATED PUBLISHED AIRSIDE PRESSURE TABLE");
         box.SelectionFont = new Font("Consolas", 9F, FontStyle.Bold);
-        box.AppendText("Airflow (cfm)   ΔPs / Min ΔPs (in. w.c.)\r\n");
+        EngineeringMathRichText.AppendAtEnd(box, "Airflow (cfm)   ΔPs / Min ΔPs (in. w.c.)\r\n");
         box.SelectionFont = new Font("Consolas", 9F);
         foreach (var point in selection.PublishedTable)
         {
             var bound = point == selection.LowerPoint || point == selection.UpperPoint;
             box.SelectionColor = bound ? Color.FromArgb(0, 103, 145) : box.ForeColor;
             box.SelectionFont = new Font("Consolas", 9F, bound ? FontStyle.Bold : FontStyle.Regular);
-            box.AppendText($"{(bound ? ">" : " ")} {point.AirflowCfm,8:0}       {point.PressureDropInWg,8:0.###}\r\n");
+            EngineeringMathRichText.AppendAtEnd(box, $"{(bound ? ">" : " ")} {point.AirflowCfm,8:0}       {point.PressureDropInWg,8:0.###}\r\n");
         }
         box.SelectionFont = box.Font;
         box.SelectionColor = box.ForeColor;
@@ -1500,10 +1500,10 @@ internal sealed partial class FittingCalculatorScreen
         box.Clear();
         void Heading(string text)
         {
-            if (box.TextLength > 0) box.AppendText(Environment.NewLine);
+            if (box.TextLength > 0) EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
             box.SelectionColor = Color.FromArgb(28, 69, 108);
-            box.AppendText(text + Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionFont = box.Font;
             box.SelectionColor = box.ForeColor;
         }
@@ -1511,7 +1511,7 @@ internal sealed partial class FittingCalculatorScreen
         {
             box.SelectionColor = color ?? box.ForeColor;
             box.SelectionFont = new Font(box.Font, style);
-            box.AppendText(text + Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionColor = box.ForeColor;
             box.SelectionFont = box.Font;
         }
@@ -1531,7 +1531,7 @@ internal sealed partial class FittingCalculatorScreen
             : "RECREATED PUBLISHED TABLE");
         var grille = !string.IsNullOrWhiteSpace(selection.NominalDuctSizeIn);
         box.SelectionFont = new Font("Consolas", 8.3F, FontStyle.Bold);
-        box.AppendText(grille
+        EngineeringMathRichText.AppendAtEnd(box, grille
             ? "Core V   CFM      VP       Neg SP   NC\r\n"
             : "CFM     TP       SP       NC      Throw (ft)\r\n");
         box.SelectionFont = new Font("Consolas", 8.3F);
@@ -1540,7 +1540,7 @@ internal sealed partial class FittingCalculatorScreen
             var marker = ReferenceEquals(point, selection.Selected) || point == selection.Selected ? ">" : " ";
             box.SelectionColor = point == selection.Selected ? Color.FromArgb(0, 103, 145) : box.ForeColor;
             box.SelectionFont = new Font("Consolas", 8.3F, point == selection.Selected ? FontStyle.Bold : FontStyle.Regular);
-            box.AppendText(grille
+            EngineeringMathRichText.AppendAtEnd(box, grille
                 ? $"{marker}{point.CoreVelocityFpm,5:0}   {point.AirflowCfm,6:0}   {point.VelocityPressureInWg,6:0.###}   {point.TotalPressureInWg,6:0.###}   {point.SoundNc,4}\r\n"
                 : $"{marker}{point.AirflowCfm,5:0}   {point.TotalPressureInWg,6:0.###}   {(point.StaticPressureInWg ?? 0),6:0.###}   {point.SoundNc,4}    {point.ThrowFt}\r\n");
         }
@@ -1668,10 +1668,10 @@ internal sealed partial class FittingCalculatorScreen
         void Heading(string text)
         {
             if (box.TextLength > 0)
-                box.AppendText(Environment.NewLine);
+                EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
             box.SelectionColor = Color.FromArgb(28, 69, 108);
-            box.AppendText(text + Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionFont = box.Font;
             box.SelectionColor = box.ForeColor;
         }
@@ -1681,9 +1681,9 @@ internal sealed partial class FittingCalculatorScreen
             {
                 box.SelectionColor = part.Input ? Color.FromArgb(190, 44, 44) : box.ForeColor;
                 box.SelectionFont = part.Input ? new Font(box.Font, FontStyle.Bold) : box.Font;
-                box.AppendText(part.Text);
+                EngineeringMathRichText.AppendAtEnd(box, part.Text);
             }
-            box.AppendText(Environment.NewLine);
+            EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionColor = box.ForeColor;
             box.SelectionFont = box.Font;
         }
@@ -1698,7 +1698,7 @@ internal sealed partial class FittingCalculatorScreen
             box.SelectionTabs = new[] { Math.Max(250, box.ClientSize.Width / 2) };
             box.SelectionColor = box.ForeColor;
             box.SelectionFont = box.Font;
-            box.AppendText($"{left}\t{right}{Environment.NewLine}");
+            EngineeringMathRichText.AppendAtEnd(box, $"{left}\t{right}{Environment.NewLine}");
         }
 
         Heading("REQUIRED EQUATIONS");

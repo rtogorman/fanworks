@@ -874,7 +874,7 @@ internal sealed class SelectionInspector : Panel
             _calculations.SelectionLength = 0;
             _calculations.SelectionFont = font;
             _calculations.SelectionColor = color;
-            _calculations.AppendText(text);
+            EngineeringMathRichText.AppendAtEnd(_calculations, text);
         }
 
         if (item is null)
