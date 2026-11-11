@@ -467,6 +467,22 @@ CI check "Designer workspace should pan upward and leftward" failed once on 0095
 
 Wine DPI test: `/home/claude/dpi.sh 168` then screenshot at 2688x1680 (`/home/claude/shotboth.sh prefix`); always set back to 96 for UI tests.
 
+### Round Q (requested 2026-11-10 evening, after v0.97.0) — target v0.98.0
+
+- Q1 Inspector: X/Y/Z labels must line up with their boxes; tidy the "Offset from ... ΔX / ΔY / ΔZ" caption.
+- Q2 Drawing: Esc deselects the selected/just-dropped item; Delete deletes it; right-click a placed item → menu
+  Edit (opens the Selection Inspector on it) / Delete.
+- Q3 Analysis Settings (ribbon button on Analysis tab → dialog): expected low/high for duct pressure rate
+  (in. w.c./100 ft), duct velocity, fitting velocity, fitting loss (in. w.c.). Saved with the project. Top-10 list
+  gets a "Within expected range" Yes/No column.
+- Q4 Analysis graph under overview/top 10: line graph, x = component number along the path, y = static pressure
+  (in. w.c.), one line per path (every source-to-sink path, not just critical).
+- Q5 Report title sheet: condensed; number of branches/paths; the same graph; System Summary becomes a donut
+  (duct segments / fittings / components) with leader labels and quantities.
+- Q6 All pop-up forms: inputs far too long, poor formatting (e.g. Sizing Criteria). Redesign consistently.
+
+| Q1 | Pending | Q2 | Pending | Q3 | Pending | Q4 | Pending | Q5 | Pending | Q6 | Pending |
+
 ### Resume notes (update as work proceeds)
 
 - Work in `/home/claude/fanworks` (git, origin = GitHub). Commit and push after every working sub-step so nothing
