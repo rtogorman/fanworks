@@ -228,6 +228,10 @@ internal sealed class MainRibbon
             }, 66);
         AddButton(system, "RibbonFanInformationButton", "Fan\nInformation", RibbonIcon.Fan,
             "Fan airflow, static pressure, efficiency and brake horsepower.", () => SystemScreen.ViewFanInformation(), 70);
+        var settings = AddGroup(page, "RibbonAnalysisSettingsGroup", "Settings");
+        AddButton(settings, "RibbonAnalysisSettingsButton", "Analysis\nSettings", RibbonIcon.AnalysisSettings,
+            "Expected ranges for duct friction rate and velocity, fitting velocity and fitting loss.",
+            () => SystemScreen.EditAnalysisSettings(), 70);
         return page;
     }
 

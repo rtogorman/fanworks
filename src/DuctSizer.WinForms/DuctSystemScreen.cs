@@ -399,15 +399,17 @@ internal sealed partial class DuctSystemScreen
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             BackColor = _host.BackColor,
             Padding = new Padding(14)
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        // Analysis tab: summary (overview + top ten pressure drops), table actions, the full table, status.
+        // Analysis tab: summary (overview + top ten pressure drops), the pressure drop along each path, table actions,
+        // the full table, status. The graph and the table share the remaining height.
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 262F));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 55F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 45F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
 
         var summary = new TableLayoutPanel
@@ -506,9 +508,10 @@ internal sealed partial class DuctSystemScreen
         _systemStorageStatusLabel.Text = "Saved automatically on this computer. No database or network connection is used.";
 
         root.Controls.Add(analysisSummary, 0, 0);
-        root.Controls.Add(actions, 0, 1);
-        root.Controls.Add(_ductGrid, 0, 2);
-        root.Controls.Add(_systemStorageStatusLabel, 0, 3);
+        root.Controls.Add(BuildPressureProfileCard(), 0, 1);
+        root.Controls.Add(actions, 0, 2);
+        root.Controls.Add(_ductGrid, 0, 3);
+        root.Controls.Add(_systemStorageStatusLabel, 0, 4);
         return root;
     }
 
@@ -2527,7 +2530,8 @@ internal sealed partial class DuctSystemScreen
                       + LayoutGeometryNote(". ")
                       + (LayoutReviewMessages() is { Count: > 0 } review
                           ? ": " + string.Join(" ", review.Take(6))
-                          : string.Empty));
+                          : string.Empty),
+            BuildPressureProfile());
         DuctSystemPdf.Export(pdfPath, "Duct System Schedule",
             $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_host._currentUnits} units", headers, rows,
             _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)

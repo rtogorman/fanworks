@@ -120,8 +120,9 @@ internal sealed class LayoutFittingNodeDialog : DpiScaledForm, IInlineEditable
         AddDialogRow(table, row++, "Air System Type", _airSystem, 42);
         AddDialogRow(table, row++, "Upstream Item", _upstream, 42);
         AddDialogRow(table, row++, "Downstream Item(s)", downstream, 42);
-        AddDialogRow(table, row++, _absoluteLocation ? LayoutPositionReference.CaptionFor(_reference) : "Relative ΔX / ΔY / ΔZ (ft)",
-            LayoutDialogControls.CreateLocationEditor(_deltaX, _deltaY, _deltaZ), 42);
+        var positionCaption = _absoluteLocation ? LayoutPositionReference.CaptionFor(_reference) : "Relative ΔX / ΔY / ΔZ (ft)";
+        AddDialogRow(table, row++, positionCaption,
+            LayoutDialogControls.CreatePositionEditor(positionCaption, _deltaX, _deltaY, _deltaZ), 42);
         if (table.GetControlFromPosition(0, row - 1) is Label locationCaption)
         {
             locationCaption.Name = "LayoutLocationCaption";

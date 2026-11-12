@@ -43,7 +43,20 @@ internal static class LayoutDialogControls
         return panel;
     }
 
-    internal static Control CreateLocationEditor(TextBox x, TextBox y, TextBox z)
+    internal static Control CreateLocationEditor(TextBox x, TextBox y, TextBox z) =>
+        CreateLocationEditor(x, y, z, "X", "Y", "Z");
+
+    /// <summary>Position boxes labelled ΔX/ΔY/ΔZ when the caption describes an offset, otherwise X/Y/Z.</summary>
+    internal static Control CreatePositionEditor(string caption, TextBox x, TextBox y, TextBox z) =>
+        caption.Contains('Δ')
+            ? CreateLocationEditor(x, y, z, "ΔX", "ΔY", "ΔZ")
+            : CreateLocationEditor(x, y, z, "X", "Y", "Z");
+
+    /// <summary>
+    /// Three short labelled boxes on one row. Each label column is sized to its text (so "Dia"
+    /// never wraps) and sits directly beside its own box.
+    /// </summary>
+    internal static Control CreateLocationEditor(TextBox x, TextBox y, TextBox z, string xLabel, string yLabel, string zLabel)
     {
         var row = new TableLayoutPanel
         {
@@ -53,14 +66,14 @@ internal static class LayoutDialogControls
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
-        foreach (var _ in new[] { "X", "Y", "Z" })
+        for (var index = 0; index < 3; index++)
         {
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 20));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
         }
-        AddAxis("X", x, 0);
-        AddAxis("Y", y, 2);
-        AddAxis("Z", z, 4);
+        AddAxis(xLabel, x, 0);
+        AddAxis(yLabel, y, 2);
+        AddAxis(zLabel, z, 4);
         return row;
 
         void AddAxis(string label, TextBox input, int column)
@@ -68,8 +81,10 @@ internal static class LayoutDialogControls
             row.Controls.Add(new Label
             {
                 Text = label,
+                AutoSize = true,
                 Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
+                Margin = new Padding(column == 0 ? 0 : 8, 0, 2, 0),
+                TextAlign = ContentAlignment.MiddleRight,
                 ForeColor = Color.FromArgb(48, 65, 80),
                 Font = new Font("Segoe UI Semibold", 8F)
             }, column, 0);

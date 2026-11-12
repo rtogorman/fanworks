@@ -3820,6 +3820,74 @@ internal static class Program
                 .Select(entry => (double)entry.GetType().GetProperty("LossPa")!.GetValue(entry)!).ToArray();
             Require(lossValues.Zip(lossValues.Skip(1)).All(pair => pair.First >= pair.Second),
                 "The top pressure drops should be listed from highest to lowest.");
+
+            // Analysis Settings, the "within expected range" column and the pressure drop along each path (round Q).
+            var analysisScreen = form.DuctSystemScreen;
+            var analysisSettingsButton = Find<Control>(form, "RibbonAnalysisSettingsButton");
+            var settingsButtonPage = analysisSettingsButton.Parent;
+            while (settingsButtonPage is not null && settingsButtonPage.Name != "RibbonAnalysisPage")
+                settingsButtonPage = settingsButtonPage.Parent;
+            Require(settingsButtonPage is not null && !topLossGrid.Columns["Range"]!.Visible,
+                "The Analysis ribbon should offer Analysis Settings, and the range column should stay hidden until a range is saved.");
+            using (var settings = new AnalysisSettingsDialog(analysisScreen._ductSystem.AnalysisExpectations, UnitSystem.Imperial))
+            {
+                settings.Show(form);
+                Application.DoEvents();
+                Find<TextBox>(settings, "AnalysisSettingsDuctPressureRateLow").Text = "0.05";
+                Find<TextBox>(settings, "AnalysisSettingsDuctPressureRateHigh").Text = "0.1";
+                Find<TextBox>(settings, "AnalysisSettingsDuctVelocityHigh").Text = "1500";
+                Find<TextBox>(settings, "AnalysisSettingsFittingLossHigh").Text = "0.05";
+                ClickButton(Find<Button>(settings, "AnalysisSettingsSaveButton"));
+                Application.DoEvents();
+                var saved = settings.Expectations;
+                Require(settings.DialogResult == DialogResult.OK
+                        && Math.Abs(saved.DuctPressureRatePaPerM.Low!.Value - UnitConversions.InchesWaterPer100FeetToPaPerM(0.05)) < 1e-12
+                        && Math.Abs(saved.DuctPressureRatePaPerM.High!.Value - UnitConversions.InchesWaterPer100FeetToPaPerM(0.1)) < 1e-12
+                        && saved.DuctVelocityMPerS.Low is null
+                        && Math.Abs(saved.DuctVelocityMPerS.High!.Value - UnitConversions.FpmToMps(1500)) < 1e-12
+                        && !saved.FittingVelocityMPerS.IsSet
+                        && Math.Abs(saved.FittingLossPa.High!.Value - UnitConversions.InchesWaterToPa(0.05)) < 1e-9,
+                    "Analysis Settings should save each entered bound, converted to SI, and leave empty bounds empty.");
+                analysisScreen._ductSystem.AnalysisExpectations = saved;
+            }
+            analysisScreen.RefreshDuctSystemGrid();
+            Application.DoEvents();
+            var rangedTop = analysisScreen.HighestPressureDrops();
+            Require(topLossGrid.Columns["Range"]!.Visible && topLossGrid.Columns["Range"]!.HeaderText == "Within expected range"
+                    && topLossGrid.Rows.Count == rangedTop.Count
+                    && rangedTop.Select((entry, index) => (entry, index)).All(pair =>
+                        Convert.ToString(topLossGrid.Rows[pair.index].Cells["Range"].Value) == pair.entry.Range.Status switch
+                        {
+                            RangeCheckStatus.Within => "Yes",
+                            RangeCheckStatus.Outside => "No",
+                            RangeCheckStatus.NotSet => "Not set",
+                            RangeCheckStatus.NotAvailable => "Not available",
+                            _ => "—"
+                        }
+                        && topLossGrid.Rows[pair.index].Cells["Range"].ToolTipText.Length > 0)
+                    && rangedTop.Where(entry => entry.Kind == "Duct").All(entry => entry.Range.Status is RangeCheckStatus.Within or RangeCheckStatus.Outside),
+                "Saving ranges should add the 'Within expected range' column, with Yes/No for every duct and the reason in a tooltip.");
+
+            var profileChart = Find<PressureProfileChart>(form, "AnalysisPressureProfileChart");
+            var routeProfiles = SystemPathProfiles.Build(analysisScreen._ductSystem);
+            var shownProfile = profileChart.Profile!;
+            var imperialUnits = form._currentUnits == UnitSystem.Imperial;
+            var criticalRoute = routeProfiles.Paths.SingleOrDefault(path => path.IsCritical);
+            var criticalSeries = shownProfile.Series.SingleOrDefault(series => series.IsCritical);
+            Require(shownProfile.PathCount == routeProfiles.Paths.Count && routeProfiles.Paths.Count > 0
+                    && shownProfile.Series.Count == routeProfiles.CompletePathCount
+                    && (criticalSeries is null
+                        || criticalRoute is not null
+                           && criticalSeries.Values.Count == criticalRoute.Steps.Count
+                           && Math.Abs(criticalSeries.Values[^1] - (imperialUnits
+                               ? UnitConversions.PaToInchesWater(criticalRoute.TotalLossPa) : criticalRoute.TotalLossPa)) < 1e-9)
+                    && ScreenBounds(profileChart).Top >= ScreenBounds(Find<Control>(form, "AnalysisSummary")).Bottom
+                    && ScreenBounds(profileChart).Bottom <= ScreenBounds(grid).Top
+                    && profileChart.Height > 60,
+                $"The Analysis tab should graph every complete path below the summary, the critical path's last point at its total. Paths={routeProfiles.Paths.Count}, series={shownProfile.Series.Count}.");
+            analysisScreen._ductSystem.AnalysisExpectations = new AnalysisExpectations();
+            analysisScreen.RefreshDuctSystemGrid();
+            Application.DoEvents();
             ClickButton(Find<Button>(form, "TopTabReports"));
             Application.DoEvents();
             var reportPreview = Find<Control>(form, "ReportsPage");
@@ -3841,6 +3909,12 @@ internal static class Program
             Require(File.Exists(printedReport) && new FileInfo(printedReport).Length > 10_000
                     && File.ReadAllBytes(printedReport).Take(5).SequenceEqual("%PDF-"u8.ToArray()),
                 "Print Report should write the report PDF.");
+            var printedText = Encoding.ASCII.GetString(File.ReadAllBytes(printedReport));
+            Require(printedText.Contains("(PRESSURE DROP ALONG EACH PATH)", StringComparison.Ordinal)
+                    && printedText.Contains("(SYSTEM SUMMARY)", StringComparison.Ordinal)
+                    && printedText.Contains("(Duct segments)", StringComparison.Ordinal)
+                    && printedText.Contains("(Quantity ", StringComparison.Ordinal),
+                "The report's title page should show the paths graph and the system summary donut with labelled quantities.");
             ClickButton(Find<Button>(form, "TopTabProject"));
             Application.DoEvents();
 
@@ -3892,6 +3966,45 @@ internal static class Program
                     "A duct should be editable in the inspector with the duct editor's own inputs (and Reverse Flow Direction).");
             }
 
+            // Designer shortcuts (round Q): Esc deselects, Delete removes the selection at once (undoable), and the
+            // right-click menu's Edit opens the Selection Inspector on the item.
+            ClickButton(Find<Button>(form, "TopTabProject"));
+            Application.DoEvents();
+            var shortcutCanvas = (LayoutDesignerCanvas)Find<Control>(form, "LayoutDesignerCanvas");
+            var shortcutModel = form.DuctSystemScreen._ductSystem;
+            var shortcutNode = shortcutModel.LayoutNodes.Last(node => node.Type != LayoutNodeType.CalculationPoint);
+            form.LayoutScreen.SelectLayoutItemById(shortcutNode.Id);
+            Application.DoEvents();
+            Require(shortcutCanvas.SelectedNodeId == shortcutNode.Id
+                    && form.LayoutScreen.TryHandleCommandKey(Keys.Escape) && !shortcutCanvas.HasSelection,
+                "Esc should deselect the selected component.");
+            Require(!form.LayoutScreen.TryHandleCommandKey(Keys.Escape),
+                "Esc with nothing selected should be left to the rest of the window.");
+            form.LayoutScreen.SelectLayoutItemById(shortcutNode.Id);
+            Application.DoEvents();
+            UiMember.Method("ShowLayoutItemMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, new object[] { new Point(40, 40) });
+            var itemMenu = (ContextMenuStrip)UiMember.Field("_layoutItemMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
+            Require(itemMenu.Items.Cast<ToolStripItem>().Select(item => item.Text).SequenceEqual(new[] { "Edit", "Delete" }),
+                "Right-clicking a component should offer Edit and Delete.");
+            itemMenu.Items["LayoutItemMenuEdit"]!.PerformClick();
+            Application.DoEvents();
+            var shortcutInspector = Find<Control>(form, "SelectionInspector");
+            Require(!(bool)shortcutInspector.GetType().GetField("_collapsed", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(shortcutInspector)!
+                    && Find<Label>(form, "InspectorTitle").Text.StartsWith(shortcutNode.Id, StringComparison.Ordinal)
+                    && shortcutCanvas.SelectedNodeId == shortcutNode.Id,
+                $"Edit should open the Selection Inspector with that component selected. title={Find<Label>(form, "InspectorTitle").Text}, selected={shortcutCanvas.SelectedNodeId}, node={shortcutNode.Id}");
+            var nodesBeforeDelete = shortcutModel.LayoutNodes.Count;
+            Require(form.LayoutScreen.TryHandleCommandKey(Keys.Delete)
+                    && form.DuctSystemScreen._ductSystem.LayoutNodes.Count == nodesBeforeDelete - 1
+                    && form.DuctSystemScreen._ductSystem.LayoutNodes.All(node => node.Id != shortcutNode.Id)
+                    && Find<Label>(form, "LayoutDesignerStatus").Text.StartsWith($"Deleted {shortcutNode.Id}", StringComparison.Ordinal),
+                "Delete should remove the selected component without a prompt and say how to undo it.");
+            ClickButton(Find<Button>(form, "LayoutUndoButton"));
+            Application.DoEvents();
+            Require(form.DuctSystemScreen._ductSystem.LayoutNodes.Count == nodesBeforeDelete
+                    && form.DuctSystemScreen._ductSystem.LayoutNodes.Any(node => node.Id == shortcutNode.Id),
+                "Undo should restore a component removed with the Delete key.");
+
             var userBeforeNew = ribbonModel.UserName;
             ClickButton(Find<Button>(form, "RibbonNewProjectButton"));
             Application.DoEvents();
@@ -3922,7 +4035,9 @@ internal static class Program
             Console.WriteLine("PASS  Project Explorer, Errors and Validation lists");
             Console.WriteLine("PASS  Analysis summary, report preview and Print Report");
             Console.WriteLine("PASS  Display scaling, resizable panels and in-place editing in the inspector");
-            Console.WriteLine("21/21 UI verification checks passed.");
+            Console.WriteLine("PASS  Analysis Settings, expected-range column and pressure drop along each path");
+            Console.WriteLine("PASS  Designer shortcuts: Esc deselects, Delete removes, right-click Edit / Delete");
+            Console.WriteLine("23/23 UI verification checks passed.");
             return 0;
         }
         catch (Exception ex)

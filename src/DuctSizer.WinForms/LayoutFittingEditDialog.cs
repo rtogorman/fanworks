@@ -149,10 +149,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
         AddRow(basics, 2, $"Airflow ({flowUnit})", _airflow, 38);
         AddRow(basics, 3, $"Air Temperature ({temperatureUnit})", _temperature, 38);
         AddRow(basics, 4, "Reference Duct Shape", _shape, 38);
-        var sizePanel = LayoutDialogControls.CreateLocationEditor(_diameter, _width, _height);
-        foreach (Control control in sizePanel.Controls)
-            if (control is Label label)
-                label.Text = label.Text switch { "X" => "Dia", "Y" => "W", _ => "H" };
+        var sizePanel = LayoutDialogControls.CreateLocationEditor(_diameter, _width, _height, "Dia", "W", "H");
         AddRow(basics, 5, $"Duct Size ({sizeUnit})", sizePanel, 46);
         root.Controls.Add(basics, 0, 0);
         _baseInlineRows.AddRange(new[]

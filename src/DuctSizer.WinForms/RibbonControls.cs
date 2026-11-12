@@ -27,7 +27,8 @@ internal enum RibbonIcon
     Project, Analysis, Reports, QuickCalc,
     NewProject, Open, Save, SaveAs, ProjectSettings, SizingCriteria, RoundSizes,
     Select, Move, AutoSize, Calculate, CriticalPath, PrintReport, DuctCalculator, FittingCalculator,
-    Filter, Fan, Warning, Check, Undo, Redo, Delete, ZoomIn, ZoomOut, ZoomFit, PdfImport, Grid, Origin, SourceSink
+    Filter, Fan, Warning, Check, Undo, Redo, Delete, ZoomIn, ZoomOut, ZoomFit, PdfImport, Grid, Origin, SourceSink,
+    AnalysisSettings
 }
 
 /// <summary>
@@ -128,6 +129,15 @@ internal static class RibbonIcons
                     graphics.FillEllipse(Brushes.White, 13, 13, 11, 11);
                     graphics.DrawLine(pencil, 22.5f, 14.5f, 15.5f, 21.5f);
                 }
+                break;
+            case RibbonIcon.AnalysisSettings:
+                // An expected band (shaded) on a scale, with its low and high markers.
+                graphics.FillRectangle(accentFill, 8, 7, 8, 10);
+                graphics.DrawLine(pen, 3, 12, 21, 12);
+                graphics.DrawLine(accentPen, 8, 5, 8, 19);
+                graphics.DrawLine(accentPen, 16, 5, 16, 19);
+                graphics.DrawLine(pen, 3, 10, 3, 14);
+                graphics.DrawLine(pen, 21, 10, 21, 14);
                 break;
             case RibbonIcon.ProjectSettings:
                 DrawGear(graphics, pen, accentFill, 12, 12, 8.5f, 6f);

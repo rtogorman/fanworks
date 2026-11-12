@@ -250,7 +250,24 @@ public sealed record DuctSystemPdfMetadata(
     string FanStaticPressure = "",
     string FanEfficiency = "",
     string FanHorsepower = "",
-    string CriticalPath = "");
+    string CriticalPath = "",
+    DuctSystemPdfPressureProfile? PressureProfile = null);
+
+/// <summary>
+/// Running pressure loss along every route of the system, in display units, for the report title page (and the
+/// Analysis tab graph). Series hold complete routes only; <paramref name="Note"/> says what was left out and why.
+/// </summary>
+/// <param name="UnitLabel">Unit of the values, e.g. "in. w.c." or "Pa".</param>
+/// <param name="PathCount">Routes in the system, including any left out of <paramref name="Series"/>.</param>
+public sealed record DuctSystemPdfPressureProfile(
+    string UnitLabel,
+    IReadOnlyList<DuctSystemPdfProfileSeries> Series,
+    int PathCount,
+    string Note = "");
+
+/// <summary>One route: Values[i] is the running loss after component i + 1 along the route.</summary>
+public sealed record DuctSystemPdfProfileSeries(string Label, IReadOnlyList<double> Values, bool IsCritical,
+    IReadOnlyList<string>? ItemIds = null);
 
 public sealed record DuctSystemPdfSchematic(
     string Title,
@@ -422,17 +439,15 @@ public static class DuctSystemPdf
         const string accent = "0.16 0.43 0.58", ink = "0.06 0.20 0.31", muted = "0.36 0.42 0.47";
         string Or(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value;
 
-        // Project block: name and number, then who, when and what.
+        // Project block (condensed, round Q): name, then number, who, when and what on one row.
         builder.Append("0.94 0.97 0.99 rg 0.72 0.80 0.87 RG 0.8 w ");
-        RoundedRectangle(builder, 32, 410, 728, 118, 9, fillAndStroke: true);
-        builder.Append("0.12 0.66 0.72 rg 32 410 5 118 re f\n");
-        TextColor(builder, 52, 508, 7.2, "PROJECT", accent, bold: true);
-        FittedText(builder, 52, 482, 690, 24, 14, Or(metadata?.ProjectName, "Untitled Project"), bold: true, color: ink);
-        TextColor(builder, 52, 464, 11, string.IsNullOrWhiteSpace(metadata?.ProjectNumber)
-            ? "Project number not entered" : $"Project No. {metadata.ProjectNumber}", accent, bold: true);
-        builder.Append("0.72 0.80 0.87 RG 0.6 w 52 452 m 740 452 l S\n");
+        RoundedRectangle(builder, 32, 446, 728, 82, 9, fillAndStroke: true);
+        builder.Append("0.12 0.66 0.72 rg 32 446 5 82 re f\n");
+        TextColor(builder, 52, 512, 7.2, "PROJECT", accent, bold: true);
+        FittedText(builder, 52, 490, 690, 20, 12, Or(metadata?.ProjectName, "Untitled Project"), bold: true, color: ink);
         var info = new[]
         {
+            ("PROJECT NO.", Or(metadata?.ProjectNumber, "Not entered")),
             ("DESIGNER", Or(metadata?.UserName, "Not entered")),
             ("PROJECT DATE", Or(metadata?.ProjectDate, "Not entered")),
             ("PRINTED", Or(metadata?.PrintedDate, DateTime.Now.ToString("MMMM d, yyyy", CultureInfo.CurrentCulture))),
@@ -440,21 +455,21 @@ public static class DuctSystemPdf
         };
         for (var index = 0; index < info.Length; index++)
         {
-            var x = 52 + index * 172;
-            TextColor(builder, x, 437, 6.6, info[index].Item1, accent, bold: true);
-            FittedText(builder, x, 423, 160, 10, 7, info[index].Item2, color: ink);
+            var x = 52 + index * 140;
+            TextColor(builder, x, 471, 6.4, info[index].Item1, accent, bold: true);
+            FittedText(builder, x, 457, 130, 9.5, 6.5, info[index].Item2, color: ink);
         }
 
         // Fan selection: the numbers a reviewer looks for first.
-        TextColor(builder, 32, 391, 9.5, "FAN SELECTION", ink, bold: true);
-        builder.Append("0.12 0.66 0.72 rg 32 386 46 1.6 re f\n");
+        TextColor(builder, 32, 428, 9.5, "FAN SELECTION", ink, bold: true);
+        builder.Append("0.12 0.66 0.72 rg 32 423 46 1.6 re f\n");
         var fanValues = new[]
         {
             ("FAN", metadata?.FanId), ("DESIGN AIRFLOW", metadata?.FanAirflow),
             ("SYSTEM STATIC PRESSURE", metadata?.FanStaticPressure), ("FAN EFFICIENCY", metadata?.FanEfficiency),
             ("REQUIRED MOTOR POWER", metadata?.FanHorsepower)
         };
-        const double tileGap = 10, tileTop = 376, tileHeight = 62;
+        const double tileGap = 10, tileTop = 414, tileHeight = 46;
         var tileWidth = (728 - tileGap * (fanValues.Length - 1)) / fanValues.Length;
         for (var index = 0; index < fanValues.Length; index++)
         {
@@ -462,25 +477,30 @@ public static class DuctSystemPdf
             builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
             RoundedRectangle(builder, x, tileTop - tileHeight, tileWidth, tileHeight, 6, fillAndStroke: true);
             builder.Append(FormattableString.Invariant($"0.12 0.30 0.47 rg {x + 6:0.##} {tileTop - 3:0.##} {tileWidth - 12:0.##} 2 re f\n"));
-            TextColor(builder, x + 10, tileTop - 18, 6.4, fanValues[index].Item1, accent, bold: true);
-            FittedText(builder, x + 10, tileTop - 42, tileWidth - 20, 15, 8, Or(fanValues[index].Item2, "Not available"),
+            TextColor(builder, x + 10, tileTop - 15, 6.2, fanValues[index].Item1, accent, bold: true);
+            FittedText(builder, x + 10, tileTop - 35, tileWidth - 20, 13, 8, Or(fanValues[index].Item2, "Not available"),
                 bold: true, color: ink);
         }
-        TextColor(builder, 32, 297, 6.6, "CRITICAL PATH", accent, bold: true);
+        TextColor(builder, 32, 354, 6.6, "CRITICAL PATH", accent, bold: true);
         foreach (var (line, index) in WrapPdfText(Or(metadata?.CriticalPath, "Not available"), 150).Take(2)
                      .Select((value, index) => (value, index)))
-            Text(builder, 112, 297 - index * 10, 8.2, line, bold: index == 0);
-        TextColor(builder, 32, 276, 8.2, Fit(total, 150), ink, bold: true);
-        TextColor(builder, 32, 264, 7.2,
-            "System static pressure is the fan selection pressure. The critical-path total excludes fan positive static.", muted);
+            Text(builder, 112, 354 - index * 10, 8.2, line, bold: index == 0);
+        TextColor(builder, 32, 334, 8.2, Fit(total, 150), ink, bold: true);
+        TextColor(builder, 32, 323, 7, Fit(
+            "System static pressure is the fan selection pressure. The critical-path total excludes fan positive static.", 160), muted);
 
-        // Report contents (left) and system summary (right).
-        const double panelTop = 248, panelBottom = 62;
+        // Lower area: report contents and system summary (left), pressure drop along every path (right).
+        const double areaTop = 312, areaBottom = 62, leftX = 32, leftWidth = 352, rightX = 396, rightWidth = 364;
+        const double contentsBottom = 190;
         builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
-        RoundedRectangle(builder, 32, panelBottom, 452, panelTop - panelBottom, 7, fillAndStroke: true);
-        RoundedRectangle(builder, 496, panelBottom, 264, panelTop - panelBottom, 7, fillAndStroke: true);
-        TextColor(builder, 46, panelTop - 18, 8.4, "REPORT CONTENTS", ink, bold: true);
-        TextColor(builder, 418, panelTop - 18, 6.4, "PAGE", accent, bold: true);
+        RoundedRectangle(builder, leftX, contentsBottom, leftWidth, areaTop - contentsBottom, 7, fillAndStroke: true);
+        builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
+        RoundedRectangle(builder, leftX, areaBottom, leftWidth, contentsBottom - 10 - areaBottom, 7, fillAndStroke: true);
+        builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
+        RoundedRectangle(builder, rightX, areaBottom, rightWidth, areaTop - areaBottom, 7, fillAndStroke: true);
+
+        TextColor(builder, leftX + 14, areaTop - 17, 8.4, "REPORT CONTENTS", ink, bold: true);
+        TextColor(builder, leftX + leftWidth - 44, areaTop - 17, 6.4, "PAGE", accent, bold: true);
         var entries = new List<(string Name, string Detail, int First, int Last)> { ("Project summary", "Project, fan selection and contents", 1, 1) };
         var next = 2;
         if (contents.ViewTitles.Count > 0)
@@ -491,57 +511,298 @@ public static class DuctSystemPdf
         }
         static bool IsDuct(DuctSystemPdfReportItem item) => item.ItemType.Contains("DUCT", StringComparison.OrdinalIgnoreCase);
         static bool IsFitting(DuctSystemPdfReportItem item) => item.ItemType.Equals("FITTING", StringComparison.OrdinalIgnoreCase);
-        static string Count(int count, string singular, string plural) => $"{count} {(count == 1 ? singular : plural)}";
         if (contents.Items.Count > 0)
-        {
-            var componentCount = contents.Items.Count(item => !IsDuct(item) && !IsFitting(item));
-            entries.Add(("Item sheets, in system order",
-                $"{Count(componentCount, "component", "components")}, {Count(contents.Items.Count(IsDuct), "duct segment", "duct segments")}, "
-                + $"{Count(contents.Items.Count(IsFitting), "fitting", "fittings")}: inputs, outputs and calculations",
+            entries.Add(("Item sheets, in system order", "Inputs, outputs and calculations for every item",
                 next, next + contents.ItemSheetCounts.Sum() - 1));
-        }
         next += contents.ItemSheetCounts.Sum();
         entries.Add(("Duct system schedule", "Every item with its size, airflow and pressures", next, next + contents.SchedulePageCount - 1));
-        var y = panelTop - 38;
+        var y = areaTop - 36;
         foreach (var (entry, index) in entries.Select((value, index) => (value, index)))
         {
-            if (y < panelBottom + 14)
+            if (y < contentsBottom + 10)
                 break;
             if (index % 2 == 1)
             {
                 builder.Append("0.965 0.978 0.988 rg ");
-                builder.Append(FormattableString.Invariant($"40 {y - 8:0.##} 436 26 re f\n"));
+                builder.Append(FormattableString.Invariant($"{leftX + 8:0.##} {y - 7:0.##} {leftWidth - 16:0.##} 22 re f\n"));
             }
-            Text(builder, 50, y + 6, 8.6, entry.Name, bold: true);
-            TextColor(builder, 50, y - 4, 6.6, Fit(entry.Detail, 92), muted);
-            Text(builder, 418, y + 1, 8.6, entry.First == entry.Last
+            Text(builder, leftX + 16, y + 5, 8, entry.Name, bold: true);
+            TextColor(builder, leftX + 16, y - 3.5, 6.2, Fit(entry.Detail, 70), muted);
+            Text(builder, leftX + leftWidth - 44, y + 1, 8.4, entry.First == entry.Last
                 ? entry.First.ToString(CultureInfo.InvariantCulture)
                 : $"{entry.First}-{entry.Last}", bold: true);
-            y -= 28;
+            y -= 23;
         }
 
-        TextColor(builder, 510, panelTop - 18, 8.4, "SYSTEM SUMMARY", ink, bold: true);
-        var counts = new[]
+        // System summary: a donut of duct segments, fittings and components, each labelled with a leader arrow.
+        var summaryTop = contentsBottom - 10;
+        TextColor(builder, leftX + 14, summaryTop - 17, 8.4, "SYSTEM SUMMARY", ink, bold: true);
+        TextColor(builder, leftX + leftWidth - 98, summaryTop - 17, 6.4,
+            $"{pageCount} REPORT PAGE{(pageCount == 1 ? string.Empty : "S")}", accent, bold: true);
+        DrawSystemSummaryDonut(builder, leftX + leftWidth / 2 + 6, (summaryTop - 24 + areaBottom) / 2 + 2, 39, 23, new[]
         {
-            ("Components", contents.Items.Count(item => !IsDuct(item) && !IsFitting(item))),
-            ("Duct segments", contents.Items.Count(IsDuct)),
-            ("Fittings", contents.Items.Count(IsFitting)),
-            ("Report pages", pageCount)
-        };
-        for (var index = 0; index < counts.Length; index++)
-        {
-            var column = index % 2;
-            var row = index / 2;
-            var x = 510 + column * 124;
-            var top = panelTop - 46 - row * 58;
-            builder.Append("0.94 0.97 0.99 rg ");
-            RoundedRectangle(builder, x, top - 40, 114, 48, 5, fillAndStroke: false);
-            TextColor(builder, x + 8, top - 4, 6.4, counts[index].Item1.ToUpperInvariant(), accent, bold: true);
-            TextColor(builder, x + 8, top - 28, 17, counts[index].Item2.ToString(CultureInfo.InvariantCulture), ink, bold: true);
-        }
-        foreach (var (line, index) in WrapPdfText(subtitle, 62).Take(3).Select((value, index) => (value, index)))
-            TextColor(builder, 510, panelBottom + 34 - index * 9, 6.6, line, muted);
+            ("Duct segments", contents.Items.Count(IsDuct), "0.16 0.43 0.58"),
+            ("Fittings", contents.Items.Count(IsFitting), "0.12 0.66 0.72"),
+            ("Components", contents.Items.Count(item => !IsDuct(item) && !IsFitting(item)), "0.55 0.64 0.73")
+        }, leftX + 16, leftX + leftWidth - 16, ink, muted, areaBottom + 20, summaryTop - 30);
+
+        DrawPressureProfilePanel(builder, metadata?.PressureProfile, rightX, areaBottom, rightWidth, areaTop - areaBottom,
+            accent, ink, muted);
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// A donut chart of item counts, each segment labelled "Name / Quantity n" at the side of the chart with a leader
+    /// line ending in an arrowhead on its segment. Labels on one side are spread so they never overlap.
+    /// </summary>
+    private static void DrawSystemSummaryDonut(StringBuilder builder, double cx, double cy, double outer, double inner,
+        IReadOnlyList<(string Name, int Count, string Rgb)> segments, double minX, double maxX, string ink, string muted,
+        double minY, double maxY)
+    {
+        var total = segments.Sum(x => x.Count);
+        if (total <= 0)
+        {
+            builder.Append("0.88 0.91 0.94 rg ");
+            DonutSegment(builder, cx, cy, outer, inner, 0, 359.99);
+            TextColor(builder, cx + outer + 24, cy - 3, 8, "No items in the report yet", muted);
+            return;
+        }
+        var start = 90.0; // clockwise from 12 o'clock
+        var labels = new List<(string Name, int Count, string Rgb, double Mid)>();
+        foreach (var (name, count, rgb) in segments)
+        {
+            if (count <= 0)
+            {
+                labels.Add((name, count, rgb, double.NaN));
+                continue;
+            }
+            var sweep = 360.0 * count / total;
+            builder.Append(rgb + " rg ");
+            DonutSegment(builder, cx, cy, outer, inner, start - sweep, start);
+            if (count < total)
+            {
+                // White separators between segments.
+                builder.Append("1 1 1 RG 1.2 w ");
+                foreach (var angle in new[] { start, start - sweep })
+                {
+                    var r = angle * Math.PI / 180;
+                    builder.Append(FormattableString.Invariant(
+                        $"{cx + inner * Math.Cos(r):0.##} {cy + inner * Math.Sin(r):0.##} m {cx + outer * Math.Cos(r):0.##} {cy + outer * Math.Sin(r):0.##} l S\n"));
+                }
+            }
+            labels.Add((name, count, rgb, start - sweep / 2));
+            start -= sweep;
+        }
+        TextColor(builder, cx - EstimatedPdfWidth(total.ToString(CultureInfo.InvariantCulture), 15, true) / 2, cy - 2, 15,
+            total.ToString(CultureInfo.InvariantCulture), ink, bold: true);
+        TextColor(builder, cx - EstimatedPdfWidth("ITEMS", 5.6, true) / 2, cy - 11, 5.6, "ITEMS", muted, bold: true);
+
+        // Leader labels: right side for segments whose middle faces right, left side otherwise. Items with a count of
+        // zero are listed on the right without a leader.
+        const double spacing = 26;
+        foreach (var right in new[] { true, false })
+        {
+            var side = labels.Where(x => double.IsFinite(x.Mid) && (Math.Cos(x.Mid * Math.PI / 180) >= 0) == right)
+                .Select(x => (x.Name, x.Count, x.Rgb, x.Mid, Y: cy + (outer + 12) * Math.Sin(x.Mid * Math.PI / 180)))
+                .OrderByDescending(x => x.Y).ToList();
+            if (side.Count > 0 && side[0].Y > maxY)
+                side[0] = side[0] with { Y = maxY };
+            for (var index = 1; index < side.Count; index++)
+                if (side[index - 1].Y - side[index].Y < spacing)
+                    side[index] = side[index] with { Y = side[index - 1].Y - spacing };
+            // Keep the lowest label (and its "Quantity" line) inside the panel; shift the side up if needed.
+            var lift = side.Count == 0 ? 0 : Math.Max(0, minY - side[^1].Y);
+            if (lift > 0)
+                side = side.Select(x => x with { Y = x.Y + lift }).ToList();
+            foreach (var label in side)
+            {
+                var radians = label.Mid * Math.PI / 180;
+                var tipX = cx + (outer + 1.5) * Math.Cos(radians);
+                var tipY = cy + (outer + 1.5) * Math.Sin(radians);
+                var elbowX = cx + (outer + 14) * Math.Cos(radians);
+                var textX = right ? cx + outer + 26 : cx - outer - 26;
+                builder.Append("0.42 0.50 0.58 RG 0.7 w ");
+                builder.Append(FormattableString.Invariant(
+                    $"{textX + (right ? -4 : 4):0.##} {label.Y:0.##} m {elbowX:0.##} {label.Y:0.##} l {tipX:0.##} {tipY:0.##} l S\n"));
+                // Arrowhead pointing at the segment along the last leg of the leader.
+                var dx = tipX - elbowX;
+                var dy = tipY - label.Y;
+                var length = Math.Max(0.01, Math.Sqrt(dx * dx + dy * dy));
+                var ux = dx / length;
+                var uy = dy / length;
+                builder.Append(FormattableString.Invariant(
+                    $"0.42 0.50 0.58 rg {tipX:0.##} {tipY:0.##} m {tipX - 4.5 * ux - 2.2 * uy:0.##} {tipY - 4.5 * uy + 2.2 * ux:0.##} l {tipX - 4.5 * ux + 2.2 * uy:0.##} {tipY - 4.5 * uy - 2.2 * ux:0.##} l h f\n"));
+                DrawLeaderLabel(builder, right ? textX : Math.Max(minX, textX - LabelWidth(label.Name, label.Count)), label.Y,
+                    label.Name, label.Count, label.Rgb, ink, muted);
+            }
+        }
+        var missing = labels.Where(x => !double.IsFinite(x.Mid)).ToArray();
+        for (var index = 0; index < missing.Length; index++)
+            DrawLeaderLabel(builder, Math.Min(maxX - 80, cx + outer + 34), cy - outer - 4 + index * -12 + 6,
+                missing[index].Name, 0, missing[index].Rgb, ink, muted, compact: true);
+    }
+
+    private static double LabelWidth(string name, int count) =>
+        Math.Max(EstimatedPdfWidth(name, 8, true), EstimatedPdfWidth($"Quantity {count}", 7.4, false)) + 12;
+
+    private static void DrawLeaderLabel(StringBuilder builder, double x, double y, string name, int count, string rgb,
+        string ink, string muted, bool compact = false)
+    {
+        builder.Append(FormattableString.Invariant($"{rgb} rg {x:0.##} {y - 3:0.##} 7 7 re f\n"));
+        if (compact)
+        {
+            TextColor(builder, x + 11, y - 2, 7, $"{name}, quantity 0", muted);
+            return;
+        }
+        TextColor(builder, x + 11, y + 1, 8, name, ink, bold: true);
+        TextColor(builder, x + 11, y - 9, 7.4, $"Quantity {count.ToString(CultureInfo.InvariantCulture)}", muted);
+    }
+
+    /// <summary>A filled ring segment between two angles (degrees, counter-clockwise from 3 o'clock).</summary>
+    private static void DonutSegment(StringBuilder builder, double cx, double cy, double outer, double inner,
+        double fromDegrees, double toDegrees)
+    {
+        var from = fromDegrees * Math.PI / 180;
+        var to = toDegrees * Math.PI / 180;
+        builder.Append(FormattableString.Invariant($"{cx + outer * Math.Cos(from):0.###} {cy + outer * Math.Sin(from):0.###} m "));
+        AppendArc(builder, cx, cy, outer, from, to);
+        builder.Append(FormattableString.Invariant($"{cx + inner * Math.Cos(to):0.###} {cy + inner * Math.Sin(to):0.###} l "));
+        AppendArc(builder, cx, cy, inner, to, from);
+        builder.Append("h f\n");
+    }
+
+    /// <summary>Appends a circular arc as cubic Bezier pieces of at most 45 degrees (the current point is its start).</summary>
+    private static void AppendArc(StringBuilder builder, double cx, double cy, double radius, double from, double to)
+    {
+        var pieces = Math.Max(1, (int)Math.Ceiling(Math.Abs(to - from) / (Math.PI / 4)));
+        var step = (to - from) / pieces;
+        var k = 4.0 / 3.0 * Math.Tan(step / 4);
+        for (var index = 0; index < pieces; index++)
+        {
+            var a = from + index * step;
+            var b = a + step;
+            var (ax, ay) = (Math.Cos(a), Math.Sin(a));
+            var (bx, by) = (Math.Cos(b), Math.Sin(b));
+            builder.Append(FormattableString.Invariant(
+                $"{cx + radius * (ax - k * ay):0.###} {cy + radius * (ay + k * ax):0.###} {cx + radius * (bx + k * by):0.###} {cy + radius * (by - k * bx):0.###} {cx + radius * bx:0.###} {cy + radius * by:0.###} c "));
+        }
+    }
+
+    /// <summary>
+    /// The title page's graph of running pressure loss along every path (the Analysis tab graph): x is the component
+    /// number along a path, y the loss from its start. The critical path is drawn in amber on top of the others.
+    /// </summary>
+    private static void DrawPressureProfilePanel(StringBuilder builder, DuctSystemPdfPressureProfile? profile,
+        double left, double bottom, double width, double height, string accent, string ink, string muted)
+    {
+        var top = bottom + height;
+        TextColor(builder, left + 14, top - 17, 8.4, "PRESSURE DROP ALONG EACH PATH", ink, bold: true);
+        if (profile is null || profile.PathCount == 0)
+        {
+            TextColor(builder, left + 14, top - 40, 8, "No connected paths: draw the system in the Designer.", muted);
+            return;
+        }
+        var pathText = profile.PathCount.ToString(CultureInfo.InvariantCulture);
+        TextColor(builder, left + 14, top - 42, 18, pathText, ink, bold: true);
+        TextColor(builder, left + 20 + EstimatedPdfWidth(pathText, 18, true), top - 37, 6.6,
+            profile.PathCount == 1 ? "PATH (BRANCH) THROUGH THE SYSTEM" : "PATHS (BRANCHES) THROUGH THE SYSTEM", accent, bold: true);
+        TextColor(builder, left + 20 + EstimatedPdfWidth(pathText, 18, true), top - 46, 6.4,
+            "Running total from the start of each path to its end", muted);
+        var noteLines = string.IsNullOrWhiteSpace(profile.Note)
+            ? Array.Empty<string>()
+            : WrapPdfText(profile.Note, 92).Take(2).ToArray();
+        for (var index = 0; index < noteLines.Length; index++)
+            TextColor(builder, left + 14, bottom + 10 + (noteLines.Length - 1 - index) * 8, 6.2, noteLines[index], "0.62 0.36 0.02");
+
+        var series = profile.Series.Where(x => x.Values.Count > 0).ToArray();
+        var plotLeft = left + 50;
+        var plotRight = left + width - 14;
+        var plotTop = top - 72;
+        var plotBottom = bottom + 34 + (noteLines.Length > 0 ? noteLines.Length * 8 + 2 : 0);
+        if (series.Length == 0)
+        {
+            TextColor(builder, plotLeft, (plotTop + plotBottom) / 2, 8, "No path can be shown yet.", muted);
+            return;
+        }
+        var xMax = Math.Max(2, series.Max(x => x.Values.Count));
+        var (yMax, yStep) = ProfileAxis(series.SelectMany(x => x.Values).Max());
+        var decimals = yStep >= 1 ? 0 : Math.Min(4, (int)Math.Ceiling(-Math.Log10(yStep) - 1e-9));
+        double Px(int component) => plotLeft + (component - 1) * (plotRight - plotLeft) / (xMax - 1);
+        double Py(double value) => plotBottom + value / yMax * (plotTop - plotBottom);
+
+        builder.Append("0.89 0.92 0.95 RG 0.5 w ");
+        for (var index = 0; index <= (int)Math.Round(yMax / yStep); index++)
+        {
+            var value = index * yStep;
+            builder.Append(FormattableString.Invariant($"{plotLeft:0.##} {Py(value):0.##} m {plotRight:0.##} {Py(value):0.##} l S\n"));
+            var text = value.ToString("F" + decimals, CultureInfo.InvariantCulture);
+            TextColor(builder, plotLeft - 5 - EstimatedPdfWidth(text, 6.4, false), Py(value) - 2.2, 6.4, text, muted);
+            builder.Append("0.89 0.92 0.95 RG 0.5 w ");
+        }
+        var xStep = new[] { 1, 2, 5, 10, 20, 25, 50, 100 }.FirstOrDefault(step => xMax / step <= 12, Math.Max(1, xMax / 10));
+        for (var component = 1; component <= xMax; component += xStep)
+        {
+            var text = component.ToString(CultureInfo.InvariantCulture);
+            TextColor(builder, Px(component) - EstimatedPdfWidth(text, 6.4, false) / 2, plotBottom - 10, 6.4, text, muted);
+        }
+        builder.Append(FormattableString.Invariant(
+            $"0.63 0.69 0.75 RG 0.7 w {plotLeft:0.##} {plotTop:0.##} m {plotLeft:0.##} {plotBottom:0.##} l {plotRight:0.##} {plotBottom:0.##} l S\n"));
+        var xTitle = "Component number along the path";
+        TextColor(builder, (plotLeft + plotRight) / 2 - EstimatedPdfWidth(xTitle, 6.6, false) / 2, plotBottom - 21, 6.6, xTitle, muted);
+        var yTitle = PdfText($"Pressure drop ({profile.UnitLabel})");
+        var yTitleX = left + 16;
+        var yTitleY = (plotTop + plotBottom) / 2 - EstimatedPdfWidth(yTitle, 6.6, false) / 2;
+        builder.Append($"{muted} rg ");
+        builder.Append(FormattableString.Invariant($"BT /F1 6.6 Tf 0 1 -1 0 {yTitleX:0.##} {yTitleY:0.##} Tm ({EscapePdf(yTitle)}) Tj ET\n"));
+
+        void Line(DuctSystemPdfProfileSeries line, string rgb, double lineWidth, double dot)
+        {
+            builder.Append(FormattableString.Invariant($"{rgb} RG {lineWidth:0.##} w 1 J 1 j "));
+            for (var index = 0; index < line.Values.Count; index++)
+                builder.Append(FormattableString.Invariant($"{Px(index + 1):0.##} {Py(line.Values[index]):0.##} {(index == 0 ? "m" : "l")} "));
+            builder.Append("S\n");
+            if (line.Values.Count > 40)
+                return;
+            builder.Append($"{rgb} rg ");
+            for (var index = 0; index < line.Values.Count; index++)
+                builder.Append(FormattableString.Invariant(
+                    $"{Px(index + 1) - dot:0.##} {Py(line.Values[index]) - dot:0.##} {dot * 2:0.##} {dot * 2:0.##} re "));
+            builder.Append("f\n");
+        }
+        foreach (var line in series.Where(x => !x.IsCritical))
+            Line(line, "0.52 0.68 0.80", 0.9, 0.9);
+        foreach (var line in series.Where(x => x.IsCritical))
+            Line(line, "0.84 0.50 0.00", 1.8, 1.4);
+        builder.Append("0 J 0 j\n");
+
+        // Legend under the headline.
+        var legendY = top - 60;
+        var legendX = plotLeft;
+        var critical = series.FirstOrDefault(x => x.IsCritical);
+        if (critical is not null)
+        {
+            builder.Append(FormattableString.Invariant($"0.84 0.50 0.00 RG 1.8 w {legendX:0.##} {legendY + 2:0.##} m {legendX + 14:0.##} {legendY + 2:0.##} l S\n"));
+            var text = Fit($"Critical path ({critical.Label})", 44);
+            TextColor(builder, legendX + 18, legendY, 6.4, text, ink);
+            legendX += 26 + EstimatedPdfWidth(PdfText(text), 6.4, false);
+        }
+        var others = series.Count(x => !x.IsCritical);
+        if (others > 0)
+        {
+            builder.Append(FormattableString.Invariant($"0.52 0.68 0.80 RG 0.9 w {legendX:0.##} {legendY + 2:0.##} m {legendX + 14:0.##} {legendY + 2:0.##} l S\n"));
+            TextColor(builder, legendX + 18, legendY, 6.4, others == 1 ? "Other path" : $"Other paths ({others})", ink);
+        }
+    }
+
+    /// <summary>A rounded axis maximum (at least the data) and a 1-2-2.5-5 step giving about five intervals.</summary>
+    private static (double Max, double Step) ProfileAxis(double dataMax)
+    {
+        if (!double.IsFinite(dataMax) || dataMax <= 0)
+            return (1, 0.2);
+        var rough = dataMax / 5;
+        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(rough)));
+        var step = new[] { 1, 2, 2.5, 5, 10 }.Select(x => x * magnitude).First(x => x >= rough);
+        return (Math.Ceiling(dataMax / step - 1e-9) * step, step);
     }
 
     private static string BuildSchematicSheet(DuctSystemPdfSchematic schematic, EmbeddedImage image,

@@ -806,6 +806,8 @@ internal sealed partial class LayoutDesignerScreen
         restored.LayoutPdfBackground = pdfBackground;
         // Item notes are not drawing edits: undo and redo keep the notes as they are now.
         restored.ItemNotes = _host.DuctSystemScreen._ductSystem.ItemNotes;
+        // Expected ranges are an analysis setting, not a drawing edit: undo and redo keep them as they are now.
+        restored.AnalysisExpectations = _host.DuctSystemScreen._ductSystem.AnalysisExpectations;
         restored.UserName = _host.DuctSystemScreen._ductSystem.UserName;
         restored.ProjectName = _host.DuctSystemScreen._ductSystem.ProjectName;
         restored.ProjectNumber = _host.DuctSystemScreen._ductSystem.ProjectNumber;
@@ -2500,11 +2502,10 @@ internal sealed partial class LayoutDesignerScreen
 
     private void RemoveLayoutNode(SavedLayoutNode node)
     {
-        var answer = MessageBox.Show(_host,
-            $"Remove {node.Id} from the graphical layout? Its calculated Duct System record will be retained.",
-            "Remove Layout Item", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
-            MessageBoxDefaultButton.Button2);
-        if (answer != DialogResult.Yes)
+        if (!_deleteWithoutPrompt && MessageBox.Show(_host,
+                $"Remove {node.Id} from the graphical layout? Its calculated Duct System record will be retained.",
+                "Remove Layout Item", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         var historyState = CaptureLayoutHistoryState();
         RemoveLayoutNodePreservingCoordinates(node);
@@ -2564,11 +2565,10 @@ internal sealed partial class LayoutDesignerScreen
             ? connection.Downstream.SecondaryConnectionDuctSequence
             : connection.Downstream.ConnectionDuctSequence;
         var ductLabel = ductSequence is int sequence ? $"D-{sequence:000}" : "this unsized duct";
-        var answer = MessageBox.Show(_host,
-            $"Remove {ductLabel} between {parentId} and {connection.Downstream.Id}? The graphical connection and its Duct System row will be deleted.",
-            "Remove Duct Connection", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
-            MessageBoxDefaultButton.Button2);
-        if (answer != DialogResult.Yes)
+        if (!_deleteWithoutPrompt && MessageBox.Show(_host,
+                $"Remove {ductLabel} between {parentId} and {connection.Downstream.Id}? The graphical connection and its Duct System row will be deleted.",
+                "Remove Duct Connection", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         var historyState = CaptureLayoutHistoryState();
         RemoveLayoutConnectionPreservingCoordinates(connection);
@@ -4410,7 +4410,7 @@ internal sealed partial class LayoutDesignerScreen
             }
             if (keyData == Keys.Delete && _layoutCanvas?.HasSelection == true && !RearrangeModeActive)
             {
-                _layoutCanvas.DeleteSelectedItem();
+                DeleteSelectedItemImmediately();
                 return true;
             }
         }
@@ -4430,9 +4430,37 @@ internal sealed partial class LayoutDesignerScreen
         var menu = new ContextMenuStrip { Name = "LayoutItemMenu", Font = new Font("Segoe UI", 9F), ShowImageMargin = false };
         _layoutItemMenu = menu;
         menu.Items.Add(new ToolStripMenuItem("Edit", null, (_, _) => EditSelectedItemInInspector()) { Name = "LayoutItemMenuEdit" });
-        menu.Items.Add(new ToolStripMenuItem("Delete", null, (_, _) => _layoutCanvas?.DeleteSelectedItem()) { Name = "LayoutItemMenuDelete" });
+        menu.Items.Add(new ToolStripMenuItem("Delete", null, (_, _) => DeleteSelectedItemImmediately()) { Name = "LayoutItemMenuDelete" });
         if (!AutomatedLayoutVerification)
             menu.Show(_layoutCanvas, location);
+    }
+
+    /// <summary>True while the Delete key or the right-click Delete removes an item: no confirmation, Ctrl+Z undoes it.</summary>
+    private bool _deleteWithoutPrompt;
+
+    /// <summary>
+    /// Deletes the selected component or duct at once (Delete key, right-click Delete), as one undoable step. The
+    /// toolbar's Delete button still asks first.
+    /// </summary>
+    internal void DeleteSelectedItemImmediately()
+    {
+        if (_layoutCanvas is null || !_layoutCanvas.HasSelection)
+            return;
+        var before = _host.DuctSystemScreen._ductSystem.LayoutNodes.Count;
+        var selected = _layoutCanvas.SelectedNodeId;
+        _deleteWithoutPrompt = true;
+        try
+        {
+            _layoutCanvas.DeleteSelectedItem();
+        }
+        finally
+        {
+            _deleteWithoutPrompt = false;
+        }
+        _layoutStatusLabel.Text = before != _host.DuctSystemScreen._ductSystem.LayoutNodes.Count && selected is not null
+            ? $"Deleted {selected}. Press Ctrl+Z to undo."
+            : "Deleted the duct connection. Press Ctrl+Z to undo.";
+        _layoutStatusLabel.ForeColor = Color.FromArgb(72, 92, 110);
     }
 
     /// <summary>Opens the Selection Inspector (if hidden) on the selected item, on its Description tab, ready to edit.</summary>

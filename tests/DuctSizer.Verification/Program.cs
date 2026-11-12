@@ -67,7 +67,13 @@ var tests = new (string Name, Action Run)[]
     ("Component model: each type saves only its own data", ComponentModelTests.EachComponentTypeSavesOnlyItsOwnData),
     ("Component model: older flat fields move into type blocks", ComponentModelTests.FlatFieldsFromOlderFilesMoveIntoTheirBlocks),
     ("Item notes: saved with the project and kept per item", ItemNotesTests.NotesRoundTripAndFollowTheirItem),
-    ("Item notes: older files open with no notes", ItemNotesTests.OlderFilesOpenWithNoNotes)
+    ("Item notes: older files open with no notes", ItemNotesTests.OlderFilesOpenWithNoNotes),
+    ("Expected ranges: inclusive, one-sided, no defaults", AnalysisTests.RangesCompareInclusiveAndOneSided),
+    ("Expected ranges: ducts and fittings checked against their own ranges", AnalysisTests.DuctsAndFittingsAreCheckedAgainstTheirOwnRanges),
+    ("Expected ranges: transitional duct checked across its whole band", AnalysisTests.TransitionalDuctUsesBothBounds),
+    ("Expected ranges: saved with the project; older files open empty", AnalysisTests.ExpectationsRoundTripAndOlderFilesOpenEmpty),
+    ("Route profiles: totals and order match the critical-path analysis", AnalysisTests.RouteProfilesMatchTheCriticalPath),
+    ("Route profiles: unsized connection makes its route incomplete", AnalysisTests.UnsizedConnectionMakesItsRouteIncomplete)
 };
 
 var failures = new List<string>();

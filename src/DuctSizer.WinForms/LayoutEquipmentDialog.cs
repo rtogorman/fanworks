@@ -260,8 +260,9 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
             AddRow(table, row++, "Pressure Drop (in. w.g.)", _pressureDrop);
             AddRow(table, row++, "Air System Type", _airSystem);
         }
-        AddRow(table, row++, _absoluteLocation ? LayoutPositionReference.CaptionFor(_reference) : "Relative ΔX / ΔY / ΔZ (ft)",
-            LayoutDialogControls.CreateLocationEditor(_deltaX, _deltaY, _deltaZ));
+        var positionCaption = _absoluteLocation ? LayoutPositionReference.CaptionFor(_reference) : "Relative ΔX / ΔY / ΔZ (ft)";
+        AddRow(table, row++, positionCaption,
+            LayoutDialogControls.CreatePositionEditor(positionCaption, _deltaX, _deltaY, _deltaZ));
         if (table.GetControlFromPosition(0, row - 1) is Label locationCaption)
         {
             locationCaption.Name = "LayoutLocationCaption";

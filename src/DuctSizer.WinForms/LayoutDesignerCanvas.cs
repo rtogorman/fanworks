@@ -68,6 +68,10 @@ internal sealed class LayoutDesignerCanvas : Panel
     internal bool HasSelection => _selectedNodeId is not null && NodeSource().Any(node => node.Id == _selectedNodeId)
                                   || _selectedConnection is not null;
 
+    /// <summary>ID of the selected component, or null when none (or a duct) is selected.</summary>
+    internal string? SelectedNodeId => _selectedNodeId is not null && NodeSource().Any(node => node.Id == _selectedNodeId)
+        ? _selectedNodeId : null;
+
     /// <summary>Deselects the selected component or duct. False when nothing was selected.</summary>
     internal bool ClearSelection()
     {

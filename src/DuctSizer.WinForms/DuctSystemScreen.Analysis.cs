@@ -1,9 +1,11 @@
+using System.Globalization;
 using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
 /// <summary>A row of the Analysis tab's "highest pressure drops" list.</summary>
-internal sealed record PressureDropEntry(string Id, string Kind, double LossPa, bool OnCriticalPath);
+/// <param name="Range">The item checked against the expected ranges (Analysis Settings).</param>
+internal sealed record PressureDropEntry(string Id, string Kind, double LossPa, bool OnCriticalPath, RangeCheckResult Range);
 
 /// <summary>
 /// Analysis tab summary (v0.96 stage 4): the system's airflow, the critical-path pressure drop and the items on the
@@ -18,6 +20,10 @@ internal sealed partial class DuctSystemScreen
     private readonly Label _analysisFanStaticValue = new() { Name = "AnalysisFanStaticValue" };
     private readonly Label _analysisRouteValue = new() { Name = "AnalysisRouteValue" };
     private readonly DataGridView _analysisTopLossGrid = new();
+    private readonly PressureProfileChart _analysisProfileChart = new();
+    private readonly Label _analysisProfileSubtitle = new() { Name = "AnalysisProfileSubtitle" };
+
+    private static readonly RangeCheckResult NoRange = new(RangeCheckStatus.NotApplicable, Array.Empty<RangeFinding>());
 
     private Control BuildAnalysisSummary(Control totalsRow)
     {
@@ -94,7 +100,8 @@ internal sealed partial class DuctSystemScreen
         _analysisTopLossGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _analysisTopLossGrid.MultiSelect = false;
         _analysisTopLossGrid.RowTemplate.Height = 22;
-        _analysisTopLossGrid.ColumnHeadersHeight = 26;
+        _analysisTopLossGrid.ColumnHeadersHeight = 34;
+        _analysisTopLossGrid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
         _analysisTopLossGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
         _analysisTopLossGrid.BackgroundColor = Color.White;
         _analysisTopLossGrid.BorderStyle = BorderStyle.None;
@@ -108,13 +115,15 @@ internal sealed partial class DuctSystemScreen
         foreach (var (name, header, width) in new[]
                  {
                      ("Rank", "#", 34), ("Item", "Item", 90), ("Kind", "Kind", 110), ("Loss", "Pressure drop", 120),
-                     ("Critical", "Critical path", 90)
+                     ("Critical", "Critical path", 90), ("Range", "Within expected range", 110)
                  })
             _analysisTopLossGrid.Columns.Add(new DataGridViewTextBoxColumn
             {
                 Name = name, HeaderText = header, Width = width, SortMode = DataGridViewColumnSortMode.NotSortable
             });
         _analysisTopLossGrid.Columns["Kind"]!.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        _analysisTopLossGrid.Columns["Range"]!.Visible = false;
+        _analysisTopLossGrid.ShowCellToolTips = true;
         _analysisTopLossGrid.CellClick += (_, args) =>
         {
             if (args.RowIndex >= 0 && _analysisTopLossGrid.Rows[args.RowIndex].Cells["Item"].Value is string id)
@@ -174,7 +183,8 @@ internal sealed partial class DuctSystemScreen
         var entries = new List<PressureDropEntry>();
         foreach (var duct in _ductSystem.Ducts)
             entries.Add(new PressureDropEntry(duct.Id, "Duct", SystemSolver.DuctLoss(_ductSystem, duct.Sequence),
-                _criticalPathItemKeys.Contains(DuctKey(duct.Sequence))));
+                _criticalPathItemKeys.Contains(DuctKey(duct.Sequence)),
+                AnalysisRangeCheck.CheckDuct(_ductSystem.AnalysisExpectations, duct)));
         foreach (var fitting in _ductSystem.Fittings)
         {
             var kind = "Fitting";
@@ -188,14 +198,15 @@ internal sealed partial class DuctSystemScreen
                 // Its loss below is NaN, so it is left out of the list.
             }
             entries.Add(new PressureDropEntry(fitting.Id, kind, SystemSolver.FittingLoss(_ductSystem, fitting.Sequence),
-                _criticalPathItemKeys.Contains(FittingKey(fitting.Sequence))));
+                _criticalPathItemKeys.Contains(FittingKey(fitting.Sequence)),
+                AnalysisRangeCheck.CheckFitting(_ductSystem.AnalysisExpectations, fitting)));
         }
         foreach (var node in _ductSystem.LayoutNodes.Where(node => node.IsDefined
                      && node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd
                          or LayoutNodeType.CustomComponent))
             entries.Add(new PressureDropEntry(node.Id, node.Type == LayoutNodeType.Grd ? "GRD"
                     : node.Type == LayoutNodeType.CustomComponent ? "Custom component" : node.Type.ToString(),
-                node.PressureDropPa, _criticalPathItemKeys.Contains(LayoutKey(node.Sequence))));
+                node.PressureDropPa, _criticalPathItemKeys.Contains(LayoutKey(node.Sequence)), NoRange));
         return entries
             .Where(entry => double.IsFinite(entry.LossPa) && entry.LossPa > 0)
             .OrderByDescending(entry => entry.LossPa)
@@ -233,15 +244,169 @@ internal sealed partial class DuctSystemScreen
             : $"{_criticalPathItemKeys.Count}  ({_criticalPathRoute})";
 
         _analysisTopLossGrid.Rows.Clear();
+        _analysisTopLossGrid.Columns["Range"]!.Visible = _ductSystem.AnalysisExpectations.AnySet;
         var rank = 1;
         foreach (var entry in HighestPressureDrops())
         {
             var index = _analysisTopLossGrid.Rows.Add(rank++, entry.Id, entry.Kind, FormatSystemTotal(entry.LossPa),
-                entry.OnCriticalPath ? "Yes" : string.Empty);
+                entry.OnCriticalPath ? "Yes" : string.Empty, RangeText(entry.Range.Status));
+            var row = _analysisTopLossGrid.Rows[index];
             if (entry.OnCriticalPath)
-                _analysisTopLossGrid.Rows[index].Cells["Critical"].Style.ForeColor = Color.FromArgb(174, 104, 0);
+                row.Cells["Critical"].Style.ForeColor = Color.FromArgb(174, 104, 0);
+            var rangeCell = row.Cells["Range"];
+            rangeCell.ToolTipText = RangeToolTip(entry.Range);
+            rangeCell.Style.ForeColor = entry.Range.Status switch
+            {
+                RangeCheckStatus.Within => Color.FromArgb(30, 110, 60),
+                RangeCheckStatus.Outside => Color.Firebrick,
+                _ => Color.FromArgb(110, 124, 136)
+            };
+            if (entry.Range.Status == RangeCheckStatus.Outside)
+                rangeCell.Style.Font = new Font("Segoe UI Semibold", 8.5F);
         }
         _analysisTopLossGrid.ClearSelection();
+        RefreshPressureProfile();
+    }
+
+    private static string RangeText(RangeCheckStatus status) => status switch
+    {
+        RangeCheckStatus.Within => "Yes",
+        RangeCheckStatus.Outside => "No",
+        RangeCheckStatus.NotSet => "Not set",
+        RangeCheckStatus.NotAvailable => "Not available",
+        _ => "—"
+    };
+
+    /// <summary>Each comparison made, in project units, e.g. "Velocity 1,250 fpm: expected 600 to 1,000 fpm (outside)".</summary>
+    internal string RangeToolTip(RangeCheckResult result)
+    {
+        if (result.Status == RangeCheckStatus.NotApplicable)
+            return "No expected range applies to this kind of item.";
+        if (result.Status == RangeCheckStatus.NotSet)
+            return "No expected range is entered for this kind of item (Analysis Settings).";
+        var lines = result.Findings.Select(finding =>
+        {
+            var (name, unit, format, convert) = QuantityDisplay(finding.Quantity);
+            var value = finding.UpperValue is double upper
+                ? $"{convert(finding.Value).ToString(format, CultureInfo.CurrentCulture)} to {convert(upper).ToString(format, CultureInfo.CurrentCulture)} (transitional flow)"
+                : convert(finding.Value).ToString(format, CultureInfo.CurrentCulture);
+            var expected = finding.Range switch
+            {
+                { Low: double low, High: double high } => $"{convert(low).ToString(format, CultureInfo.CurrentCulture)} to {convert(high).ToString(format, CultureInfo.CurrentCulture)}",
+                { Low: double low } => $"at least {convert(low).ToString(format, CultureInfo.CurrentCulture)}",
+                { High: double high } => $"at most {convert(high).ToString(format, CultureInfo.CurrentCulture)}",
+                _ => "not set"
+            };
+            return $"{name} {value} {unit}: expected {expected} {unit} ({(finding.Within ? "within" : "outside")})";
+        }).ToList();
+        if (result.Problem is not null)
+            lines.Add("Not checked: " + result.Problem);
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private (string Name, string Unit, string Format, Func<double, double> Convert) QuantityDisplay(ExpectedQuantity quantity)
+    {
+        var imperial = _host._currentUnits == UnitSystem.Imperial;
+        return quantity switch
+        {
+            ExpectedQuantity.DuctPressureRate => ("Pressure drop rate", imperial ? "in. w.c./100 ft" : "Pa/m", "0.####",
+                imperial ? UnitConversions.PaPerMToInchesWaterPer100Feet : value => value),
+            ExpectedQuantity.DuctVelocity => ("Velocity", imperial ? "fpm" : "m/s", imperial ? "N0" : "0.##",
+                imperial ? UnitConversions.MpsToFpm : value => value),
+            ExpectedQuantity.FittingVelocity => ("Velocity", imperial ? "fpm" : "m/s", imperial ? "N0" : "0.##",
+                imperial ? UnitConversions.MpsToFpm : value => value),
+            _ => ("Loss", imperial ? "in. w.c." : "Pa", imperial ? "0.####" : "0.##",
+                imperial ? UnitConversions.PaToInchesWater : value => value)
+        };
+    }
+
+    /// <summary>Opens Analysis Settings (expected ranges) and applies a save.</summary>
+    internal void EditAnalysisSettings()
+    {
+        using var dialog = new AnalysisSettingsDialog(_ductSystem.AnalysisExpectations, _host._currentUnits);
+        if (dialog.ShowDialog(_host) != DialogResult.OK)
+            return;
+        _ductSystem.AnalysisExpectations = dialog.Expectations;
+        SaveDuctSystem();
+        RefreshAnalysisSummary();
+    }
+
+    /// <summary>
+    /// Running pressure loss along every route, in project units: complete routes only, with a note naming what was
+    /// left out. The critical path is marked only when every route is complete (otherwise it cannot be known).
+    /// </summary>
+    internal DuctSystemPdfPressureProfile BuildPressureProfile()
+    {
+        var imperial = _host._currentUnits == UnitSystem.Imperial;
+        var unit = imperial ? "in. w.c." : "Pa";
+        var result = SystemPathProfiles.Build(_ductSystem);
+        var allComplete = result.CompletePathCount == result.Paths.Count && !result.Truncated;
+        var series = result.Paths.Where(path => path.IsComplete)
+            .Select(path => new DuctSystemPdfProfileSeries($"{path.StartId} → {path.EndId}",
+                path.Steps.Select(step => imperial ? UnitConversions.PaToInchesWater(step.CumulativeLossPa) : step.CumulativeLossPa).ToArray(),
+                allComplete && path.IsCritical,
+                path.Steps.Select(step => step.ItemId).ToArray()))
+            .ToArray();
+        var notes = new List<string>();
+        var incomplete = result.Paths.Count - result.CompletePathCount;
+        if (incomplete > 0)
+            notes.Add($"{incomplete} path{(incomplete == 1 ? " is" : "s are")} not shown: an item on {(incomplete == 1 ? "it" : "them")} has no calculated loss (see the Errors list).");
+        if (result.Truncated)
+            notes.Add($"Only the first {SystemPathProfiles.MaximumPaths} paths are shown.");
+        if (!allComplete && series.Length > 0)
+            notes.Add("The critical path is not marked until every path can be calculated.");
+        return new DuctSystemPdfPressureProfile(unit, series, result.Paths.Count, string.Join(" ", notes));
+    }
+
+    private void RefreshPressureProfile()
+    {
+        var profile = BuildPressureProfile();
+        _analysisProfileChart.Profile = profile;
+        _analysisProfileChart.EmptyMessage = profile.PathCount == 0
+            ? "Draw and connect the system in the Designer to see the pressure drop along each path."
+            : "No path can be shown yet. " + profile.Note;
+        var summary = profile.PathCount == 1 ? "1 path" : $"{profile.PathCount} paths";
+        _analysisProfileSubtitle.Text = $"Running total from the start of each path to its end  ·  {summary}"
+                                        + (string.IsNullOrEmpty(profile.Note) ? string.Empty : "  ·  " + profile.Note);
+        _analysisProfileSubtitle.ForeColor = string.IsNullOrEmpty(profile.Note)
+            ? Color.FromArgb(74, 91, 106) : Color.FromArgb(160, 90, 0);
+    }
+
+    /// <summary>The Analysis tab's pressure-profile card (below the overview and the top-10 list).</summary>
+    private Control BuildPressureProfileCard()
+    {
+        var card = new RoundedPanel
+        {
+            Name = "AnalysisProfileCard",
+            Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            CornerRadius = 10,
+            BorderColor = UiPalette.CardBorder,
+            Padding = new Padding(14, 8, 14, 8),
+            Margin = new Padding(0, 10, 0, 0)
+        };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.White };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.Controls.Add(new Label
+        {
+            Text = "Pressure drop along each path",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI Semibold", 10F),
+            ForeColor = Color.FromArgb(22, 50, 78),
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
+        _analysisProfileSubtitle.Dock = DockStyle.Fill;
+        _analysisProfileSubtitle.TextAlign = ContentAlignment.MiddleLeft;
+        _analysisProfileSubtitle.AutoEllipsis = true;
+        _analysisProfileSubtitle.Font = new Font("Segoe UI", 8.5F);
+        layout.Controls.Add(_analysisProfileSubtitle, 0, 1);
+        _analysisProfileChart.Dock = DockStyle.Fill;
+        _analysisProfileChart.Margin = new Padding(0, 4, 0, 0);
+        layout.Controls.Add(_analysisProfileChart, 0, 2);
+        card.Controls.Add(layout);
+        return card;
     }
 
     /// <summary>Selects the item's row in the full system table and scrolls it into view.</summary>

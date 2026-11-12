@@ -78,7 +78,7 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 15;
+    public const int CurrentSchemaVersion = 16;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -91,6 +91,12 @@ public sealed class DuctSystemDocument
     /// its notes. Notes of deleted items are dropped when the project is saved. Schema 15.
     /// </summary>
     public Dictionary<string, string> ItemNotes { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Expected ranges the engineer enters in Analysis Settings (duct friction rate and velocity, fitting velocity
+    /// and loss), used only to flag items on the Analysis tab. Empty by default. Schema 16.
+    /// </summary>
+    public AnalysisExpectations AnalysisExpectations { get; set; } = new();
     public int NextSequence { get; set; } = 1;
     public int NextFittingSequence { get; set; } = 1;
     public int NextLayoutSequence { get; set; } = 1;
@@ -721,6 +727,8 @@ public static class DuctSystemStore
                 pdfBackground.CenterZFeet = FiniteOrZero(pdfBackground.CenterZFeet);
             }
         }
+        document.AnalysisExpectations ??= new AnalysisExpectations();
+        document.AnalysisExpectations.Normalize();
         document.AutomaticSizing ??= new AutomaticSizingSettings();
         document.AutomaticSizing.Duct ??= new AutomaticDuctSizingDefaults();
         document.AutomaticSizing.Coil ??= new AutomaticEquipmentSizingDefaults();
@@ -810,6 +818,9 @@ public static class DuctSystemStore
         // Version 15: optional per-item notes (ItemNotes; empty when absent).
         if (document.SchemaVersion == 14)
             document.SchemaVersion = 15;
+        // Version 16: optional expected ranges for the Analysis tab (AnalysisExpectations; empty when absent).
+        if (document.SchemaVersion == 15)
+            document.SchemaVersion = 16;
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."

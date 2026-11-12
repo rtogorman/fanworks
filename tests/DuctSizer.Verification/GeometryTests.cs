@@ -362,8 +362,8 @@ internal static class ItemNotesTests
         {
             DuctSystemStore.Save(path, document);
             var loaded = DuctSystemStore.Load(path);
-            if (loaded.SchemaVersion != 15 || DuctSystemDocument.CurrentSchemaVersion != 15)
-                throw new Exception("Notes are saved in file format 15.");
+            if (loaded.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion || DuctSystemDocument.CurrentSchemaVersion < 15)
+                throw new Exception("Notes are saved in file format 15 and later.");
             if (loaded.ItemNotes.Count != 1
                 || loaded.ItemNotes[CriticalPathAnalyzer.LayoutKey(fan.Sequence)] != "Fan per schedule FS-1; confirm motor size.")
                 throw new Exception("A note must round-trip unchanged; blank notes and notes of deleted items are dropped.");
@@ -387,9 +387,9 @@ internal static class ItemNotesTests
             json.Remove("ItemNotes");
             File.WriteAllText(path, json.ToJsonString());
             var loaded = DuctSystemStore.Load(path);
-            if (loaded.SchemaVersion != 15 || loaded.ItemNotes is null || loaded.ItemNotes.Count != 0
+            if (loaded.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion || loaded.ItemNotes is null || loaded.ItemNotes.Count != 0
                 || loaded.LayoutNodes.Count != 1)
-                throw new Exception("A format-14 project must open as format 15 with no notes and nothing else changed.");
+                throw new Exception("A format-14 project must open as the current format with no notes and nothing else changed.");
         }
         finally
         {
