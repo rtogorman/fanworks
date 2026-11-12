@@ -73,7 +73,10 @@ var tests = new (string Name, Action Run)[]
     ("Expected ranges: transitional duct checked across its whole band", AnalysisTests.TransitionalDuctUsesBothBounds),
     ("Expected ranges: saved with the project; older files open empty", AnalysisTests.ExpectationsRoundTripAndOlderFilesOpenEmpty),
     ("Route profiles: totals and order match the critical-path analysis", AnalysisTests.RouteProfilesMatchTheCriticalPath),
-    ("Route profiles: unsized connection makes its route incomplete", AnalysisTests.UnsizedConnectionMakesItsRouteIncomplete)
+    ("Route profiles: unsized connection makes its route incomplete", AnalysisTests.UnsizedConnectionMakesItsRouteIncomplete),
+    ("SMACNA: pressure, seal and leakage classes; F = CL x P^0.65", LeakageTests.PressureSealAndLeakageClassesFollowSmacna),
+    ("Surface area of ducts and fittings", LeakageTests.SurfaceAreasOfDuctsAndFittings),
+    ("System leakage: class from pressure, F x area", LeakageTests.SystemLeakageIsSumOfFactorTimesArea)
 };
 
 var failures = new List<string>();

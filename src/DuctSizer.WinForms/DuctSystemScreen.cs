@@ -395,21 +395,34 @@ internal sealed partial class DuctSystemScreen
 
     private Control BuildDuctSystemPage()
     {
+        // Analysis tab: one page that scrolls as a whole. Summary (overview + top ten pressure drops), the pressure drop
+        // along each path with the system summary donut, table actions, the full table (as tall as its rows, so it
+        // has no scroll bar of its own), status. The top-ten list keeps its own scroll bar.
+        var page = new Panel
+        {
+            Name = "AnalysisPageScroll",
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = _host.BackColor
+        };
         var root = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Name = "AnalysisPageContent",
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
             RowCount = 5,
             BackColor = _host.BackColor,
             Padding = new Padding(14)
         };
+        _analysisPageScroll = page;
+        _analysisPageContent = root;
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        // Analysis tab: summary (overview + top ten pressure drops), the pressure drop along each path, table actions,
-        // the full table, status. The graph and the table share the remaining height.
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 262F));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 55F));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 490F));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 350F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 45F));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
 
         var summary = new TableLayoutPanel
@@ -508,11 +521,68 @@ internal sealed partial class DuctSystemScreen
         _systemStorageStatusLabel.Text = "Saved automatically on this computer. No database or network connection is used.";
 
         root.Controls.Add(analysisSummary, 0, 0);
-        root.Controls.Add(BuildPressureProfileCard(), 0, 1);
+        var graphs = new TableLayoutPanel
+        {
+            Name = "AnalysisGraphs",
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = _host.BackColor
+        };
+        graphs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 66F));
+        graphs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34F));
+        graphs.Controls.Add(BuildPressureProfileCard(), 0, 0);
+        graphs.Controls.Add(BuildSystemSummaryCard(), 1, 0);
+        root.Controls.Add(graphs, 0, 1);
         root.Controls.Add(actions, 0, 2);
         root.Controls.Add(_ductGrid, 0, 3);
         root.Controls.Add(_systemStorageStatusLabel, 0, 4);
-        return root;
+        // The full table shows every row; the wheel over it scrolls the page.
+        _ductGrid.ScrollBars = ScrollBars.Horizontal;
+        _ductGrid.MouseWheel += (_, args) =>
+        {
+            if (_ductGrid.ScrollBars == ScrollBars.Both || args is not HandledMouseEventArgs handled)
+                return;
+            handled.Handled = true;
+            ScrollAnalysisPage(-args.Delta / 120 * DpiScaling.Scale(64));
+        };
+        page.Controls.Add(root);
+        return page;
+    }
+
+    private Panel? _analysisPageScroll;
+    private TableLayoutPanel? _analysisPageContent;
+
+    /// <summary>Scrolls the Analysis page by <paramref name="pixels"/> (positive = down).</summary>
+    internal void ScrollAnalysisPage(int pixels)
+    {
+        if (_analysisPageScroll is null)
+            return;
+        var current = -_analysisPageScroll.AutoScrollPosition.Y;
+        _analysisPageScroll.AutoScrollPosition = new Point(-_analysisPageScroll.AutoScrollPosition.X, Math.Max(0, current + pixels));
+    }
+
+    /// <summary>
+    /// Makes the Analysis table as tall as its header and rows, so the whole table is on the page and the page scroll
+    /// bar moves through it. A very large table (beyond about 30,000 pixels) keeps its own scroll bar instead.
+    /// </summary>
+    private void FitAnalysisTableHeight()
+    {
+        if (_analysisPageContent is null || _analysisPageContent.RowStyles.Count < 4)
+            return;
+        var rows = 0;
+        foreach (DataGridViewRow row in _ductGrid.Rows)
+            if (row.Visible)
+                rows += row.Height;
+        var needed = _ductGrid.ColumnHeadersHeight + rows + SystemInformation.HorizontalScrollBarHeight + 6;
+        needed = Math.Max(needed, DpiScaling.Scale(140));
+        const int largest = 30_000;
+        _ductGrid.ScrollBars = needed > largest ? ScrollBars.Both : ScrollBars.Horizontal;
+        var height = Math.Min(needed, largest);
+        if (Math.Abs(_analysisPageContent.RowStyles[3].Height - height) > 0.5)
+            _analysisPageContent.RowStyles[3].Height = height;
     }
 
     private static void ConfigureSystemButton(Button button, string text, int width)
@@ -586,10 +656,11 @@ internal sealed partial class DuctSystemScreen
         AddGridColumn("Method", "Eq. diameter", 94, true);
         AddGridColumn("Basis", "Pressure basis", 104, true);
         AddGridColumn("Temperature", "Temperature", 84, true);
+        AddGridColumn("SurfaceArea", "Surface area", 84, true);
         var displayOrder = new[]
         {
             "Id", "Description", "Airflow", "PressureIn", "PressureOut", "AirSystem", "Temperature",
-            "PressureRate", "Velocity", "Length", "Size", "StaticDrop", "BranchId", "UpstreamId",
+            "PressureRate", "Velocity", "Length", "Size", "SurfaceArea", "StaticDrop", "BranchId", "UpstreamId",
             "DownstreamId", "DeltaX", "DeltaY", "DeltaZ", "AbsoluteX", "AbsoluteY", "AbsoluteZ",
             "Shape", "Area", "Material", "Method", "Basis"
         };
@@ -1122,6 +1193,7 @@ internal sealed partial class DuctSystemScreen
     internal void RefreshDuctSystemGrid()
     {
         RefreshDuctSystemGridCore();
+        FitAnalysisTableHeight();
         RefreshAnalysisSummary();
     }
 
@@ -1187,6 +1259,7 @@ internal sealed partial class DuctSystemScreen
                     duct.PressureLossBasis == PressureLossBasis.EquivalentRoundArea ? "Equivalent round" : "Actual area");
                 _ductGrid.Rows[rowIndex].Tag = new SystemRowTag(false, duct.Sequence);
                 _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = FormatSystemTemperature(duct.TemperatureC);
+                _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = FormatSurfaceArea(SurfaceAreaCalculator.ForDuct(duct));
                 ApplyCriticalRowStyle(_ductGrid.Rows[rowIndex], criticalKey);
                 ApplyAirflowOverrideStyle(_ductGrid.Rows[rowIndex], duct.Sequence, isFitting: false);
             }
@@ -1202,6 +1275,7 @@ internal sealed partial class DuctSystemScreen
                     "—", duct.Shape, "—", "—", "—", "—", "—", ex.Message, "—", "—");
                 _ductGrid.Rows[rowIndex].Tag = new SystemRowTag(false, duct.Sequence);
                 _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = FormatSystemTemperature(duct.TemperatureC);
+                _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = FormatSurfaceArea(SurfaceAreaCalculator.ForDuct(duct));
                 _ductGrid.Rows[rowIndex].DefaultCellStyle.ForeColor = Color.Firebrick;
             }
         }
@@ -1244,6 +1318,7 @@ internal sealed partial class DuctSystemScreen
                     $"{result.Definition.ReferenceVelocity} VP");
                 _ductGrid.Rows[rowIndex].Tag = new SystemRowTag(true, fitting.Sequence);
                 _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = FormatSystemTemperature(fitting.TemperatureC);
+                _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = FormatSurfaceArea(SurfaceAreaCalculator.ForFitting(fitting));
                 ApplyCriticalRowStyle(_ductGrid.Rows[rowIndex], criticalKey);
                 ApplyAirflowOverrideStyle(_ductGrid.Rows[rowIndex], fitting.Sequence, isFitting: true);
             }
@@ -1260,6 +1335,7 @@ internal sealed partial class DuctSystemScreen
                     "—", "—", "—", "—", ex.Message, "—", "—");
                 _ductGrid.Rows[rowIndex].Tag = new SystemRowTag(true, fitting.Sequence);
                 _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = FormatSystemTemperature(fitting.TemperatureC);
+                _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = FormatSurfaceArea(SurfaceAreaCalculator.ForFitting(fitting));
                 _ductGrid.Rows[rowIndex].DefaultCellStyle.ForeColor = Color.Firebrick;
             }
         }
@@ -1320,6 +1396,7 @@ internal sealed partial class DuctSystemScreen
                 "—", "—");
             _ductGrid.Rows[rowIndex].DefaultCellStyle.BackColor = Color.FromArgb(247, 251, 248);
             _ductGrid.Rows[rowIndex].Tag = equipment;
+            _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = "—";
             _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = equipment.Type == LayoutNodeType.CalculationPoint
                 && !string.Equals(equipment.CalculationPointType, "Temperature", StringComparison.OrdinalIgnoreCase)
                     ? "—" : FormatSystemTemperature(equipment.TemperatureC);
@@ -1581,6 +1658,19 @@ internal sealed partial class DuctSystemScreen
         ? $"{UnitConversions.SquareMetersToSquareFeet(squareMeters):0.###}"
         : $"{squareMeters:0.####}";
 
+    /// <summary>Surface area for the tables: "—" for equipment (no ductwork area); fittings, estimated, carry "≈".</summary>
+    internal string FormatSurfaceArea(ItemSurfaceArea? area)
+    {
+        if (area is null)
+            return "—";
+        if (area.Problem is not null)
+            return "Not available";
+        var text = _host._currentUnits == UnitSystem.Imperial
+            ? $"{area.AreaFt2:0.##}"
+            : $"{area.AreaM2:0.###}";
+        return area.IsEstimate ? "≈ " + text : text;
+    }
+
     private string FormatSystemVelocity(double metersPerSecond) => _host._currentUnits == UnitSystem.Imperial
         ? $"{UnitConversions.MpsToFpm(metersPerSecond):N0}"
         : $"{metersPerSecond:0.##}";
@@ -1703,6 +1793,7 @@ internal sealed partial class DuctSystemScreen
         _ductGrid.Columns["AbsoluteZ"].HeaderText = imperial ? "Absolute Z\n(ft)" : "Absolute Z\n(m)";
         _ductGrid.Columns["Length"].HeaderText = imperial ? "Length\n(ft)" : "Length\n(m)";
         _ductGrid.Columns["Area"].HeaderText = imperial ? "Area\n(ft²)" : "Area\n(m²)";
+        _ductGrid.Columns["SurfaceArea"].HeaderText = imperial ? "Surface area\n(ft²)" : "Surface area\n(m²)";
         _ductGrid.Columns["Velocity"].HeaderText = imperial ? "Velocity\n(fpm)" : "Velocity\n(m/s)";
         _ductGrid.Columns["Temperature"].HeaderText = imperial ? "Temperature\n(°F)" : "Temperature\n(°C)";
         _ductGrid.Columns["PressureRate"].HeaderText = imperial ? "Pressure rate\n(in. w.c./100 ft)" : "Pressure rate\n(Pa/m)";
@@ -2531,7 +2622,8 @@ internal sealed partial class DuctSystemScreen
                       + (LayoutReviewMessages() is { Count: > 0 } review
                           ? ": " + string.Join(" ", review.Take(6))
                           : string.Empty),
-            BuildPressureProfile());
+            BuildPressureProfile(),
+            BuildLeakageSummary());
         DuctSystemPdf.Export(pdfPath, "Duct System Schedule",
             $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_host._currentUnits} units", headers, rows,
             _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)
@@ -2816,10 +2908,11 @@ internal sealed partial class DuctSystemScreen
     private IReadOnlyList<DuctSystemPdfReportItem> BuildPdfReportItems()
     {
         var items = new List<(string Key, DuctSystemPdfReportItem Item)>();
+        var leakage = SmacnaLeakage.Analyze(_ductSystem);
         foreach (var duct in _ductSystem.Ducts.OrderBy(x => x.Sequence))
-            items.Add((DuctKey(duct.Sequence), BuildDuctReportItem(duct)));
+            items.Add((DuctKey(duct.Sequence), BuildDuctReportItem(duct, leakage)));
         foreach (var fitting in _ductSystem.Fittings.OrderBy(x => x.Sequence))
-            items.Add((FittingKey(fitting.Sequence), BuildFittingReportItem(fitting)));
+            items.Add((FittingKey(fitting.Sequence), BuildFittingReportItem(fitting, leakage)));
         foreach (var node in _ductSystem.LayoutNodes
                      .Where(x => x.Type is LayoutNodeType.Reservoir or LayoutNodeType.Fan or LayoutNodeType.Coil
                                      or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CalculationPoint
@@ -2831,7 +2924,7 @@ internal sealed partial class DuctSystemScreen
         return OrderPdfReportItems(items);
     }
 
-    internal DuctSystemPdfReportItem BuildDuctReportItem(SavedDuct duct)
+    internal DuctSystemPdfReportItem BuildDuctReportItem(SavedDuct duct, SystemLeakageResult? leakage = null)
     {
         var topology = LayoutTopologyForDuct(duct.Sequence);
         var inputs = new List<DuctSystemPdfField>
@@ -2871,12 +2964,16 @@ internal sealed partial class DuctSystemScreen
                 PdfField("Static pressure out", PdfPressure(pressure.Outlet)),
                 PdfField("Calculation basis", result.CalculationBasisDescription)
             });
+            calculations.Add(DuctSystemPdfCalculationSection.Title("DUCT SIZING CALCULATION"));
             calculations.AddRange(BuildDuctPdfCalculations(result));
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
         {
             outputs.Add(PdfField("Calculation status", $"Invalid - {ex.Message}"));
         }
+        var surfaceArea = SurfaceAreaCalculator.ForDuct(duct);
+        outputs.Add(PdfField("Surface area", FormatSurfaceAreaWithUnit(surfaceArea)));
+        calculations.AddRange(BuildSurfaceAreaSections(surfaceArea, leakage ?? SmacnaLeakage.Analyze(_ductSystem)));
         var quickCheck = new[]
         {
             PdfField("Duct size", SafeDuctSize(duct)),
@@ -2889,7 +2986,7 @@ internal sealed partial class DuctSystemScreen
                 QuickCheck: quickCheck);
     }
 
-    internal DuctSystemPdfReportItem BuildFittingReportItem(SavedFitting fitting)
+    internal DuctSystemPdfReportItem BuildFittingReportItem(SavedFitting fitting, SystemLeakageResult? leakage = null)
     {
         var topology = LayoutTopologyForFitting(fitting.Sequence);
         var layoutNode = _ductSystem.LayoutNodes.FirstOrDefault(x => x.LinkedFittingSequence == fitting.Sequence);
@@ -2961,11 +3058,18 @@ internal sealed partial class DuctSystemScreen
                     ? $"Linear interpolation: {selection.LowerPoint.AirflowCfm:0} to {selection.UpperPoint.AirflowCfm:0} cfm"
                     : "Exact published airflow point"));
             }
+            calculations.Add(DuctSystemPdfCalculationSection.Title(SurfaceAreaCalculator.IsTerminalOrBox(fitting.FittingCode)
+                ? "COMPONENT SIZING CALCULATION" : "FITTING SIZING CALCULATION"));
             calculations.AddRange(BuildFittingPdfCalculations(result));
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException or KeyNotFoundException)
         {
             outputs.Add(PdfField("Calculation status", $"Invalid - {ex.Message}"));
+        }
+        if (SurfaceAreaCalculator.ForFitting(fitting) is { } fittingArea)
+        {
+            outputs.Add(PdfField("Surface area (estimate)", FormatSurfaceAreaWithUnit(fittingArea)));
+            calculations.AddRange(BuildSurfaceAreaSections(fittingArea, leakage ?? SmacnaLeakage.Analyze(_ductSystem)));
         }
         var quickCheck = new[]
         {
@@ -3060,8 +3164,12 @@ internal sealed partial class DuctSystemScreen
             ? "CALCULATION POINT"
             : node.Type.ToString().ToUpperInvariant();
         var quickCheck = BuildEquipmentPdfQuickCheck(node, description, inputs, outputs);
+        var equipmentCalculations = BuildEquipmentPdfCalculations(node, pressure);
+        if (equipmentCalculations.Count > 0)
+            equipmentCalculations = new[] { DuctSystemPdfCalculationSection.Title("COMPONENT SIZING CALCULATION") }
+                .Concat(equipmentCalculations).ToArray();
         return new DuctSystemPdfReportItem(node.Id, description, reportType, inputs, outputs,
-                BuildEquipmentPdfCalculations(node, pressure), QuickCheck: quickCheck);
+                equipmentCalculations, QuickCheck: quickCheck);
     }
 
 
@@ -3245,6 +3353,80 @@ internal sealed partial class DuctSystemScreen
                 L($"Calculation basis: {result.CalculationBasisDescription}")
             })
         };
+    }
+
+    private string FormatSurfaceAreaWithUnit(ItemSurfaceArea area) => area.Problem is not null
+        ? $"Not available - {area.Problem}"
+        : _host._currentUnits == UnitSystem.Imperial ? $"{area.AreaFt2:0.##} ft2" : $"{area.AreaM2:0.###} m2";
+
+    /// <summary>
+    /// The secondary worksheet of a duct or fitting: its outer surface area (perimeter × length), and, when the
+    /// system's SMACNA pressure class is known, the allowable leakage of this item. Worksheet values are in
+    /// inch-pound units like the rest of the worksheet.
+    /// </summary>
+    internal static IReadOnlyList<DuctSystemPdfCalculationSection> BuildSurfaceAreaSections(ItemSurfaceArea area,
+        SystemLeakageResult? system)
+    {
+        static DuctSystemPdfCalculationLine L(string formula, string value = "") => new(formula, value);
+        static DuctSystemPdfCalculationLine Input(string label, string value) => new(label, value, HighlightAsInput: true);
+        static DuctSystemPdfCalculationLine E(string formula, string value = "", string substitution = "") =>
+            new(formula, value, true, InputSubstitution: substitution);
+        var sections = new List<DuctSystemPdfCalculationSection> { DuctSystemPdfCalculationSection.Title("SURFACE AREA CALCULATION") };
+        var round = area.Shape == DuctShape.Round;
+        var perimeterEquation = round ? "P = \\pi D" : "P = 2(W + H)";
+        var lengthEquation = area.ArcAngleDegrees is not null ? "L_{eq} = \\frac{\\theta}{360} 2\\pi r" : area.Kind == "Fitting"
+            ? round ? "L_{eq} = D" : "L_{eq} = max(W, H)"
+            : "L = L_{duct}";
+        var areaEquation = area.Kind == "Fitting" ? "A_{s} = P \\times L_{eq}" : "A_{s} = P \\times L";
+        if (area.Problem is not null)
+        {
+            sections.Add(new DuctSystemPdfCalculationSection("SURFACE AREA", new[] { L($"Not calculated: {area.Problem}") }));
+            return sections;
+        }
+        var diameterIn = UnitConversions.MToInches(area.DiameterM);
+        var widthIn = UnitConversions.MToInches(area.WidthM);
+        var heightIn = UnitConversions.MToInches(area.HeightM);
+        var perimeterFt = UnitConversions.MToFeet(area.PerimeterM);
+        var lengthFt = UnitConversions.MToFeet(area.LengthM);
+        var sizeText = round ? $"D = {diameterIn:0.###} in = {diameterIn / 12:0.####} ft"
+            : $"W = {widthIn:0.###} in = {widthIn / 12:0.####} ft; H = {heightIn:0.###} in = {heightIn / 12:0.####} ft";
+        var work = new List<DuctSystemPdfCalculationLine>
+        {
+            E(perimeterEquation, $"{perimeterFt:0.####} ft", sizeText)
+        };
+        if (area.ArcAngleDegrees is double angle && area.CenterlineRadiusM is double radius)
+        {
+            var radiusFt = UnitConversions.MToFeet(radius);
+            work.Add(E("r = (\\frac{r}{" + (round ? "D" : "W") + "})" + (round ? "D" : "W"), $"{radiusFt:0.####} ft",
+                $"r/{(round ? "D" : "W")} = {area.RadiusRatio:0.###}; {(round ? $"D = {diameterIn / 12:0.####}" : $"W = {widthIn / 12:0.####}")} ft"));
+            work.Add(E(lengthEquation, $"{lengthFt:0.####} ft", $"theta = {angle:0.#} deg; r = {radiusFt:0.####} ft"));
+        }
+        else if (area.Kind == "Fitting")
+            work.Add(E(lengthEquation, $"{lengthFt:0.####} ft", round ? $"D = {diameterIn / 12:0.####} ft"
+                : $"W = {widthIn / 12:0.####} ft; H = {heightIn / 12:0.####} ft"));
+        else
+            work.Add(Input("Duct length L", $"{lengthFt:0.###} ft"));
+        work.Add(E(areaEquation, $"{area.AreaFt2:0.###} ft2", $"P = {perimeterFt:0.####} ft; L = {lengthFt:0.####} ft"));
+        sections.Add(new DuctSystemPdfCalculationSection(area.Kind == "Fitting" ? "FITTING SURFACE AREA (ESTIMATE)" : "DUCT SURFACE AREA", work));
+
+        if (system is { PressureClassInWc: double pressureClass, SealClass: SmacnaSealClass seal })
+        {
+            var leakageClass = SmacnaLeakage.LeakageClass(seal, area.Shape);
+            var factor = SmacnaLeakage.AllowableLeakageFactor(leakageClass, pressureClass);
+            sections.Add(new DuctSystemPdfCalculationSection("ALLOWABLE LEAKAGE OF THIS ITEM (SMACNA)", new[]
+            {
+                L($"System pressure class {pressureClass:0.#} in. w.c.; Seal Class {seal}; leakage class C_L = {leakageClass} ({(round ? "round" : "rectangular")} metal duct)."),
+                E("F = C_{L} P^{0.65}", $"{factor:0.###} cfm/100 ft2", $"C_L = {leakageClass}; P = {pressureClass:0.#} in. w.c."),
+                E("Q_{leak} = F \\frac{A_{s}}{100}", $"{factor * area.AreaFt2 / 100:0.###} cfm", $"F = {factor:0.###} cfm/100 ft2; As = {area.AreaFt2:0.###} ft2")
+            }));
+        }
+        sections.Add(new DuctSystemPdfCalculationSection("SURFACE AREA ASSUMPTIONS", new[]
+        {
+            L("Nominal (inside) duct dimensions; sheet-metal thickness neglected"
+              + (area.Kind == "Fitting" ? "; ASHRAE data give no fitting length, so it is estimated (" + area.LengthBasis + ")." : ".")),
+            L("Coils, filters, GRDs, VAV boxes and custom components: 0 cfm/ft2 leakage, no surface area.")
+        }));
+        return sections;
     }
 
     private static IReadOnlyList<DuctSystemPdfCalculationSection> BuildFittingPdfCalculations(FittingCalculationResult result)

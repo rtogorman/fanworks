@@ -251,7 +251,37 @@ public sealed record DuctSystemPdfMetadata(
     string FanEfficiency = "",
     string FanHorsepower = "",
     string CriticalPath = "",
-    DuctSystemPdfPressureProfile? PressureProfile = null);
+    DuctSystemPdfPressureProfile? PressureProfile = null,
+    DuctSystemPdfLeakageSummary? Leakage = null);
+
+/// <summary>
+/// The system's SMACNA duct pressure class, seal class, leakage class and allowable leakage, ready to show (Analysis
+/// tab and report title page). Built once in project units so screen and report agree.
+/// </summary>
+/// <param name="Available">False when the leakage could not be calculated; <paramref name="Note"/> says why.</param>
+/// <param name="PressureClass">e.g. "1 in. w.c."</param>
+/// <param name="PressureBasis">The design pressure and where it came from, e.g. "0.993 in. w.c. critical-path loss, rounded up".</param>
+/// <param name="SealClass">e.g. "Seal Class C"</param>
+/// <param name="SealDetail">What the seal class seals, e.g. "Transverse joints only".</param>
+/// <param name="LeakageClass">e.g. "CL 12 round, 24 rectangular"</param>
+/// <param name="Factor">Allowable leakage F, e.g. "12 / 24 cfm per 100 ft2 (round / rect.)"</param>
+/// <param name="Leakage">Total allowable leakage, e.g. "61.5 cfm"</param>
+/// <param name="LeakageDetail">e.g. "2.6 % of 2,400 cfm; 612 ft2 of duct and fittings"</param>
+/// <param name="CalculationLines">The worked calculation, one line per duct type plus the total.</param>
+/// <param name="Criteria">The standards applied.</param>
+public sealed record DuctSystemPdfLeakageSummary(
+    bool Available,
+    string PressureClass,
+    string PressureBasis,
+    string SealClass,
+    string SealDetail,
+    string LeakageClass,
+    string Factor,
+    string Leakage,
+    string LeakageDetail,
+    IReadOnlyList<string> CalculationLines,
+    string Criteria,
+    string Note = "");
 
 /// <summary>
 /// Running pressure loss along every route of the system, in display units, for the report title page (and the
@@ -317,9 +347,18 @@ public sealed record DuctSystemPdfCalculationLine(
     bool HighlightAsInput = false,
     string InputSubstitution = "");
 
+/// <param name="IsTitle">
+/// A worksheet title ("DUCT SIZING CALCULATION", "SURFACE AREA CALCULATION") rather than a section. A title after the
+/// first starts a secondary calculation: it is drawn below the assumptions, after a divider line.
+/// </param>
 public sealed record DuctSystemPdfCalculationSection(
     string Heading,
-    IReadOnlyList<DuctSystemPdfCalculationLine> Lines);
+    IReadOnlyList<DuctSystemPdfCalculationLine> Lines,
+    bool IsTitle = false)
+{
+    /// <summary>A worksheet title with no lines.</summary>
+    public static DuctSystemPdfCalculationSection Title(string text) => new(text, Array.Empty<DuctSystemPdfCalculationLine>(), true);
+}
 
 public sealed record DuctSystemPdfReportItem(
     string Id,
@@ -491,66 +530,112 @@ public static class DuctSystemPdf
         TextColor(builder, 32, 323, 7, Fit(
             "System static pressure is the fan selection pressure. The critical-path total excludes fan positive static.", 160), muted);
 
-        // Lower area: report contents and system summary (left), pressure drop along every path (right).
-        const double areaTop = 312, areaBottom = 62, leftX = 32, leftWidth = 352, rightX = 396, rightWidth = 364;
-        const double contentsBottom = 190;
-        builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
-        RoundedRectangle(builder, leftX, contentsBottom, leftWidth, areaTop - contentsBottom, 7, fillAndStroke: true);
-        builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
-        RoundedRectangle(builder, leftX, areaBottom, leftWidth, contentsBottom - 10 - areaBottom, 7, fillAndStroke: true);
+        // Lower area. Left: report contents (compact), duct pressure class and leakage (SMACNA), system summary donut.
+        // Right: pressure drop along every path.
+        const double areaTop = 312, areaBottom = 62, leftX = 32, leftWidth = 420, rightX = 462, rightWidth = 298;
+        const double contentsBottom = 262, leakageTop = 254, leakageBottom = 146, summaryTop = 138;
+        foreach (var (top, bottom) in new[] { (areaTop, contentsBottom), (leakageTop, leakageBottom), (summaryTop, areaBottom) })
+        {
+            builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
+            RoundedRectangle(builder, leftX, bottom, leftWidth, top - bottom, 7, fillAndStroke: true);
+        }
         builder.Append("1 1 1 rg 0.72 0.80 0.87 RG 0.7 w ");
         RoundedRectangle(builder, rightX, areaBottom, rightWidth, areaTop - areaBottom, 7, fillAndStroke: true);
 
-        TextColor(builder, leftX + 14, areaTop - 17, 8.4, "REPORT CONTENTS", ink, bold: true);
-        TextColor(builder, leftX + leftWidth - 44, areaTop - 17, 6.4, "PAGE", accent, bold: true);
-        var entries = new List<(string Name, string Detail, int First, int Last)> { ("Project summary", "Project, fan selection and contents", 1, 1) };
+        // Report contents: two columns of entries with their pages.
+        TextColor(builder, leftX + 14, areaTop - 14, 8, "REPORT CONTENTS", ink, bold: true);
+        var entries = new List<(string Name, int First, int Last)> { ("Project summary", 1, 1) };
         var next = 2;
         if (contents.ViewTitles.Count > 0)
         {
-            entries.Add(("System views", string.Join(", ", contents.ViewTitles.Select(view => view.Replace("Layout Designer - ", string.Empty, StringComparison.Ordinal))),
-                next, next + contents.ViewTitles.Count - 1));
+            entries.Add(("System views", next, next + contents.ViewTitles.Count - 1));
             next += contents.ViewTitles.Count;
         }
         static bool IsDuct(DuctSystemPdfReportItem item) => item.ItemType.Contains("DUCT", StringComparison.OrdinalIgnoreCase);
         static bool IsFitting(DuctSystemPdfReportItem item) => item.ItemType.Equals("FITTING", StringComparison.OrdinalIgnoreCase);
         if (contents.Items.Count > 0)
-            entries.Add(("Item sheets, in system order", "Inputs, outputs and calculations for every item",
-                next, next + contents.ItemSheetCounts.Sum() - 1));
+            entries.Add(("Item sheets, in system order", next, next + contents.ItemSheetCounts.Sum() - 1));
         next += contents.ItemSheetCounts.Sum();
-        entries.Add(("Duct system schedule", "Every item with its size, airflow and pressures", next, next + contents.SchedulePageCount - 1));
-        var y = areaTop - 36;
-        foreach (var (entry, index) in entries.Select((value, index) => (value, index)))
+        entries.Add(("Duct system schedule", next, next + contents.SchedulePageCount - 1));
+        for (var index = 0; index < entries.Count && index < 4; index++)
         {
-            if (y < contentsBottom + 10)
-                break;
-            if (index % 2 == 1)
-            {
-                builder.Append("0.965 0.978 0.988 rg ");
-                builder.Append(FormattableString.Invariant($"{leftX + 8:0.##} {y - 7:0.##} {leftWidth - 16:0.##} 22 re f\n"));
-            }
-            Text(builder, leftX + 16, y + 5, 8, entry.Name, bold: true);
-            TextColor(builder, leftX + 16, y - 3.5, 6.2, Fit(entry.Detail, 70), muted);
-            Text(builder, leftX + leftWidth - 44, y + 1, 8.4, entry.First == entry.Last
-                ? entry.First.ToString(CultureInfo.InvariantCulture)
-                : $"{entry.First}-{entry.Last}", bold: true);
-            y -= 23;
+            var column = index % 2;
+            var row = index / 2;
+            var x = leftX + 14 + column * 200;
+            var y = areaTop - 29 - row * 14;
+            Text(builder, x, y, 7.4, entries[index].Name, bold: true);
+            var pages = entries[index].First == entries[index].Last
+                ? entries[index].First.ToString(CultureInfo.InvariantCulture)
+                : $"{entries[index].First}-{entries[index].Last}";
+            TextColor(builder, x + 176 - EstimatedPdfWidth(pages, 7.4, true), y, 7.4, pages, accent, bold: true);
         }
 
+        DrawLeakagePanel(builder, metadata?.Leakage, leftX, leakageBottom, leftWidth, leakageTop - leakageBottom, accent, ink, muted);
+
         // System summary: a donut of duct segments, fittings and components, each labelled with a leader arrow.
-        var summaryTop = contentsBottom - 10;
-        TextColor(builder, leftX + 14, summaryTop - 17, 8.4, "SYSTEM SUMMARY", ink, bold: true);
-        TextColor(builder, leftX + leftWidth - 98, summaryTop - 17, 6.4,
-            $"{pageCount} REPORT PAGE{(pageCount == 1 ? string.Empty : "S")}", accent, bold: true);
-        DrawSystemSummaryDonut(builder, leftX + leftWidth / 2 + 6, (summaryTop - 24 + areaBottom) / 2 + 2, 39, 23, new[]
+        TextColor(builder, leftX + 14, summaryTop - 14, 8, "SYSTEM SUMMARY", ink, bold: true);
+        TextColor(builder, leftX + 14, summaryTop - 24, 6.2,
+            $"{pageCount} report page{(pageCount == 1 ? string.Empty : "s")}", muted);
+        DrawSystemSummaryDonut(builder, leftX + leftWidth / 2 + 20, (summaryTop + areaBottom) / 2 - 2, 29, 17, new[]
         {
             ("Duct segments", contents.Items.Count(IsDuct), "0.16 0.43 0.58"),
             ("Fittings", contents.Items.Count(IsFitting), "0.12 0.66 0.72"),
             ("Components", contents.Items.Count(item => !IsDuct(item) && !IsFitting(item)), "0.55 0.64 0.73")
-        }, leftX + 16, leftX + leftWidth - 16, ink, muted, areaBottom + 20, summaryTop - 30);
+        }, leftX + 120, leftX + leftWidth - 16, ink, muted, areaBottom + 14, summaryTop - 24);
 
         DrawPressureProfilePanel(builder, metadata?.PressureProfile, rightX, areaBottom, rightWidth, areaTop - areaBottom,
             accent, ink, muted);
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// The title page's SMACNA block: pressure class, seal class, leakage class and allowable leakage, then the basis,
+    /// the worked calculation (F = CL x P^0.65; leakage = F x A / 100) and the standards applied.
+    /// </summary>
+    private static void DrawLeakagePanel(StringBuilder builder, DuctSystemPdfLeakageSummary? leakage, double left,
+        double bottom, double width, double height, string accent, string ink, string muted)
+    {
+        var top = bottom + height;
+        TextColor(builder, left + 14, top - 14, 8, "DUCT PRESSURE CLASS AND LEAKAGE (SMACNA)", ink, bold: true);
+        if (leakage is null)
+        {
+            TextColor(builder, left + 14, top - 34, 7, "Not available.", muted);
+            return;
+        }
+        var values = new[]
+        {
+            ("PRESSURE CLASS", leakage.PressureClass), ("SEAL CLASS", leakage.SealClass),
+            ("LEAKAGE CLASS", leakage.LeakageClass), ("ALLOWABLE LEAKAGE", leakage.Leakage)
+        };
+        const double columnWidth = 98;
+        for (var index = 0; index < values.Length; index++)
+        {
+            var x = left + 14 + index * columnWidth;
+            TextColor(builder, x, top - 28, 5.8, values[index].Item1, accent, bold: true);
+            FittedText(builder, x, top - 41, columnWidth - 8, 11, 6.2, values[index].Item2, bold: true,
+                color: index == 3 && !leakage.Available ? "0.70 0.13 0.13" : ink);
+        }
+        var lines = new List<(string Text, bool Bold)>();
+        if (leakage.PressureBasis.Length > 0)
+            lines.Add(($"{leakage.PressureBasis}. {leakage.SealDetail}.", false));
+        lines.AddRange(leakage.CalculationLines.Select(line => (line, true)));
+        if (!string.IsNullOrWhiteSpace(leakage.LeakageDetail))
+            lines.Add(("Allowable leakage is " + leakage.LeakageDetail + ".", false));
+        if (!string.IsNullOrWhiteSpace(leakage.Note))
+            lines.Add(("Not available: " + leakage.Note, true));
+        var y = top - 53;
+        var criteria = WrapPdfText(leakage.Criteria, 118).ToArray();
+        var lastLineY = bottom + 6 + (criteria.Length - 1) * 7;
+        foreach (var (text, bold) in lines)
+            foreach (var wrapped in WrapPdfText(text, 112))
+            {
+                if (y < lastLineY + 8)
+                    break;
+                TextColor(builder, left + 14, y, 6, wrapped, bold ? ink : muted, bold);
+                y -= 7.6;
+            }
+        for (var index = 0; index < criteria.Length; index++)
+            TextColor(builder, left + 14, bottom + 6 + (criteria.Length - 1 - index) * 7, 5.6, criteria[index], accent);
     }
 
     /// <summary>
@@ -1021,13 +1106,19 @@ public static class DuctSystemPdf
     private static List<string> BuildItemSheets(string subtitle, string total, DuctSystemPdfMetadata? metadata,
         DuctSystemPdfReportItem item, EmbeddedImage? referenceImage, int firstPage, int pageCount)
     {
-        var sections = item.Calculations ?? Array.Empty<DuctSystemPdfCalculationSection>();
+        var allSections = item.Calculations ?? Array.Empty<DuctSystemPdfCalculationSection>();
+        // A title after the first starts a secondary calculation (for example the surface area): it follows the
+        // primary calculation's assumptions, after a divider.
+        var secondaryStart = allSections.Select((section, index) => (section, index))
+            .Where(pair => pair.section.IsTitle && pair.index > 0).Select(pair => pair.index).DefaultIfEmpty(allSections.Count).First();
+        var sections = allSections.Take(secondaryStart).ToArray();
         var assumptions = sections.FirstOrDefault(section => section.Heading.Equals("ASSUMPTIONS", StringComparison.OrdinalIgnoreCase));
         // The worksheet ends with its assumptions; the input values are already listed in the left column.
         var blocks = CalculationBlocks(sections
             .Where(section => !section.Heading.Equals("ASSUMPTIONS", StringComparison.OrdinalIgnoreCase)
                               && !section.Heading.Equals("INPUT VALUES", StringComparison.OrdinalIgnoreCase))
-            .Concat(assumptions is null ? Array.Empty<DuctSystemPdfCalculationSection>() : new[] { assumptions }));
+            .Concat(assumptions is null ? Array.Empty<DuctSystemPdfCalculationSection>() : new[] { assumptions })
+            .Concat(allSections.Skip(secondaryStart)));
 
         var side = new List<SideRow> { new(SideRowKind.Heading, "INPUTS", string.Empty) };
         side.AddRange(item.Inputs.Select(field => new SideRow(SideRowKind.Field, field.Label, field.Value)));
@@ -1309,7 +1400,7 @@ public static class DuctSystemPdf
     /// side (equations listed without substitution or result, such as the required-equation summary).
     /// </summary>
     private sealed record CalculationBlock(bool Heading, string Text, DuctSystemPdfCalculationLine? Line,
-        DuctSystemPdfCalculationLine? Partner = null);
+        DuctSystemPdfCalculationLine? Partner = null, bool Title = false, bool Divider = false);
 
     private static List<CalculationBlock> CalculationBlocks(IEnumerable<DuctSystemPdfCalculationSection> sections)
     {
@@ -1319,6 +1410,11 @@ public static class DuctSystemPdf
         var blocks = new List<CalculationBlock>();
         foreach (var section in sections)
         {
+            if (section.IsTitle)
+            {
+                blocks.Add(new CalculationBlock(true, PdfText(section.Heading), null, Title: true, Divider: blocks.Count > 0));
+                continue;
+            }
             blocks.Add(new CalculationBlock(true, PdfText(section.Heading), null));
             for (var index = 0; index < section.Lines.Count; index++)
             {
@@ -1339,6 +1435,8 @@ public static class DuctSystemPdf
 
     private static double CalculationBlockHeight(CalculationBlock block, double columnWidth, double fontSize)
     {
+        if (block.Title)
+            return Math.Max(12.5, fontSize * 2.1) + (block.Divider ? 7 : 0);
         if (block.Heading)
             return Math.Max(11.25, fontSize * 1.82);
         var height = CalculationBlockHeight(false, block.Line, string.Empty, columnWidth, fontSize);
@@ -1389,7 +1487,21 @@ public static class DuctSystemPdf
             }
             y -= gap;
             var x = left + column * (columnWidth + columnGap);
-            if (block.Heading)
+            if (block.Title)
+            {
+                var titleTop = y;
+                if (block.Divider)
+                {
+                    builder.Append(FormattableString.Invariant(
+                        $"0.10 0.29 0.43 RG 0.9 w {x:0.##} {y - 3:0.##} m {x + columnWidth:0.##} {y - 3:0.##} l S\n"));
+                    titleTop -= 7;
+                }
+                TextColor(builder, x, titleTop - Math.Max(7.2, fontSize * 1.3) - 1.5, Math.Max(7.2, fontSize * 1.3),
+                    Fit(block.Text, Math.Max(22, (int)(columnWidth / 4.2))), "0.06 0.20 0.31", bold: true);
+                builder.Append(FormattableString.Invariant(
+                    $"0.12 0.66 0.72 rg {x:0.##} {titleTop - blockHeight + (block.Divider ? 7 : 0) + 1:0.##} 34 1.4 re f\n"));
+            }
+            else if (block.Heading)
             {
                 builder.Append("0.91 0.95 0.98 rg ");
                 RoundedRectangle(builder, x, y - blockHeight + 1, columnWidth, blockHeight - 1, 2, fillAndStroke: false);

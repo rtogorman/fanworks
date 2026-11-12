@@ -509,3 +509,16 @@ Record:
   Terminals and Calculation Points kept (not in the original list).
 - Sample project for screenshots: run the UI tests with `SAMPLE='Z:\tmp\sample.fanworks'`, copy it to the Wine prefix's `AppData/Local/DuctSizer/duct-system.json`. Linux helpers: `/home/claude/shot.sh` (screenshot of the app under Wine),
   `/home/claude/tour.sh` + `xclick.py` (click through tabs), `/home/claude/run-uitests.sh`.
+
+### Round R (requested 2026-11-11 evening, after v0.98.1) — v0.99.0
+
+Done: donut on the Analysis tab; Analysis page scrolls as a whole with the full-height table (top-10 keeps its own
+scroll); SMACNA pressure class (rounded up from max(critical-path loss, fan static)), seal class by pressure class
+(A ≥ 4, B = 3, C ≤ 2 in. w.c.), leakage class (A 3/6, B 6/12, C 12/24 round/rect, SMACNA Air Duct Leakage Test
+Manual), F = CL·P^0.65 and total leakage = Σ F·A/100, on the Analysis overview and report title page (contents
+condensed); surface area of ducts (exact) and fittings (estimated) in the tables and as a secondary worksheet after
+the assumptions with a divider; worksheet titles Duct/Fitting/Component sizing calculation.
+Checks: engine 74/74 (3 new), interface 24/24 at 100 % and 150 % under Wine.
+Open with Ryan: newer SMACNA editions recommend Seal Class A for all ducts (leakage classes then by pressure class);
+FanWorks follows seal class by pressure class as he specified. Item sheets with the surface-area worksheet usually
+need a continuation sheet (report 28 -> 39 pages on the 4-path test project).

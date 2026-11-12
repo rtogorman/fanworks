@@ -197,6 +197,28 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.99.0
+
+- **Duct pressure class and leakage (SMACNA)** in the Analysis tab's System overview and on the report title page:
+  - **Pressure class**: the smallest SMACNA static pressure class (½, 1, 2, 3, 4, 6 or 10 in. w.c.) at or above the
+    design pressure, which is the larger of the critical-path pressure loss and the fan static pressure (rounded up,
+    never down). Shown with its criteria: per SMACNA HVAC Duct Construction Standards.
+  - **Seal class** from the pressure class: A for 4 in. w.c. and up, B for 3 in. w.c., C for 2 in. w.c. and below.
+  - **Leakage class** CL from the seal class and duct type (SMACNA HVAC Air Duct Leakage Test Manual): Seal Class A
+    3 round / 6 rectangular, B 6 / 12, C 12 / 24.
+  - **Allowable leakage** F = CL × P^0.65 (cfm per 100 ft², P = pressure class in in. w.c.), and the system's
+    allowable duct leakage = F × (surface area of all ducts and fittings) / 100, with the working shown.
+  - Coils, filters, GRDs, VAV boxes and other components are taken as 0 cfm/ft² (no surface area).
+- **Surface area** of every duct segment (πDL round, 2(W + H)L rectangular) and fitting (estimated: perimeter ×
+  an equivalent length — the centerline arc for elbows with a radius ratio, otherwise one reference dimension).
+  New *Surface area* column in the Analysis table and the System Overview (fittings marked ≈).
+- **Worksheets** (Selection Inspector Calculations tab and report item sheets) are titled *Duct / Fitting /
+  Component sizing calculation*; after the assumptions, a divider and the **Surface area calculation** (equations
+  and working, plus the item's allowable leakage).
+- **Analysis tab**: the whole page scrolls; the full table shows every row (no scroll bar of its own; the top-10 list
+  keeps its own). The System summary donut is shown beside the path graph.
+- Report title page: report contents condensed to make room for the SMACNA block.
+
 ## What changed in 0.98.0 and 0.98.1
 
 - **Pop-up windows**: every editor and settings window lays out its fields to suit their content — numbers in

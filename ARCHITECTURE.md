@@ -156,3 +156,12 @@ Analysis tab (`PressureProfileChart`) and the report title sheet both draw `Duct
 once by `DuctSystemScreen.BuildPressureProfile` in project units. Pop-up forms get a shared field-layout pass
 (`DialogStyle`, attached by `DpiScaledForm`; the main window opts out).
 
+## Surface area and SMACNA leakage (v0.99)
+
+`SurfaceAreaCalculator` (Core, `DuctLeakage.cs`) gives each duct's area from its saved size and length and each
+fitting's estimated area; GRD/VAV records are terminals (no area). `SmacnaLeakage.Analyze` takes the design pressure
+(max of critical-path loss and fan static pressure), picks the pressure class, seal class and leakage class per duct
+shape, and sums F × A / 100. `DuctSystemScreen.BuildLeakageSummary` words it once for the Analysis tab and the
+report (`DuctSystemPdfLeakageSummary`). Worksheet titles are `DuctSystemPdfCalculationSection.Title`; a title after
+the first starts a secondary calculation drawn after the assumptions with a divider.
+

@@ -926,8 +926,20 @@ internal sealed class SelectionInspector : Panel
             }
             return;
         }
+        var title = new Font("Segoe UI Semibold", 11F);
+        var first = true;
         foreach (var section in sections)
         {
+            if (section.IsTitle)
+            {
+                // A worksheet title; a later one (the surface-area calculation) follows a divider line.
+                if (!first)
+                    Write(new string('─', 34) + "\r\n", body, Color.FromArgb(120, 140, 158));
+                Write(section.Heading.ToUpperInvariant() + "\r\n\r\n", title, RibbonPalette.Ink);
+                first = false;
+                continue;
+            }
+            first = false;
             Write(section.Heading.ToUpperInvariant() + "\r\n", heading, Color.FromArgb(31, 78, 121));
             foreach (var line in section.Lines)
             {

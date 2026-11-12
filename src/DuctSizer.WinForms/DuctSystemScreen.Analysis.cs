@@ -19,6 +19,16 @@ internal sealed partial class DuctSystemScreen
     private readonly Label _analysisPressureValue = new() { Name = "AnalysisPressureValue" };
     private readonly Label _analysisFanStaticValue = new() { Name = "AnalysisFanStaticValue" };
     private readonly Label _analysisRouteValue = new() { Name = "AnalysisRouteValue" };
+    private readonly Label _analysisPressureClassValue = new() { Name = "AnalysisPressureClassValue" };
+    private readonly Label _analysisPressureClassNote = new() { Name = "AnalysisPressureClassNote" };
+    private readonly Label _analysisSealClassValue = new() { Name = "AnalysisSealClassValue" };
+    private readonly Label _analysisSealClassNote = new() { Name = "AnalysisSealClassNote" };
+    private readonly Label _analysisFactorValue = new() { Name = "AnalysisLeakageFactorValue" };
+    private readonly Label _analysisFactorNote = new() { Name = "AnalysisLeakageFactorNote" };
+    private readonly Label _analysisLeakageValue = new() { Name = "AnalysisLeakageValue" };
+    private readonly Label _analysisLeakageNote = new() { Name = "AnalysisLeakageNote" };
+    private readonly Label _analysisLeakageDetail = new() { Name = "AnalysisLeakageDetail" };
+    private readonly SystemSummaryDonut _analysisDonut = new();
     private readonly DataGridView _analysisTopLossGrid = new();
     private readonly PressureProfileChart _analysisProfileChart = new();
     private readonly Label _analysisProfileSubtitle = new() { Name = "AnalysisProfileSubtitle" };
@@ -61,19 +71,35 @@ internal sealed partial class DuctSystemScreen
         };
         overviewLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         overviewLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        overviewLayout.RowCount = 7;
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
-        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         overviewLayout.Controls.Add(SectionTitle("System overview"), 0, 0);
         overviewLayout.SetColumnSpan(overviewLayout.GetControlFromPosition(0, 0)!, 2);
         overviewLayout.Controls.Add(Tile("Airflow", _analysisAirflowValue), 0, 1);
         overviewLayout.Controls.Add(Tile("Critical-path pressure drop", _analysisPressureValue), 1, 1);
         overviewLayout.Controls.Add(Tile("Fan static pressure", _analysisFanStaticValue), 0, 2);
         overviewLayout.Controls.Add(Tile("Items in the critical route", _analysisRouteValue), 1, 2);
+        // SMACNA duct construction and leakage (pressure class, seal class, allowable leakage).
+        overviewLayout.Controls.Add(Tile("Duct pressure class", _analysisPressureClassValue, _analysisPressureClassNote), 0, 3);
+        overviewLayout.Controls.Add(Tile("Seal class and leakage class", _analysisSealClassValue, _analysisSealClassNote), 1, 3);
+        overviewLayout.Controls.Add(Tile("Allowable leakage factor F", _analysisFactorValue, _analysisFactorNote), 0, 4);
+        overviewLayout.Controls.Add(Tile("Allowable duct leakage", _analysisLeakageValue, _analysisLeakageNote), 1, 4);
+        _analysisLeakageDetail.Dock = DockStyle.Fill;
+        _analysisLeakageDetail.Margin = new Padding(0, 4, 8, 0);
+        _analysisLeakageDetail.Font = new Font("Segoe UI", 8.25F);
+        _analysisLeakageDetail.ForeColor = Color.FromArgb(62, 78, 94);
+        _analysisLeakageDetail.TextAlign = ContentAlignment.TopLeft;
+        overviewLayout.Controls.Add(_analysisLeakageDetail, 0, 5);
+        overviewLayout.SetColumnSpan(_analysisLeakageDetail, 2);
         totalsRow.Dock = DockStyle.Fill;
         totalsRow.Margin = new Padding(0, 4, 0, 0);
-        overviewLayout.Controls.Add(totalsRow, 0, 3);
+        overviewLayout.Controls.Add(totalsRow, 0, 6);
         overviewLayout.SetColumnSpan(totalsRow, 2);
         overview.Controls.Add(overviewLayout);
 
@@ -146,7 +172,7 @@ internal sealed partial class DuctSystemScreen
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        static Control Tile(string caption, Label value)
+        static Control Tile(string caption, Label value, Label? note = null)
         {
             var tile = new Panel
             {
@@ -162,6 +188,16 @@ internal sealed partial class DuctSystemScreen
             value.AutoEllipsis = true;
             value.Text = "—";
             tile.Controls.Add(value);
+            if (note is not null)
+            {
+                // The criteria or basis, under the value (for example "Per SMACNA HVAC Duct Construction Standards").
+                note.Dock = DockStyle.Bottom;
+                note.Height = 28;
+                note.Font = new Font("Segoe UI", 7.75F);
+                note.ForeColor = Color.FromArgb(74, 91, 106);
+                note.AutoEllipsis = true;
+                tile.Controls.Add(note);
+            }
             tile.Controls.Add(new Label
             {
                 Text = caption,
@@ -267,6 +303,40 @@ internal sealed partial class DuctSystemScreen
         }
         _analysisTopLossGrid.ClearSelection();
         RefreshPressureProfile();
+        RefreshLeakageSummary();
+        _analysisDonut.SetCounts(SystemItemCounts());
+    }
+
+    /// <summary>Duct segments, fittings and components, counted as the report counts its item sheets.</summary>
+    internal (int Ducts, int Fittings, int Components) SystemItemCounts() => (
+        _ductSystem.Ducts.Count,
+        _ductSystem.Fittings.Count,
+        _ductSystem.LayoutNodes.Count(x => x.Type is LayoutNodeType.Reservoir or LayoutNodeType.Fan or LayoutNodeType.Coil
+                                           or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CalculationPoint
+                                           or LayoutNodeType.CustomComponent
+                                       || x.Type == LayoutNodeType.Fitting && !x.IsDefined && x.LinkedFittingSequence is null));
+
+    private void RefreshLeakageSummary()
+    {
+        var leakage = BuildLeakageSummary();
+        _analysisPressureClassValue.Text = leakage.PressureClass;
+        _analysisPressureClassNote.Text = "Per SMACNA HVAC Duct Construction Standards";
+        _analysisSealClassValue.Text = leakage.SealClass;
+        _analysisSealClassNote.Text = leakage.LeakageClass + " (SMACNA Air Duct Leakage Test Manual)";
+        _analysisFactorValue.Text = leakage.Factor;
+        _analysisFactorNote.Text = (leakage.LeakageClass.Contains(',') ? "Round / rectangular. " : string.Empty)
+                                   + "F = CL × P^0.65, P = pressure class (in. w.c.)";
+        _analysisLeakageValue.Text = leakage.Leakage;
+        _analysisLeakageNote.Text = leakage.LeakageDetail;
+        _analysisLeakageValue.ForeColor = leakage.Available ? Color.FromArgb(22, 65, 102) : Color.Firebrick;
+        var detail = new List<string>();
+        if (leakage.PressureBasis.Length > 0)
+            detail.Add(leakage.PressureBasis + ". " + leakage.SealDetail + ".");
+        detail.AddRange(leakage.CalculationLines);
+        if (!string.IsNullOrEmpty(leakage.Note))
+            detail.Add("Not available: " + leakage.Note);
+        detail.Add(leakage.Criteria);
+        _analysisLeakageDetail.Text = string.Join(Environment.NewLine, detail);
     }
 
     private static string RangeText(RangeCheckStatus status) => status switch
@@ -375,6 +445,70 @@ internal sealed partial class DuctSystemScreen
         return new DuctSystemPdfPressureProfile(unit, series, result.Paths.Count, string.Join(" ", notes), comparison);
     }
 
+    /// <summary>
+    /// The system's SMACNA pressure class, seal class, leakage class and allowable leakage, worded for the Analysis
+    /// tab and the report title page. The leakage formula is defined in inch-pound units (cfm per 100 ft², in. w.c.),
+    /// so the worked lines are in those units; headline values follow the project units.
+    /// </summary>
+    internal DuctSystemPdfLeakageSummary BuildLeakageSummary(SystemLeakageResult? computed = null)
+    {
+        var result = computed ?? SmacnaLeakage.Analyze(_ductSystem);
+        var imperial = _host._currentUnits == UnitSystem.Imperial;
+        const string criteria = "Per SMACNA HVAC Duct Construction Standards - Metal and Flexible (pressure and seal class) and "
+                                + "SMACNA HVAC Air Duct Leakage Test Manual (leakage class CL); allowable leakage F = CL x P^0.65.";
+        string Pressure(double inWc) => imperial
+            ? $"{inWc.ToString("0.###", CultureInfo.CurrentCulture)} in. w.c."
+            : $"{UnitConversions.InchesWaterToPa(inWc).ToString("0", CultureInfo.CurrentCulture)} Pa";
+        if (result.PressureClassInWc is not double pressureClass || result.SealClass is not SmacnaSealClass seal)
+            return new DuctSystemPdfLeakageSummary(false, "Not available", string.Empty, "—", string.Empty, "—", "—",
+                "Not available", string.Empty, Array.Empty<string>(), criteria, result.Problem ?? "Not available.");
+
+        // SMACNA's metric classes: 125, 250, 500, 750, 1000, 1500 and 2500 Pa.
+        var classText = imperial
+            ? $"{pressureClass.ToString("0.#", CultureInfo.CurrentCulture)} in. w.c."
+            : $"{(pressureClass switch { 0.5 => 125, 1 => 250, 2 => 500, 3 => 750, 4 => 1000, 6 => 1500, _ => 2500 })} Pa ({pressureClass:0.#} in. w.c.)";
+        var basis = $"Design pressure {Pressure(result.DesignPressureInWc ?? 0)} ({result.DesignPressureBasis}), rounded up to the next SMACNA class";
+        var sealDetail = seal switch
+        {
+            SmacnaSealClass.A => "All transverse joints, longitudinal seams and duct wall penetrations sealed",
+            SmacnaSealClass.B => "All transverse joints and longitudinal seams sealed",
+            _ => "Transverse joints sealed"
+        };
+        static string ShapeName(DuctShape shape) => shape == DuctShape.Round ? "round" : "rectangular";
+        var shapes = result.ByShape.Count > 0
+            ? result.ByShape.Select(x => x.Shape).ToArray()
+            : new[] { DuctShape.Round, DuctShape.Rectangular };
+        var leakageClass = string.Join(", ", shapes.Select(shape => $"CL {SmacnaLeakage.LeakageClass(seal, shape)} {ShapeName(shape)}"));
+        // One duct type: "12 cfm/100 ft²"; both: "12 / 24 cfm/100 ft²" (round / rectangular).
+        var factor = string.Join(" / ", shapes.Select(shape =>
+            SmacnaLeakage.AllowableLeakageFactor(SmacnaLeakage.LeakageClass(seal, shape), pressureClass).ToString("0.##", CultureInfo.CurrentCulture)))
+                     + " cfm/100 ft²";
+        var lines = result.ByShape.Select(x =>
+            $"{(x.Shape == DuctShape.Round ? "Round" : "Rectangular")}: F = {x.LeakageClass} x {pressureClass:0.#}^0.65 = {x.FactorCfmPer100Ft2:0.##} cfm/100 ft²; "
+            + $"{x.FactorCfmPer100Ft2:0.##} x {x.AreaFt2:0.#} ft² / 100 = {x.LeakageCfm:0.##} cfm").ToList();
+        if (!result.IsAvailable)
+            return new DuctSystemPdfLeakageSummary(false, classText, basis, $"Seal Class {seal}", sealDetail, leakageClass,
+                factor, "Not available", string.Empty, lines, criteria, result.Problem ?? string.Empty);
+
+        var totalCfm = result.TotalLeakageCfm;
+        if (result.ByShape.Count > 1)
+            lines.Add($"Total allowable leakage = {string.Join(" + ", result.ByShape.Select(x => x.LeakageCfm.ToString("0.##", CultureInfo.InvariantCulture)))} = {totalCfm:0.##} cfm");
+        var leakage = imperial
+            ? $"{totalCfm.ToString("0.#", CultureInfo.CurrentCulture)} cfm"
+            : $"{UnitConversions.M3PerSToLps(UnitConversions.CfmToM3PerS(totalCfm)).ToString("0.#", CultureInfo.CurrentCulture)} L/s";
+        var fans = _ductSystem.LayoutNodes.Where(node => node.Type == LayoutNodeType.Fan).ToArray();
+        var airflowCfm = fans.Length == 1 ? UnitConversions.M3PerSToCfm(fans[0].AirflowM3PerS) : 0;
+        var areaText = imperial
+            ? $"{result.TotalAreaFt2.ToString("N0", CultureInfo.CurrentCulture)} ft²"
+            : $"{(result.TotalAreaFt2 / UnitConversions.SquareMetersToSquareFeet(1)).ToString("N1", CultureInfo.CurrentCulture)} m²";
+        var detail = (airflowCfm > 0
+                         ? $"{(totalCfm / airflowCfm * 100).ToString("0.0", CultureInfo.CurrentCulture)} % of the fan airflow; "
+                         : string.Empty)
+                     + $"{areaText} of duct and fittings (fitting areas estimated)";
+        return new DuctSystemPdfLeakageSummary(true, classText, basis, $"Seal Class {seal}", sealDetail, leakageClass, factor,
+            leakage, detail, lines, criteria);
+    }
+
     private void RefreshPressureProfile()
     {
         var profile = BuildPressureProfile();
@@ -389,6 +523,36 @@ internal sealed partial class DuctSystemScreen
         _analysisProfileComparison.Visible = profile.Comparison.Length > 0;
         _analysisProfileSubtitle.ForeColor = string.IsNullOrEmpty(profile.Note)
             ? Color.FromArgb(74, 91, 106) : Color.FromArgb(160, 90, 0);
+    }
+
+    /// <summary>The Analysis tab's system summary donut (duct segments, fittings, components), beside the path graph.</summary>
+    private Control BuildSystemSummaryCard()
+    {
+        var card = new RoundedPanel
+        {
+            Name = "AnalysisSystemSummaryCard",
+            Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            CornerRadius = 10,
+            BorderColor = UiPalette.CardBorder,
+            Padding = new Padding(14, 8, 14, 8),
+            Margin = new Padding(10, 10, 0, 0)
+        };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = Color.White };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.Controls.Add(new Label
+        {
+            Text = "System summary",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI Semibold", 10F),
+            ForeColor = Color.FromArgb(22, 50, 78),
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
+        _analysisDonut.Dock = DockStyle.Fill;
+        layout.Controls.Add(_analysisDonut, 0, 1);
+        card.Controls.Add(layout);
+        return card;
     }
 
     /// <summary>The Analysis tab's pressure-profile card (below the overview and the top-10 list).</summary>

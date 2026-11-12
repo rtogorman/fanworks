@@ -506,7 +506,7 @@ internal static class Program
                 "Escape cancellation should clear the selected toolbox component and canvas placement mode.");
             Require(layoutSummaryGrid.Columns.Cast<DataGridViewColumn>().Select(x => x.Name).SequenceEqual(
                         new[] { "Id", "Description", "Branch", "Size", "Airflow", "Velocity", "PressureRate", "StaticDrop", "PressureIn",
-                            "PressureOut", "Length", "Upstream", "Downstream", "AbsoluteX", "AbsoluteY", "AbsoluteZ" })
+                            "PressureOut", "Length", "SurfaceArea", "Upstream", "Downstream", "AbsoluteX", "AbsoluteY", "AbsoluteZ" })
                     && layoutSummaryGrid.AutoSizeColumnsMode == DataGridViewAutoSizeColumnsMode.Fill
                     && layoutSummarySplitter.Orientation == Orientation.Horizontal
                     && !layoutSummarySplitter.Panel2Collapsed
@@ -3891,6 +3891,39 @@ internal static class Program
                         : shownProfile.Comparison.Contains(nextRoute.EndId, StringComparison.Ordinal)
                           && Find<Label>(form, "AnalysisProfileComparison").Text == shownProfile.Comparison,
                 $"The Analysis tab should name the path closest to the critical path when there is one. Comparison={shownProfile.Comparison}");
+            // SMACNA pressure class, seal class and leakage; donut; whole-page scroll with the full-height table.
+            var leakageSummary = analysisScreen.BuildLeakageSummary();
+            var leakageResult = SmacnaLeakage.Analyze(analysisScreen._ductSystem);
+            Require(Find<Label>(form, "AnalysisPressureClassValue").Text == leakageSummary.PressureClass
+                    && Find<Label>(form, "AnalysisPressureClassNote").Text.Contains("SMACNA HVAC Duct Construction Standards", StringComparison.Ordinal)
+                    && Find<Label>(form, "AnalysisSealClassValue").Text == leakageSummary.SealClass
+                    && Find<Label>(form, "AnalysisLeakageValue").Text == leakageSummary.Leakage
+                    && (leakageResult.PressureClassInWc is null
+                        || leakageSummary.PressureClass.Contains(leakageResult.PressureClassInWc.Value.ToString("0.#", System.Globalization.CultureInfo.CurrentCulture), StringComparison.Ordinal))
+                    && (!leakageResult.IsAvailable
+                        || Math.Abs(leakageResult.TotalLeakageCfm - leakageResult.ByShape.Sum(x => x.FactorCfmPer100Ft2 * x.AreaFt2 / 100)) < 1e-9),
+                $"The overview should show the SMACNA pressure class, seal class and allowable leakage. Class={leakageSummary.PressureClass}, leakage={leakageSummary.Leakage}, note={leakageSummary.Note}");
+            var donut = Find<SystemSummaryDonut>(form, "AnalysisSystemSummaryDonut");
+            Require(donut.Counts == analysisScreen.SystemItemCounts() && donut.Counts.Ducts == analysisScreen._ductSystem.Ducts.Count,
+                "The Analysis tab should show the system summary donut with the duct, fitting and component counts.");
+            var pageScroll = Find<Panel>(form, "AnalysisPageScroll");
+            var visibleRows = grid.Rows.Cast<DataGridViewRow>().Where(row => row.Visible).Sum(row => row.Height);
+            Require(pageScroll.AutoScroll && grid.ScrollBars == ScrollBars.Horizontal
+                    && grid.Height >= grid.ColumnHeadersHeight + visibleRows
+                    && grid.Columns["SurfaceArea"] is { } surfaceColumn && surfaceColumn.HeaderText.StartsWith("Surface area", StringComparison.Ordinal),
+                $"The Analysis page should scroll as a whole, with the full table (every row, surface area column) on it. Grid height={grid.Height}, rows={visibleRows}.");
+            var firstDuct = analysisScreen._ductSystem.Ducts.FirstOrDefault();
+            if (firstDuct is not null)
+            {
+                var ductRow = grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(row => Convert.ToString(row.Cells["Id"].Value) == firstDuct.Id);
+                var ductItem = analysisScreen.BuildDuctReportItem(firstDuct);
+                var headings = ductItem.Calculations!.Select(section => section.Heading).ToArray();
+                Require((ductRow is null || Convert.ToString(ductRow.Cells["SurfaceArea"].Value) == analysisScreen.FormatSurfaceArea(SurfaceAreaCalculator.ForDuct(firstDuct)))
+                        && headings.First() == "DUCT SIZING CALCULATION"
+                        && Array.IndexOf(headings, "SURFACE AREA CALCULATION") > Array.IndexOf(headings, "ASSUMPTIONS")
+                        && ductItem.Calculations!.Single(section => section.Heading == "SURFACE AREA CALCULATION").IsTitle,
+                    $"A duct's worksheet should be titled, and its surface area calculation should follow the assumptions. Headings: {string.Join(", ", headings)}");
+            }
             analysisScreen._ductSystem.AnalysisExpectations = new AnalysisExpectations();
             analysisScreen.RefreshDuctSystemGrid();
             Application.DoEvents();
@@ -3916,7 +3949,9 @@ internal static class Program
                     && File.ReadAllBytes(printedReport).Take(5).SequenceEqual("%PDF-"u8.ToArray()),
                 "Print Report should write the report PDF.");
             var printedText = Encoding.ASCII.GetString(File.ReadAllBytes(printedReport));
-            Require(printedText.Contains("(PRESSURE DROP ALONG EACH PATH)", StringComparison.Ordinal)
+            Require(printedText.Contains("(DUCT PRESSURE CLASS AND LEAKAGE \\(SMACNA\\))", StringComparison.Ordinal)
+                    && printedText.Contains("(SURFACE AREA CALCULATION)", StringComparison.Ordinal)
+                    && printedText.Contains("(PRESSURE DROP ALONG EACH PATH)", StringComparison.Ordinal)
                     && printedText.Contains("(SYSTEM SUMMARY)", StringComparison.Ordinal)
                     && printedText.Contains("(Duct segments)", StringComparison.Ordinal)
                     && printedText.Contains("(Quantity ", StringComparison.Ordinal),
@@ -4043,7 +4078,8 @@ internal static class Program
             Console.WriteLine("PASS  Display scaling, resizable panels and in-place editing in the inspector");
             Console.WriteLine("PASS  Analysis Settings, expected-range column and pressure drop along each path");
             Console.WriteLine("PASS  Designer shortcuts: Esc deselects, Delete removes, right-click Edit / Delete");
-            Console.WriteLine("23/23 UI verification checks passed.");
+            Console.WriteLine("PASS  SMACNA pressure class and leakage, surface areas, donut and scrolling Analysis page");
+            Console.WriteLine("24/24 UI verification checks passed.");
             return 0;
         }
         catch (Exception ex)

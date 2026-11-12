@@ -548,6 +548,7 @@ internal sealed partial class LayoutDesignerScreen
         ("PressureIn", "PressureIn", "SP in", 66),
         ("PressureOut", "PressureOut", "SP out", 66),
         ("Length", "Length", "Length", 56),
+        ("SurfaceArea", "SurfaceArea", "Surface area", 74),
         ("Upstream", "UpstreamId", "Upstream", 72),
         ("Downstream", "DownstreamId", "Downstream", 80),
         ("AbsoluteX", "AbsoluteX", "X", 48),

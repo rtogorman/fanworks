@@ -194,3 +194,104 @@ internal static class AnalysisTests
             throw new Exception(message);
     }
 }
+
+/// <summary>Checks for SMACNA pressure class, seal class, surface area and allowable leakage (round Q follow-up).</summary>
+internal static class LeakageTests
+{
+    public static void PressureSealAndLeakageClassesFollowSmacna()
+    {
+        // Pressure class: smallest class at or above the design pressure, rounded up; none above 10 in. w.c.
+        foreach (var (pressure, expected) in new (double, double?)[]
+                 {
+                     (0.0, 0.5), (0.366, 0.5), (0.5, 0.5), (0.51, 1), (0.993, 1), (1.0, 1), (1.6, 2), (2.0, 2),
+                     (2.01, 3), (3.5, 4), (5.2, 6), (10.0, 10), (10.01, null), (-1.2, 2), (double.NaN, null)
+                 })
+            Require(SmacnaLeakage.PressureClassFor(pressure) == expected,
+                $"Pressure {pressure} in. w.c. should give class {expected?.ToString() ?? "none"}, not {SmacnaLeakage.PressureClassFor(pressure)}.");
+        Require(new[] { 0.5, 1.0, 2.0 }.All(p => SmacnaLeakage.SealClassFor(p) == SmacnaSealClass.C)
+                && SmacnaLeakage.SealClassFor(3) == SmacnaSealClass.B
+                && new[] { 4.0, 6.0, 10.0 }.All(p => SmacnaLeakage.SealClassFor(p) == SmacnaSealClass.A),
+            "Seal class: C up to 2 in. w.c., B at 3, A at 4 and up.");
+        Require(SmacnaLeakage.LeakageClass(SmacnaSealClass.A, DuctShape.Round) == 3
+                && SmacnaLeakage.LeakageClass(SmacnaSealClass.A, DuctShape.Rectangular) == 6
+                && SmacnaLeakage.LeakageClass(SmacnaSealClass.B, DuctShape.Round) == 6
+                && SmacnaLeakage.LeakageClass(SmacnaSealClass.B, DuctShape.Rectangular) == 12
+                && SmacnaLeakage.LeakageClass(SmacnaSealClass.C, DuctShape.Round) == 12
+                && SmacnaLeakage.LeakageClass(SmacnaSealClass.C, DuctShape.Rectangular) == 24,
+            "Leakage classes: A 3/6, B 6/12, C 12/24 (round/rectangular).");
+        // Hand-checked: F = 12 × 2^0.65 = 12 × 1.569168 = 18.830 cfm/100 ft²; F = 6 × 1^0.65 = 6.
+        Near(SmacnaLeakage.AllowableLeakageFactor(12, 2), 18.830017, 1e-5, "F for C_L = 12 at 2 in. w.c.");
+        Near(SmacnaLeakage.AllowableLeakageFactor(6, 1), 6, 1e-12, "F for C_L = 6 at 1 in. w.c.");
+    }
+
+    public static void SurfaceAreasOfDuctsAndFittings()
+    {
+        var document = new DuctSystemDocument();
+        var round = SystemTests.AddDuct(document, 12, 800, 20);
+        Near(SurfaceAreaCalculator.ForDuct(round).AreaFt2, Math.PI * 1.0 * 20, 1e-9, "12 in round x 20 ft = pi x 1 ft x 20 ft");
+        var rectangular = SystemTests.AddDuct(document, 12, 800, 10);
+        rectangular.Shape = DuctShape.Rectangular;
+        rectangular.WidthM = UnitConversions.InchesToM(24);
+        rectangular.HeightM = UnitConversions.InchesToM(12);
+        Near(SurfaceAreaCalculator.ForDuct(rectangular).AreaFt2, 2 * (2.0 + 1.0) * 10, 1e-9, "24 x 12 in x 10 ft = 2(2 + 1) x 10");
+
+        var elbow = new SavedFitting
+        {
+            Sequence = document.ReserveFittingSequence(), FittingCode = "3-1", Shape = DuctShape.Round,
+            DiameterM = UnitConversions.InchesToM(12), Inputs = new Dictionary<string, double> { ["rd"] = 1.5, ["angle"] = 90 }
+        };
+        // Centerline arc = 90/360 × 2π × 1.5 ft = 2.3562 ft; A = π × 1 ft × 2.3562 ft = 7.4022 ft².
+        var elbowArea = SurfaceAreaCalculator.ForFitting(elbow)!;
+        Near(elbowArea.AreaFt2, Math.PI * (0.25 * 2 * Math.PI * 1.5), 1e-9, "round elbow area along its centerline arc");
+        Require(elbowArea.IsEstimate, "A fitting area is marked as an estimate.");
+        var tee = new SavedFitting
+        {
+            Sequence = document.ReserveFittingSequence(), FittingCode = "5-10", Shape = DuctShape.Rectangular,
+            WidthM = UnitConversions.InchesToM(24), HeightM = UnitConversions.InchesToM(12)
+        };
+        Near(SurfaceAreaCalculator.ForFitting(tee)!.AreaFt2, 2 * (2.0 + 1.0) * 2.0, 1e-9, "other fittings: perimeter x larger side");
+        Require(SurfaceAreaCalculator.ForFitting(new SavedFitting { FittingCode = GrdPerformanceCatalog.Titus350RCode }) is null,
+            "A GRD has no ductwork surface area (leakage 0).");
+        round.LengthM = 0;
+        Require(SurfaceAreaCalculator.ForDuct(round).Problem is not null, "A duct without a length has no area and says why.");
+    }
+
+    public static void SystemLeakageIsSumOfFactorTimesArea()
+    {
+        var system = SystemTests.BuildDivergingSystem();
+        var result = SmacnaLeakage.Analyze(system.Document);
+        var critical = CriticalPathAnalyzer.Analyze(system.Document);
+        var criticalInWc = UnitConversions.PaToInchesWater(critical.PressureLossPa);
+        Require(result.IsAvailable && result.PressureClassInWc == SmacnaLeakage.PressureClassFor(criticalInWc)
+                && result.SealClass == SmacnaSealClass.C,
+            $"The system's class follows its critical-path loss ({criticalInWc:0.###} in. w.c.); class={result.PressureClassInWc}, problem={result.Problem}.");
+        // Every item here is round: 16 in x 20 ft, 14 in x 30 ft, 8 in x 15 ft, and a 16 in tee (one diameter long).
+        var area = Math.PI * (16.0 / 12 * 20 + 14.0 / 12 * 30 + 8.0 / 12 * 15 + 16.0 / 12 * 16.0 / 12);
+        Near(result.TotalAreaFt2, area, 1e-6, "system surface area");
+        var factor = 12 * Math.Pow(result.PressureClassInWc!.Value, 0.65);
+        Near(result.TotalLeakageCfm, factor * area / 100, 1e-6, "leakage = F x A / 100");
+
+        var fan = SystemTests.AddNode(system.Document, LayoutNodeType.Fan, parent: null, duct: null);
+        fan.FanStaticPressurePa = UnitConversions.InchesWaterToPa(3.4);
+        var withFan = SmacnaLeakage.Analyze(system.Document);
+        Require(withFan.PressureClassInWc == 4 && withFan.SealClass == SmacnaSealClass.A
+                && withFan.DesignPressureBasis == "fan static pressure",
+            $"A fan static pressure above the critical-path loss sets the class (3.4 in. w.c. -> 4, Seal Class A). Got {withFan.PressureClassInWc}, {withFan.Problem}.");
+        Near(withFan.TotalLeakageCfm, 3 * Math.Pow(4, 0.65) * area / 100, 1e-6, "Seal Class A round leakage at 4 in. w.c.");
+
+        system.BranchSink.ConnectionDuctSequence = null;
+        Require(!SmacnaLeakage.Analyze(system.Document).IsAvailable, "An incomplete critical path leaves the leakage unavailable.");
+    }
+
+    private static void Near(double actual, double expected, double tolerance, string what)
+    {
+        if (Math.Abs(actual - expected) > tolerance * Math.Max(1, Math.Abs(expected)))
+            throw new Exception($"{what}: expected {expected:R}, got {actual:R}.");
+    }
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition)
+            throw new Exception(message);
+    }
+}
