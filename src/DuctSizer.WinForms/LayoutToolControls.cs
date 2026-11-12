@@ -79,7 +79,7 @@ internal sealed class LayoutToolCard : Control
             var iconSize = Math.Min(40, Math.Max(28, Height - 8));
             LayoutIconPainter.Draw(e.Graphics, _type,
                 new Rectangle((Width - iconSize) / 2, (Height - iconSize) / 2, iconSize, iconSize),
-                Color.FromArgb(21, 83, 99), _fittingGroup);
+                Color.FromArgb(10, 88, 187), _fittingGroup);
             return;
         }
         if (_hover)
@@ -92,7 +92,7 @@ internal sealed class LayoutToolCard : Control
         var compactIcon = Math.Max(DpiScaling.Scale(14), Math.Min(DpiScaling.Scale(22), Height - captionHeight - DpiScaling.Scale(4)));
         LayoutIconPainter.Draw(e.Graphics, _type,
             new Rectangle((Width - compactIcon) / 2, DpiScaling.Scale(2), compactIcon, compactIcon),
-            Color.FromArgb(21, 83, 99), _fittingGroup);
+            Color.FromArgb(10, 88, 187), _fittingGroup);
         TextRenderer.DrawText(e.Graphics, _title, CaptionFont, new Rectangle(0, Height - captionHeight - 1, Width, captionHeight),
             RibbonPalette.Ink, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.NoPadding
                                | TextFormatFlags.EndEllipsis);

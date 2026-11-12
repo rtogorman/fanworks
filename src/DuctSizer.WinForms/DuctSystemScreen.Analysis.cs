@@ -168,7 +168,7 @@ internal sealed partial class DuctSystemScreen
             Text = text,
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 10F),
-            ForeColor = Color.FromArgb(22, 50, 78),
+            ForeColor = Color.FromArgb(11, 31, 59),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
@@ -183,7 +183,7 @@ internal sealed partial class DuctSystemScreen
             };
             value.Dock = DockStyle.Fill;
             value.Font = new Font("Segoe UI Semibold", 13F);
-            value.ForeColor = Color.FromArgb(22, 65, 102);
+            value.ForeColor = Color.FromArgb(11, 31, 59);
             value.TextAlign = ContentAlignment.MiddleLeft;
             value.AutoEllipsis = true;
             value.Text = "—";
@@ -286,7 +286,7 @@ internal sealed partial class DuctSystemScreen
             ? "Not calculated"
             : _criticalPathIssues.Count > 0 ? "Not available" : FormatSystemTotal(_criticalPathPressureLossPa);
         _analysisPressureValue.ForeColor = _criticalPathCalculated && _criticalPathIssues.Count > 0
-            ? Color.Firebrick : Color.FromArgb(22, 65, 102);
+            ? Color.Firebrick : Color.FromArgb(11, 31, 59);
         _analysisFanStaticValue.Text = fan is { IsDefined: true } ? FormatSystemTotal(fan.FanStaticPressurePa) : "—";
         _analysisRouteValue.Text = !_criticalPathCalculated || _criticalPathItemKeys.Count == 0
             ? "—"
@@ -343,7 +343,7 @@ internal sealed partial class DuctSystemScreen
                                    + "F = CL × P^0.65, P = pressure class (in. w.c.)";
         _analysisLeakageValue.Text = leakage.Leakage;
         _analysisLeakageNote.Text = leakage.LeakageDetail;
-        _analysisLeakageValue.ForeColor = leakage.Available ? Color.FromArgb(22, 65, 102) : Color.Firebrick;
+        _analysisLeakageValue.ForeColor = leakage.Available ? Color.FromArgb(11, 31, 59) : Color.Firebrick;
         var detail = new List<string>();
         if (leakage.PressureBasis.Length > 0)
             detail.Add(leakage.PressureBasis + ". " + leakage.SealDetail + ".");
@@ -594,7 +594,7 @@ internal sealed partial class DuctSystemScreen
             Text = "System summary",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 10F),
-            ForeColor = Color.FromArgb(22, 50, 78),
+            ForeColor = Color.FromArgb(11, 31, 59),
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
         _analysisDonut.Dock = DockStyle.Fill;
@@ -626,7 +626,7 @@ internal sealed partial class DuctSystemScreen
             Text = "Pressure drop along each path",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 10F),
-            ForeColor = Color.FromArgb(22, 50, 78),
+            ForeColor = Color.FromArgb(11, 31, 59),
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
         _analysisProfileSubtitle.Dock = DockStyle.Fill;
@@ -638,7 +638,7 @@ internal sealed partial class DuctSystemScreen
         _analysisProfileComparison.AutoSize = true;
         _analysisProfileComparison.Margin = new Padding(0, 2, 0, 0);
         _analysisProfileComparison.Font = new Font("Segoe UI Semibold", 8.5F);
-        _analysisProfileComparison.ForeColor = Color.FromArgb(22, 65, 102);
+        _analysisProfileComparison.ForeColor = Color.FromArgb(11, 31, 59);
         _analysisProfileComparison.Visible = false;
         layout.Controls.Add(_analysisProfileComparison, 0, 2);
         _analysisProfileChart.Dock = DockStyle.Fill;

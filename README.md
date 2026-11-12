@@ -197,6 +197,30 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.101.0
+
+- **Brand**: the new fan works identity — navy #0B1F3B, primary blue #0E6FE6 and light blue #7EC7FF; the blower mark
+  and the lowercase "fan works" wordmark (Nunito ExtraBold, a rounded sans-serif) in the top bar, the window icon,
+  the ribbon and accents, and on every report sheet.
+- **Report typography**: the report now embeds the brand typeface (Nunito) and a matching symbol font, so Greek letters
+  and signs (ρ, μ, ε, Δ, π, θ, →, ≤, √) are real typeset glyphs at the right size instead of hand-drawn shapes. Single-letter
+  variables are italic; numbers, names and descriptive subscripts upright. Units are typeset (°F, ft², ft³).
+- **One sheet per item**: duct and fitting worksheets fit one page. The repeated "required equations" list is gone; each
+  worksheet ends with **Variables and where they come from** — every symbol, its units and the step, input, table or
+  constant it comes from — then the assumptions.
+- **Tables across the page**: published manufacturer tables (Titus/Price grilles and diffusers, Titus VAV) are real
+  tables across the full width of the worksheet, with the row used highlighted.
+- **Table look-ups explained**: each ASHRAE coefficient read from a table shows how it was read — the interpolation
+  equation with the bracketing table points, inputs and output (one-, two- and three-way); "published point, used as
+  printed"; or "outside the table, edge value used, review required". Where two table columns cannot be interpolated
+  (ASHRAE 5-24 main, 90°, As/Ac between columns) the conservative (larger) coefficient is now used and the worksheet
+  says so (previously the nearest column). Grille and diffuser airflows are rounded up to the next published point,
+  and the worksheet says so. A junction now reads only the selected path's table.
+- **Outlet check**: if an outlet's stored pressure drop no longer matches the published value at its current airflow,
+  its sheet says "Review required" with both values.
+- **Quick Calc**: the Fitting Calculator's Calculate button stays visible on short windows; the Duct Calculator ribbon
+  icon is a plain isometric duct outline.
+
 ## What changed in 0.100.0
 
 - **Pressure labels**: a **Pressure** checkbox beside Labels / Flow / Sizes on the Project tab shows each duct's

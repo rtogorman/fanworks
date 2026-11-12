@@ -33,7 +33,7 @@ internal sealed class FanInformationDialog : DpiScaledForm
             var side = Math.Max(1, Math.Min(icon.ClientSize.Width, icon.ClientSize.Height) - 28);
             var square = new Rectangle((icon.ClientSize.Width - side) / 2, (icon.ClientSize.Height - side) / 2,
                 side, side);
-            LayoutIconPainter.Draw(args.Graphics, LayoutNodeType.Fan, square, Color.FromArgb(31, 120, 180));
+            LayoutIconPainter.Draw(args.Graphics, LayoutNodeType.Fan, square, Color.FromArgb(14, 111, 230));
         };
 
         var details = new Label
@@ -52,7 +52,7 @@ internal sealed class FanInformationDialog : DpiScaledForm
             DialogResult = DialogResult.OK,
             Dock = DockStyle.Right,
             Width = 92,
-            BackColor = Color.FromArgb(31, 120, 180),
+            BackColor = Color.FromArgb(14, 111, 230),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };

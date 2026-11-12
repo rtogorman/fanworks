@@ -103,7 +103,7 @@ internal sealed class SourceSinkEditorDialog : DpiScaledForm
                 Text = $"{NormalizePressure(UnitConversions.PaToInchesWater(boundary.PressurePa)):0.###} in. w.c.",
                 AutoSize = true,
                 Anchor = AnchorStyles.Right,
-                ForeColor = Color.FromArgb(28, 69, 108),
+                ForeColor = Color.FromArgb(16, 45, 84),
                 Font = new Font("Segoe UI", 9F)
             }, 3, row++);
         }

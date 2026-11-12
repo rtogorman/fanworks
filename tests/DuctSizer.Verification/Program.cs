@@ -76,7 +76,11 @@ var tests = new (string Name, Action Run)[]
     ("Route profiles: unsized connection makes its route incomplete", AnalysisTests.UnsizedConnectionMakesItsRouteIncomplete),
     ("SMACNA: pressure, seal and leakage classes; F = CL x P^0.65", LeakageTests.PressureSealAndLeakageClassesFollowSmacna),
     ("Surface area of ducts and fittings", LeakageTests.SurfaceAreasOfDuctsAndFittings),
-    ("System leakage: class from pressure, F x area", LeakageTests.SystemLeakageIsSumOfFactorTimesArea)
+    ("System leakage: class from pressure, F x area", LeakageTests.SystemLeakageIsSumOfFactorTimesArea),
+    ("Table look-ups: interpolation recorded with its table points", TableLookupTests.InterpolationIsRecordedWithItsTablePoints),
+    ("Table look-ups: conservative value between columns", TableLookupTests.BetweenColumnsTheConservativeValueIsUsed),
+    ("Junctions read only the selected path's table", TableLookupTests.OnlyTheSelectedJunctionPathIsRead),
+    ("Engineering text typeset for display", TableLookupTests.EngineeringTextIsTypeset)
 };
 
 var failures = new List<string>();
@@ -1330,27 +1334,34 @@ static void TestDuctSystemExchange()
         var pdf = File.ReadAllBytes(pdfPath);
         if (pdf.Length < 1_000 || Encoding.ASCII.GetString(pdf, 0, 8) != "%PDF-1.4")
             throw new Exception("The PDF report is missing or invalid.");
-        var pdfText = Encoding.ASCII.GetString(pdf);
+        var pdfText = PdfPlainText(pdf);
         var summaryIndex = pdfText.IndexOf("Project Summary", StringComparison.Ordinal);
         var ductSheetIndex = pdfText.IndexOf("D-001 - STRAIGHT DUCT", StringComparison.Ordinal);
         var coilSheetIndex = pdfText.IndexOf("L-002 - COIL", StringComparison.Ordinal);
-        var firstReviewHeadingIndex = pdfText.IndexOf("ENGINEERING CALCULATION REVIEW", StringComparison.Ordinal);
+        var firstReviewHeadingIndex = pdfText.IndexOf("(ENGINEERING CALCULATION)", StringComparison.Ordinal);
         var firstInputHeadingIndex = pdfText.IndexOf("(INPUTS)", StringComparison.Ordinal);
         var finalScheduleIndex = pdfText.LastIndexOf("Duct System Schedule", StringComparison.Ordinal);
         if (!pdfText.Contains("/Count 7", StringComparison.Ordinal)
             || !pdfText.Contains("Project Summary", StringComparison.Ordinal)
-            || !pdfText.Contains("L-001 to L-010", StringComparison.Ordinal)
+            // The arrow in "L-001 → L-010" is set in the embedded symbol font (code 0xAE), never as '?'.
+            || !pdfText.Contains("(L-001 ) Tj /F4", StringComparison.Ordinal)
+            || !pdfText.Contains("(\\256) Tj", StringComparison.Ordinal)
             || pdfText.Contains("L-001 ? L-010", StringComparison.Ordinal)
             || !pdfText.Contains("CALCULATED OUTPUTS", StringComparison.Ordinal)
             || !pdfText.Contains("QA/QC QUICK CHECK", StringComparison.Ordinal)
-            || !pdfText.Contains("ENGINEERING CALCULATION REVIEW", StringComparison.Ordinal)
-            || !pdfText.Contains("INPUT / SUBSTITUTION", StringComparison.Ordinal)
-            || !pdfText.Contains("SOLVED RESULT", StringComparison.Ordinal)
+            || !pdfText.Contains("(ENGINEERING CALCULATION)", StringComparison.Ordinal)
+            || !pdfText.Contains("(Inputs substituted)", StringComparison.Ordinal)
+            || !pdfText.Contains("(Solved result)", StringComparison.Ordinal)
             || !pdfText.Contains("HVAC AIRSIDE DESIGN", StringComparison.Ordinal)
-            || !pdfText.Contains("/BaseFont /Helvetica-Oblique", StringComparison.Ordinal)
-            || !pdfText.Contains("BT /F3", StringComparison.Ordinal)
+            || !pdfText.Contains("(fan works)", StringComparison.Ordinal)
+            // Brand typeface (embedded TrueType) and the embedded symbol font: real glyphs, no hand-drawn symbols.
+            || !pdfText.Contains("/BaseFont /Nunito-Italic", StringComparison.Ordinal)
+            || !pdfText.Contains("/FontFile2", StringComparison.Ordinal)
+            || !pdfText.Contains("/BaseFont /FanWorksSymbols", StringComparison.Ordinal)
+            || !pdfText.Contains("/ToUnicode", StringComparison.Ordinal)
+            || !pdfText.Contains("/F3 ", StringComparison.Ordinal)
             || pdfText.Contains("/BaseFont /Symbol", StringComparison.Ordinal)
-            || pdfText.Contains("BT /F4", StringComparison.Ordinal)
+            || pdfText.Contains("/BaseFont /Helvetica", StringComparison.Ordinal)
             || !pdfText.Contains("1,250 cfm", StringComparison.Ordinal)
             || summaryIndex < 0 || ductSheetIndex <= summaryIndex || coilSheetIndex <= ductSheetIndex
             || finalScheduleIndex <= coilSheetIndex
@@ -1393,6 +1404,42 @@ static void TestDuctSystemExchange()
     {
         if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
     }
+}
+
+/// <summary>The PDF's bytes with every FlateDecode stream decompressed in place (for text checks).</summary>
+static string PdfPlainText(byte[] pdf)
+{
+    var text = Encoding.Latin1.GetString(pdf);
+    var result = new StringBuilder();
+    var position = 0;
+    while (true)
+    {
+        var marker = text.IndexOf(">>\nstream\n", position, StringComparison.Ordinal);
+        var start = marker < 0 ? -1 : marker + 3;
+        if (start < 0)
+        {
+            result.Append(text, position, text.Length - position);
+            break;
+        }
+        var dataStart = start + "stream\n".Length;
+        var end = text.IndexOf("\nendstream", dataStart, StringComparison.Ordinal);
+        var dictionaryStart = text.LastIndexOf("<<", start, StringComparison.Ordinal);
+        var dictionary = dictionaryStart >= 0 ? text[dictionaryStart..start] : string.Empty;
+        result.Append(text, position, dataStart - position);
+        if (dictionary.Contains("/FlateDecode", StringComparison.Ordinal) && !dictionary.Contains("/Image", StringComparison.Ordinal)
+            && !dictionary.Contains("/Length1", StringComparison.Ordinal))
+        {
+            using var input = new MemoryStream(pdf, dataStart, end - dataStart);
+            using var zlib = new System.IO.Compression.ZLibStream(input, System.IO.Compression.CompressionMode.Decompress);
+            using var output = new MemoryStream();
+            zlib.CopyTo(output);
+            result.Append(Encoding.Latin1.GetString(output.ToArray()));
+        }
+        else
+            result.Append(text, dataStart, end - dataStart);
+        position = end;
+    }
+    return result.ToString();
 }
 
 static void TestInvalidInput()

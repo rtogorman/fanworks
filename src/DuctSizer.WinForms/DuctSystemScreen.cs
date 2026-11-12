@@ -161,7 +161,7 @@ internal sealed partial class DuctSystemScreen
             ColumnCount = 5,
             RowCount = 1
         };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 56));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 380));
@@ -171,7 +171,7 @@ internal sealed partial class DuctSystemScreen
         _projectHeaderAppIcon.Name = "ProjectHeaderAppIcon";
         _projectHeaderAppIcon.Dock = DockStyle.Fill;
         _projectHeaderAppIcon.SizeMode = PictureBoxSizeMode.Zoom;
-        _projectHeaderAppIcon.Margin = new Padding(0, 4, 4, 4);
+        _projectHeaderAppIcon.Margin = new Padding(4, 5, 2, 5);
         _projectHeaderAppIcon.BackColor = Color.Transparent;
         using (var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream(
                    "DuctSizer.WinForms.Assets.DuctSizerCentrifugalIcon.png"))
@@ -182,9 +182,11 @@ internal sealed partial class DuctSystemScreen
         // Sized to its text so the name is never cut off at any display scale.
         _projectHeaderBrand.AutoSize = true;
         _projectHeaderBrand.Anchor = AnchorStyles.Left;
-        _projectHeaderBrand.Text = "FanWorks";
+        _projectHeaderBrand.Text = "fan works";
         _projectHeaderBrand.ForeColor = Color.White;
-        _projectHeaderBrand.Font = new Font("Segoe UI Semibold", 15F);
+        // The brand wordmark: Nunito ExtraBold (a private font, drawn with GDI+).
+        _projectHeaderBrand.UseCompatibleTextRendering = true;
+        _projectHeaderBrand.Font = BrandFonts.Wordmark(16F);
         _projectHeaderBrand.TextAlign = ContentAlignment.MiddleLeft;
         _projectHeaderBrand.Margin = new Padding(2, 0, 18, 0);
         _projectHeaderBrand.BackColor = Color.Transparent;
@@ -439,13 +441,13 @@ internal sealed partial class DuctSystemScreen
         _systemTotalLabel.Name = "SystemTotalLabel";
         _systemTotalLabel.Dock = DockStyle.Fill;
         _systemTotalLabel.TextAlign = ContentAlignment.MiddleLeft;
-        _systemTotalLabel.ForeColor = Color.FromArgb(22, 65, 102);
+        _systemTotalLabel.ForeColor = Color.FromArgb(11, 31, 59);
         _systemTotalLabel.Font = new Font("Segoe UI Semibold", 10.5F);
         _systemTotalLabel.AutoEllipsis = false;
         _systemCriticalLabel.Name = "SystemCriticalPathLabel";
         _systemCriticalLabel.Dock = DockStyle.Fill;
         _systemCriticalLabel.TextAlign = ContentAlignment.MiddleLeft;
-        _systemCriticalLabel.ForeColor = Color.FromArgb(31, 120, 180);
+        _systemCriticalLabel.ForeColor = Color.FromArgb(14, 111, 230);
         _systemCriticalLabel.Font = new Font("Segoe UI Semibold", 10F);
         _systemCriticalLabel.Text = "Critical path: not calculated";
         _systemCriticalLabel.AutoEllipsis = true;
@@ -499,11 +501,11 @@ internal sealed partial class DuctSystemScreen
         _autoSizeFanButton.Click += (_, _) => AutoSizeFan();
         _viewFanInformationButton.Click += (_, _) => ViewFanInformation();
         _criticalPathFilterButton.Click += (_, _) => ToggleCriticalPathFilter();
-        _autoSizeFanButton.BackColor = Color.FromArgb(31, 120, 180);
+        _autoSizeFanButton.BackColor = Color.FromArgb(14, 111, 230);
         _autoSizeFanButton.ForeColor = Color.White;
         _autoSizeFanButton.Font = new Font("Segoe UI Semibold", 8.2F);
         _criticalPathFilterButton.Font = new Font("Segoe UI Semibold", 7.5F);
-        _autoSizeFanButton.FlatAppearance.BorderColor = Color.FromArgb(31, 120, 180);
+        _autoSizeFanButton.FlatAppearance.BorderColor = Color.FromArgb(14, 111, 230);
         _criticalPathFilterButton.Enabled = false;
         // Calculate (fan sizing) and Fan Information are ribbon commands since v0.96; the filter stays with the table.
         primaryActions.Controls.Add(_criticalPathFilterButton);
@@ -973,7 +975,7 @@ internal sealed partial class DuctSystemScreen
         SaveDuctSystem();
         RefreshDuctSystemGrid();
         _systemStorageStatusLabel.Text = message;
-        _systemStorageStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+        _systemStorageStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
         _host.LayoutScreen.ShowLayoutCriticalPathHighlight();
         _host.LayoutScreen.RefreshLayoutDesigner();
         _host.LayoutScreen._layoutStatusLabel.Text = $"Calculated. {message} Critical path: {_criticalPathRoute}.";
@@ -993,7 +995,7 @@ internal sealed partial class DuctSystemScreen
         SaveDuctSystem();
         RefreshDuctSystemGrid();
         _systemStorageStatusLabel.Text = message;
-        _systemStorageStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+        _systemStorageStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
     }
 
     private bool TryAutoSizeFan(out string message)
@@ -1187,7 +1189,7 @@ internal sealed partial class DuctSystemScreen
         if (!_criticalPathCalculated || !_criticalPathItemKeys.Contains(key))
             return;
         row.DefaultCellStyle.BackColor = Color.FromArgb(232, 244, 253);
-        row.DefaultCellStyle.ForeColor = Color.FromArgb(22, 65, 102);
+        row.DefaultCellStyle.ForeColor = Color.FromArgb(11, 31, 59);
     }
 
     internal void RefreshDuctSystemGrid()
@@ -1430,7 +1432,7 @@ internal sealed partial class DuctSystemScreen
             : _criticalPathIssues.Count > 0
                 ? $"Critical-path net pressure loss: not available ({CriticalPathIssueSummary()})"
                 : $"Critical-path net pressure loss: {FormatSystemTotal(_criticalPathPressureLossPa)}";
-        _systemTotalLabel.ForeColor = _criticalPathIssues.Count > 0 ? Color.Firebrick : Color.FromArgb(22, 65, 102);
+        _systemTotalLabel.ForeColor = _criticalPathIssues.Count > 0 ? Color.Firebrick : Color.FromArgb(11, 31, 59);
         _systemCountLabel.Text = itemCount == 1 ? "1 item" : $"{itemCount} items";
         _layoutGeometryIssues = LayoutGeometryCheck.Check(_ductSystem);
         _layoutModelIssues = LayoutModelCheck.Check(_ductSystem);
@@ -1439,7 +1441,7 @@ internal sealed partial class DuctSystemScreen
             : $"Route: {_criticalPathRoute}") + LayoutGeometryNote(" · ");
         var layoutReview = LayoutReviewMessages();
         _systemCriticalLabel.ForeColor = layoutReview.Count > 0
-            ? Color.FromArgb(150, 85, 0) : Color.FromArgb(31, 120, 180);
+            ? Color.FromArgb(150, 85, 0) : Color.FromArgb(14, 111, 230);
         _host.LayoutScreen._layoutToolTips.SetToolTip(_systemCriticalLabel, layoutReview.Count == 0
             ? string.Empty
             : "Layout items to review:\r\n" + string.Join("\r\n", layoutReview.Take(12).Select(message => "• " + message))
@@ -2703,7 +2705,7 @@ internal sealed partial class DuctSystemScreen
             _saveButton.Text = "Saving...";
             _host.UseWaitCursor = true;
             _systemStorageStatusLabel.Text = "Creating the project PDF and CSV...";
-            _systemStorageStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+            _systemStorageStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
             Application.DoEvents();
 
             WriteReportPdf(temporaryPdfPath);
@@ -3273,28 +3275,6 @@ internal sealed partial class DuctSystemScreen
             : result.Input.EquivalentDiameterMethod == EquivalentDiameterMethod.Huebscher
                 ? "D_{e} = \\frac{1.30(WH)^{0.625}}{(W+H)^{0.25}}"
                 : "D_{h} = \\frac{2WH}{W+H}";
-        var requiredEquations = new List<DuctSystemPdfCalculationLine>
-        {
-            E("\\rho = \\rho_{moist}(T, RH, p_{atm})"),
-            E("\\mu = \\mu_{Sutherland}(T)"),
-            E(geometryEquation),
-            E(equivalentEquation),
-            E("V_{calc} = \\frac{Q}{A_{calc}}"),
-            E("Re = \\frac{\\rho V_{calc}D_{calc}}{\\mu}")
-        };
-        if (result.Friction.Regime == FlowRegime.Laminar)
-            requiredEquations.Add(E("f = \\frac{64}{Re}"));
-        else
-        {
-            requiredEquations.Add(E("\\frac{1}{\\sqrt{f}} = -2 log_{10}(X)"));
-            requiredEquations.Add(E("X = \\frac{\\epsilon}{3.7D} + \\frac{2.51}{Re\\sqrt{f}}"));
-        }
-        requiredEquations.AddRange(new[]
-        {
-            E("VP = (\\frac{V_{calc}}{4005})^{2}(\\frac{\\rho}{0.075})"),
-            E("\\frac{\\Delta P}{100 ft} = f(\\frac{100 ft}{D_{calc}})VP"),
-            E("\\Delta P = (\\frac{\\Delta P}{100 ft})(\\frac{L}{100 ft})")
-        });
         var frictionLines = new List<DuctSystemPdfCalculationLine>
         {
             L(result.Friction.Regime == FlowRegime.Laminar
@@ -3302,7 +3282,7 @@ internal sealed partial class DuctSystemScreen
                 : "Reynolds number identifies turbulent flow, so the implicit Colebrook equation is solved by safeguarded bisection."),
             E(result.Friction.Regime == FlowRegime.Laminar
                     ? "f = \\frac{64}{Re}"
-                    : "Colebrook(\\epsilon_{r}, Re) \\rightarrow f",
+                    : "\\frac{1}{\\sqrt{f}} = -2\\log_{10}(\\frac{\\epsilon_{r}}{3.7} + \\frac{2.51}{Re\\sqrt{f}})",
                 $"{factor:0.000000}",
                 result.Friction.Regime == FlowRegime.Laminar
                     ? $"Re = {result.ReynoldsNumber:0}"
@@ -3310,14 +3290,12 @@ internal sealed partial class DuctSystemScreen
         };
         if (result.Friction.Regime != FlowRegime.Laminar)
         {
-            frictionLines.Add(L("Starting friction-factor bracket",
-                $"{result.Friction.InitialLowerBound:0.########} to {result.Friction.InitialUpperBound:0.########}"));
-            frictionLines.Add(L("Convergence check",
-                $"{result.Friction.Iterations} iterations; residual {result.Friction.FinalResidual:0.000E+00}; converged {result.Friction.Converged}"));
+            frictionLines.Add(L($"Solved by bisection between f = {result.Friction.InitialLowerBound:0.########} and {result.Friction.InitialUpperBound:0.########}: " +
+                $"{result.Friction.Iterations} iterations, residual {result.Friction.FinalResidual:0.0E+00}, " +
+                (result.Friction.Converged ? "converged." : "NOT converged - review.")));
         }
         return new[]
         {
-            new DuctSystemPdfCalculationSection("REQUIRED EQUATIONS", requiredEquations),
             new DuctSystemPdfCalculationSection("INPUT VALUES", new[]
             {
                 Input("Airflow Q", $"{qCfm:0.##} cfm"),
@@ -3358,12 +3336,55 @@ internal sealed partial class DuctSystemScreen
                 E("\\frac{\\Delta P}{100 ft} = f(\\frac{100 ft}{D_{calc}})VP", $"{rate:0.####} in. w.c./100 ft", $"f = {factor:0.000000}; Dcalc = {diameterFt:0.####} ft; VP = {velocityPressure:0.####} in. w.c."),
                 E("\\Delta P = (\\frac{\\Delta P}{100 ft})(\\frac{L}{100 ft})", $"{total:0.####} in. w.c.", $"rate = {rate:0.####} in. w.c./100 ft; L = {lengthFt:0.###} ft")
             }),
+            new DuctSystemPdfCalculationSection("VARIABLES AND WHERE THEY COME FROM", DuctVariables(result)),
             new DuctSystemPdfCalculationSection("ASSUMPTIONS", new[]
             {
                 L("Steady, fully developed airflow; Darcy friction factor; moist-air properties at the entered temperature, RH, and pressure."),
                 L($"Calculation basis: {result.CalculationBasisDescription}")
             })
         };
+    }
+
+    /// <summary>Every symbol in the duct worksheet: what it is, its units and where its value comes from.</summary>
+    private static IReadOnlyList<DuctSystemPdfCalculationLine> DuctVariables(DuctCalculationResult result)
+    {
+        static DuctSystemPdfCalculationLine V(string symbol, string meaning) => DuctSystemPdfCalculationLine.Variable(symbol, meaning);
+        var round = result.Input.Geometry.Shape == DuctShape.Round;
+        var huebscher = result.Input.EquivalentDiameterMethod == EquivalentDiameterMethod.Huebscher;
+        var lines = new List<DuctSystemPdfCalculationLine>
+        {
+            V("Q", "Airflow, cfm: input (the airflow carried by this duct in the system)."),
+            V("T", "Air temperature, °F: input."),
+            V("RH", "Relative humidity: project setting."),
+            V("p_{atm}", "Atmospheric pressure, psia: project setting."),
+            round
+                ? V("D", "Duct diameter, in: the final (rounded, constructible) size, step 1.")
+                : V("W, H", "Duct width and height, in: the final (rounded, constructible) size, step 1."),
+            V("A, A_{actual}", "Inside area of the final duct, ft²: step 1."),
+            round
+                ? V("D_{e}", "Equivalent diameter, in: equal to D for a round duct, step 1.")
+                : huebscher
+                    ? V("D_{e}", "Equivalent diameter, in: Huebscher's equation (equal friction), step 1.")
+                    : V("D_{h}", "Hydraulic diameter, in: 2WH / (W + H), step 1."),
+            V("D_{calc}", "Diameter used for velocity and friction, in: the equivalent (or hydraulic) diameter, step 1."),
+            V("A_{calc}", "Area of a circle of diameter Dcalc, ft²: step 1."),
+            V("\\rho", "Moist-air density, lbm/ft³: step 2, from T, RH and patm."),
+            V("\\mu", "Dynamic viscosity, lbm/(ft·s): step 2, Sutherland's law at T."),
+            V("V_{actual}", "Velocity in the actual duct area, fpm: step 3."),
+            V("V_{calc}", "Velocity used for the friction loss, fpm: step 3 (Q / Acalc)."),
+            V("\\epsilon", $"Absolute roughness, ft: duct material ({result.Input.Material.Name})."),
+            V("\\epsilon_{r}", "Relative roughness ε / Dcalc: step 3."),
+            V("Re", "Reynolds number: step 3; decides laminar, transitional or turbulent flow."),
+            V("f", result.Friction.Regime == FlowRegime.Laminar
+                ? "Darcy friction factor: step 4, 64 / Re (laminar)."
+                : "Darcy friction factor: step 4, solved from the Colebrook equation."),
+            V("VP", "Velocity pressure, in. w.c.: step 5."),
+            V("4005, 0.075", "Constants: velocity (fpm) of standard air at 1 in. w.c. VP; standard air density (lbm/ft³)."),
+            V("\\Delta P/100 ft", "Friction rate, in. w.c. per 100 ft: step 5."),
+            V("L", "Duct length, ft: input (from the drawing)."),
+            V("\\Delta P", "Pressure loss of this duct, in. w.c.: step 5.")
+        };
+        return lines;
     }
 
     private string FormatSurfaceAreaWithUnit(ItemSurfaceArea area) => area.Problem is not null
@@ -3379,7 +3400,6 @@ internal sealed partial class DuctSystemScreen
         SystemLeakageResult? system)
     {
         static DuctSystemPdfCalculationLine L(string formula, string value = "") => new(formula, value);
-        static DuctSystemPdfCalculationLine Input(string label, string value) => new(label, value, HighlightAsInput: true);
         static DuctSystemPdfCalculationLine E(string formula, string value = "", string substitution = "") =>
             new(formula, value, true, InputSubstitution: substitution);
         var sections = new List<DuctSystemPdfCalculationSection> { DuctSystemPdfCalculationSection.Title("SURFACE AREA CALCULATION") };
@@ -3415,8 +3435,6 @@ internal sealed partial class DuctSystemScreen
         else if (area.Kind == "Fitting")
             work.Add(E(lengthEquation, $"{lengthFt:0.####} ft", round ? $"D = {diameterIn / 12:0.####} ft"
                 : $"W = {widthIn / 12:0.####} ft; H = {heightIn / 12:0.####} ft"));
-        else
-            work.Add(Input("Duct length L", $"{lengthFt:0.###} ft"));
         work.Add(E(areaEquation, $"{area.AreaFt2:0.###} ft2", $"P = {perimeterFt:0.####} ft; L = {lengthFt:0.####} ft"));
         sections.Add(new DuctSystemPdfCalculationSection(area.Kind == "Fitting" ? "FITTING SURFACE AREA (ESTIMATE)" : "DUCT SURFACE AREA", work));
 
@@ -3426,16 +3444,34 @@ internal sealed partial class DuctSystemScreen
             var factor = SmacnaLeakage.AllowableLeakageFactor(leakageClass, pressureClass);
             sections.Add(new DuctSystemPdfCalculationSection("DUCT LEAKAGE OF THIS ITEM (SMACNA)", new[]
             {
-                L($"System pressure class {pressureClass:0.#} in. w.c.; Seal Class {seal}; leakage class C_L = {leakageClass} ({(round ? "round" : "rectangular")} metal duct)."),
-                E("F = C_{L} P^{0.65}", $"{factor:0.###} cfm/100 ft2", $"C_L = {leakageClass}; P = {pressureClass:0.#} in. w.c."),
+                E("F = C_{L} P_{c}^{0.65}", $"{factor:0.###} cfm/100 ft2",
+                    $"CL = {leakageClass} (Seal Class {seal}, {(round ? "round" : "rectangular")}); Pc = {pressureClass:0.#} in. w.c."),
                 E("Q_{leak} = F \\frac{A_{s}}{100}", $"{factor * area.AreaFt2 / 100:0.###} cfm", $"F = {factor:0.###} cfm/100 ft2; As = {area.AreaFt2:0.###} ft2")
             }));
         }
+        static DuctSystemPdfCalculationLine V(string symbol, string meaning) => DuctSystemPdfCalculationLine.Variable(symbol, meaning);
+        var variables = new List<DuctSystemPdfCalculationLine>
+        {
+            V("P", "Perimeter of the section, ft: from the size above (πD or 2(W + H))."),
+            area.Kind == "Fitting"
+                ? V("L_{eq}", "Estimated length of the fitting, ft: " + area.LengthBasis + ".")
+                : V("L", $"Duct length, ft: from the drawing ({lengthFt:0.###} ft).")
+        };
+        if (area.ArcAngleDegrees is not null)
+            variables.Add(V("\\theta, r", "Elbow angle (degrees) and centerline radius (ft): from the fitting inputs."));
+        variables.Add(V("A_{s}", "Outer surface area, ft²: P × length."));
+        if (system is { PressureClassInWc: not null, SealClass: not null })
+        {
+            variables.Add(V("P_{c}", "System SMACNA pressure class, in. w.c.: from the system design pressure (Analysis tab)."));
+            variables.Add(V("C_{L}", "SMACNA leakage class, cfm/100 ft² at 1 in. w.c.: from the seal class and duct shape."));
+            variables.Add(V("F", "Leakage factor, cfm per 100 ft² of duct surface."));
+            variables.Add(V("Q_{leak}", "Duct leakage of this item, cfm."));
+        }
+        sections.Add(new DuctSystemPdfCalculationSection("VARIABLES AND WHERE THEY COME FROM", variables));
         sections.Add(new DuctSystemPdfCalculationSection("SURFACE AREA ASSUMPTIONS", new[]
         {
-            L("Nominal (inside) duct dimensions; sheet-metal thickness neglected"
-              + (area.Kind == "Fitting" ? "; ASHRAE data give no fitting length, so it is estimated (" + area.LengthBasis + ")." : ".")),
-            L("Coils, filters, GRDs, VAV boxes and custom components: 0 cfm/ft2 leakage, no surface area.")
+            L("Surface area: nominal (inside) dimensions, sheet-metal thickness neglected"
+              + (area.Kind == "Fitting" ? "; fitting length estimated (ASHRAE gives none)." : "."))
         }));
         return sections;
     }
@@ -3451,38 +3487,19 @@ internal sealed partial class DuctSystemScreen
             new(label, value, HighlightAsInput: true);
         static DuctSystemPdfCalculationLine E(string formula, string value = "", string substitution = "") =>
             new(formula, value, true, InputSubstitution: substitution);
+        static DuctSystemPdfCalculationLine V(string symbol, string meaning) => DuctSystemPdfCalculationLine.Variable(symbol, meaning);
         var sections = new List<DuctSystemPdfCalculationSection>
         {
-            new("REQUIRED EQUATIONS", new[]
-            {
-                E("A_{ref} = A(geometry)"),
-                E("D_{h} = \\frac{4A_{ref}}{P_{wetted}}"),
-                E("V_{ref} = \\frac{Q}{A_{ref}}"),
-                E("Re = \\frac{\\rho V_{ref}D_{h}}{\\mu}"),
-                E("C = C_{ASHRAE}(table inputs)"),
-                E("VP = (\\frac{V_{ref}}{4005})^{2}(\\frac{\\rho}{0.075})"),
-                E("\\Delta P_{t} = C \\times VP")
-            }),
-            new("PARAMETERS AND SUB-EQUATIONS", new[]
-            {
-                L("Q = reference airflow; Aref = reference area; Vref = reference velocity"),
-                L("Dh = hydraulic diameter; rho = moist-air density; mu = dynamic viscosity"),
-                L("Re = Reynolds number; C = ASHRAE loss coefficient; VP = velocity pressure; DeltaPt = total-pressure loss"),
-                E("\\rho = \\rho_{moist}(T, RH, p_{atm})"),
-                E("\\mu = \\mu_{Sutherland}(T)")
-            }),
             new("ASHRAE SOURCE AND SELECTION", new[]
             {
-                L($"ASHRAE {result.Definition.Code} - {result.Definition.Description}"),
-                L(result.Definition.SourceNote),
-                L("Reference velocity basis =", result.Definition.ReferenceVelocity),
-                L("Selection method =", result.Definition.IsAutomated
-                    ? "linear/bilinear interpolation within published table limits"
-                    : "user-entered coefficient from the cited ASHRAE entry")
+                L($"ASHRAE {result.Definition.Code}: {result.Definition.SourceNote}"),
+                L($"Reference velocity basis: {result.Definition.ReferenceVelocity}. Coefficient: " + (result.Definition.IsAutomated
+                    ? "read from the published table (see the table look-up)."
+                    : "entered from the cited ASHRAE entry."))
             })
         };
         var tableLines = result.Definition.Inputs.Count == 0
-            ? new[] { L("This fitting uses a fixed published coefficient; no table-axis input is required.") }
+            ? Array.Empty<DuctSystemPdfCalculationLine>()
             : result.Definition.Inputs.Select(spec =>
             {
                 result.Inputs.TryGetValue(spec.Key, out var value);
@@ -3492,7 +3509,8 @@ internal sealed partial class DuctSystemScreen
                     : $"{value:0.####}{(string.IsNullOrWhiteSpace(spec.Unit) ? "" : " " + spec.Unit)}";
                 return Input($"{spec.Label} [{spec.Key}], range {spec.Minimum:0.####} to {spec.Maximum:0.####}", selected);
             }).ToArray();
-        sections.Add(new DuctSystemPdfCalculationSection("PUBLISHED TABLE / EQUATION INPUTS", tableLines));
+        if (tableLines.Length > 0)
+            sections.Add(new DuctSystemPdfCalculationSection("PUBLISHED TABLE / EQUATION INPUTS", tableLines));
 
         var flow = new List<DuctSystemPdfCalculationLine>();
         if (result.AirflowM3PerS is double airflow)
@@ -3523,24 +3541,64 @@ internal sealed partial class DuctSystemScreen
             intermediates.Add(E("Re = \\frac{\\rho V D_{h}}{\\mu}", $"{reynolds:0}",
                 $"rho = {density:0.#####}; V = {velocityFtS:0.####} ft/s; Dh = {dhFt:0.####} ft; mu = {viscosity:0.########}"));
         }
+        // Derived ratios (junction legs: b branch, s straight, c common), two per row.
         var publishedKeys = result.Definition.Inputs.Select(spec => spec.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        intermediates.AddRange(result.Inputs.Where(pair => !publishedKeys.Contains(pair.Key)).OrderBy(pair => pair.Key)
-            .Select(pair => L($"{FittingCalculatorScreen.FittingIntermediateLabel(pair.Key)} =", $"{pair.Value:0.####}")));
+        var derived = result.Inputs.Where(pair => !publishedKeys.Contains(pair.Key) && !pair.Key.Equals("path", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(pair => pair.Key).ToArray();
+        for (var index = 0; index < derived.Length; index += 2)
+        {
+            var cells = new List<string> { FittingCalculatorScreen.FittingIntermediateSymbol(derived[index].Key), $"{derived[index].Value:0.####}" };
+            if (index + 1 < derived.Length)
+                cells.AddRange(new[] { FittingCalculatorScreen.FittingIntermediateSymbol(derived[index + 1].Key), $"{derived[index + 1].Value:0.####}" });
+            else
+                cells.AddRange(new[] { string.Empty, string.Empty });
+            intermediates.Add(DuctSystemPdfCalculationLine.Row(DuctSystemPdfLineKind.TableRow, cells.ToArray()));
+        }
         sections.Add(new DuctSystemPdfCalculationSection("INTERMEDIATE CALCULATIONS", intermediates.Count > 0 ? intermediates : new[] { L("No additional derived ratio is required for this fitting.") }));
 
+        var lookupLines = WorksheetLookups.Lines(result);
+        if (lookupLines.Count > 0)
+            sections.Add(new DuctSystemPdfCalculationSection("TABLE LOOK-UP (HOW C WAS READ FROM THE TABLE)", lookupLines));
+        else if (!result.Definition.IsAutomated)
+            sections.Add(new DuctSystemPdfCalculationSection("COEFFICIENT SOURCE", new[]
+            {
+                L("The loss coefficient was entered from the cited ASHRAE entry; FanWorks does not estimate missing coefficients.")
+            }));
         var velocityPressure = UnitConversions.PaToInchesWater(result.VelocityPressurePa);
+        var coefficientBasis = lookupLines.Count == 0
+            ? result.Definition.IsAutomated ? "fixed published coefficient" : "entered coefficient"
+            : result.TableLookups.Count == 1 ? "table look-up above" : "table look-ups above, combined as the source note states";
         sections.Add(new DuctSystemPdfCalculationSection("COEFFICIENT AND PRESSURE LOSS", new[]
         {
-            E("C = C_{ASHRAE}(inputs)", $"{result.Coefficient:0.####}", "selected/interpolated published table inputs"),
+            E("C = C_{ASHRAE}", $"{result.Coefficient:0.####}", coefficientBasis),
             E("VP = (\\frac{V}{4005})^{2}(\\frac{\\rho}{0.075})", $"{velocityPressure:0.####} in. w.c.",
                 $"V = {UnitConversions.MpsToFpm(result.ReferenceVelocityMPerS):0.#} fpm; rho = {density:0.#####} lbm/ft3"),
             E("\\Delta P_{t} = C \\times VP", $"{UnitConversions.PaToInchesWater(result.PressureLossPa):0.####} in. w.c.",
                 $"C = {result.Coefficient:0.####}; VP = {velocityPressure:0.####} in. w.c.")
         }));
+        var fittingVariables = new List<DuctSystemPdfCalculationLine>
+        {
+            V("Q", "Reference airflow, cfm: the airflow through the fitting's reference section (from the connected system)."),
+            V("A_{ref}", "Reference area, ft²: from the reference duct size listed above."),
+            V("P_{wetted}", "Wetted perimeter of the reference section, in (πD round; 2(W + H) rectangular)."),
+            V("D_{h}", "Hydraulic diameter, in: 4 Aref / Pwetted."),
+            V("V_{ref}", $"Reference velocity, fpm: Q / Aref; basis: {result.Definition.ReferenceVelocity}."),
+            V("\\rho", "Moist-air density, lbm/ft³: from the air temperature, relative humidity and atmospheric pressure."),
+            V("\\mu", "Dynamic viscosity, lbm/(ft·s): Sutherland's law at the air temperature."),
+            V("Re", "Reynolds number: ρ V Dh / μ (used by fittings whose coefficient depends on it)."),
+            V("C", "ASHRAE loss coefficient referred to Vref: from the published table or equation for this fitting."),
+            V("VP", "Velocity pressure, in. w.c.: (V / 4005)² (ρ / 0.075)."),
+            V("4005, 0.075", "Constants: velocity (fpm) of standard air at 1 in. w.c. VP; standard air density (lbm/ft³)."),
+            V("\\Delta P_{t}", "Total-pressure loss of the fitting, in. w.c.: C × VP.")
+        };
+        if (result.ReferenceGeometry is { Shape: DuctShape.Rectangular })
+            fittingVariables.Insert(3, V("W, H", "Width and height of the rectangular reference section, in."));
+        if (derived.Length > 0)
+            fittingVariables.Add(V("Q, A, V ratios", "Airflow, area and velocity ratios of the junction legs (b branch, s straight, c common): from the system airflows and duct sizes."));
+        sections.Add(new DuctSystemPdfCalculationSection("VARIABLES AND WHERE THEY COME FROM", fittingVariables));
         sections.Add(new DuctSystemPdfCalculationSection("ASSUMPTIONS", new[]
         {
-            L("Steady airflow; ASHRAE reference-velocity convention; interpolation is restricted to digitized published limits."),
-            L("Duct material and roughness are not used in the ASHRAE fitting-loss coefficient calculation.")
+            L("Steady airflow; ASHRAE reference-velocity convention; tables are not extrapolated; duct roughness does not enter C.")
         }));
         if (result.TableRangeWarnings.Count > 0)
         {
@@ -3581,15 +3639,18 @@ internal sealed partial class DuctSystemScreen
         static DuctSystemPdfCalculationLine Solved(string label, string value, string substitution = "") =>
             new(label, value, IsEquation: true, InputSubstitution: substitution);
 
+        var reheat = string.Equals(result.Definition.Code, VavPerformanceCatalog.WithReheatCode, StringComparison.OrdinalIgnoreCase);
         var table = new List<DuctSystemPdfCalculationLine>
         {
-            L("Published airflow (cfm)", "Airside ΔPs / Min ΔPs (in. w.c.)")
+            DuctSystemPdfCalculationLine.Row(DuctSystemPdfLineKind.TableHeader, "Published airflow (cfm)",
+                reheat ? "Airside ΔPs (in. w.c.)" : "Min ΔPs (in. w.c.)", "Used")
         };
         table.AddRange(selection.PublishedTable.Select(point =>
         {
             var bound = point == selection.LowerPoint || point == selection.UpperPoint;
-            return L(bound ? $"> {point.AirflowCfm:0}" : $"  {point.AirflowCfm:0}",
-                $"{point.PressureDropInWg:0.###}");
+            return DuctSystemPdfCalculationLine.Row(bound ? DuctSystemPdfLineKind.TableRowSelected : DuctSystemPdfLineKind.TableRow,
+                $"{point.AirflowCfm:0}", $"{point.PressureDropInWg:0.###}",
+                !bound ? "" : selection.WasInterpolated ? (point == selection.LowerPoint ? "← Q1 (below)" : "← Q2 (above)") : "← exact");
         }));
 
         var interpolation = selection.WasInterpolated
@@ -3615,7 +3676,7 @@ internal sealed partial class DuctSystemScreen
             {
                 L(selection.Product), L(selection.Configuration), L(selection.SourceReference)
             }),
-            new DuctSystemPdfCalculationSection("RECREATED PUBLISHED PERFORMANCE TABLE", table),
+            new DuctSystemPdfCalculationSection("PUBLISHED PERFORMANCE TABLE (MANUFACTURER DATA)", table, Wide: true),
             new DuctSystemPdfCalculationSection("INPUT / INTERPOLATION / SOLVED RESULT", interpolation),
             new DuctSystemPdfCalculationSection("PRESSURE-LOSS RESULT", new[]
             {
@@ -3624,6 +3685,13 @@ internal sealed partial class DuctSystemScreen
                     ? "Airside ΔPs is the selected hot-water coil air pressure drop."
                     : "Min ΔPs is the terminal inlet-to-outlet pressure drop with the primary damper full open."),
                 L("Interpolation is restricted to the supplied published airflow range; no extrapolation is performed.")
+            }),
+            new DuctSystemPdfCalculationSection("VARIABLES AND WHERE THEY COME FROM", new[]
+            {
+                DuctSystemPdfCalculationLine.Variable("Q", "Requested airflow, cfm: the airflow through this terminal from the system."),
+                DuctSystemPdfCalculationLine.Variable("Q_{1}, Q_{2}", "Published airflows either side of Q, cfm: from the table above."),
+                DuctSystemPdfCalculationLine.Variable("\\Delta P_{1}, \\Delta P_{2}", "Published pressure drops at Q1 and Q2, in. w.c."),
+                DuctSystemPdfCalculationLine.Variable("\\Delta P", "Pressure drop at Q, in. w.c.: linear interpolation between the two published points.")
             })
         };
     }
@@ -3640,6 +3708,60 @@ internal sealed partial class DuctSystemScreen
                     result.Inputs["slotWidth"], Convert.ToInt32(result.Inputs["slotCount"]));
     }
 
+    /// <summary>The manufacturer's published table as worksheet table rows, with the row used highlighted.</summary>
+    private static List<DuctSystemPdfCalculationLine> GrdTableLines(GrdPerformanceSelection selection, bool grille)
+    {
+        var table = new List<DuctSystemPdfCalculationLine>
+        {
+            grille
+                ? DuctSystemPdfCalculationLine.Row(DuctSystemPdfLineKind.TableHeader, "Core velocity (fpm)", "Airflow (cfm)",
+                    "Velocity pressure (in. w.c.)", "Static pressure (in. w.c.)", "Sound (NC)", "Used")
+                : DuctSystemPdfCalculationLine.Row(DuctSystemPdfLineKind.TableHeader, "Airflow (cfm)", "Total pressure (in. w.c.)",
+                    "Static pressure (in. w.c.)", "Sound (NC)", "Throw (ft to 150/100/50 fpm)", "Used")
+        };
+        table.AddRange(selection.PublishedTable.Select(point =>
+        {
+            var used = point == selection.Selected;
+            var kind = used ? DuctSystemPdfLineKind.TableRowSelected : DuctSystemPdfLineKind.TableRow;
+            return grille
+                ? DuctSystemPdfCalculationLine.Row(kind, $"{point.CoreVelocityFpm:0}", $"{point.AirflowCfm:0}",
+                    $"{point.VelocityPressureInWg:0.###}", $"-{point.TotalPressureInWg:0.###}", $"{point.SoundNc}", used ? "← used" : "")
+                : DuctSystemPdfCalculationLine.Row(kind, $"{point.AirflowCfm:0}", $"{point.TotalPressureInWg:0.###}",
+                    $"{(point.StaticPressureInWg ?? 0):0.###}", $"{point.SoundNc}", $"{point.ThrowFt}", used ? "← used" : "");
+        }));
+        return table;
+    }
+
+    /// <summary>States how the requested airflow was matched to the table (rounded up to the next published airflow).</summary>
+    private static DuctSystemPdfCalculationLine GrdRoundingLine(GrdPerformanceSelection selection)
+    {
+        static DuctSystemPdfCalculationLine L(string formula, string value = "") => new(formula, value);
+        return selection.AirflowWasRoundedUp
+            ? L($"The requested {selection.RequestedAirflowCfm:0.##} cfm is not a published airflow. It was rounded UP to the next published point, " +
+                $"{selection.Selected.AirflowCfm:0} cfm (conservative: the higher airflow has the higher pressure drop and sound level). No interpolation is used.")
+            : L($"The requested {selection.RequestedAirflowCfm:0.##} cfm is a published airflow point; its values are used as printed.");
+    }
+
+    private static DuctSystemPdfCalculationLine[] GrdVariables(bool grille) => grille
+                ? new[]
+                {
+                    DuctSystemPdfCalculationLine.Variable("Q", "Requested airflow, cfm: the airflow delivered to this grille by the system."),
+                    DuctSystemPdfCalculationLine.Variable("Q_{pub}", "Published airflow used, cfm: the first table airflow at or above Q."),
+                    DuctSystemPdfCalculationLine.Variable("V_{core}", "Core velocity, fpm: published, for the selected nominal duct size."),
+                    DuctSystemPdfCalculationLine.Variable("VP", "Velocity pressure, in. w.c.: published."),
+                    DuctSystemPdfCalculationLine.Variable("SP", "Static pressure, in. w.c.: published (negative); its magnitude is the pressure loss."),
+                    DuctSystemPdfCalculationLine.Variable("NC", "Noise criterion: published sound rating at Q_pub.")
+                }
+                : new[]
+                {
+                    DuctSystemPdfCalculationLine.Variable("Q", "Requested airflow, cfm: the airflow delivered to this outlet by the system."),
+                    DuctSystemPdfCalculationLine.Variable("Q_{pub}", "Published airflow used, cfm: the first table airflow at or above Q."),
+                    DuctSystemPdfCalculationLine.Variable("TP", "Total pressure, in. w.c.: published; used as the pressure loss."),
+                    DuctSystemPdfCalculationLine.Variable("SP", "Static pressure, in. w.c.: published."),
+                    DuctSystemPdfCalculationLine.Variable("NC", "Noise criterion: published sound rating at Q_pub."),
+                    DuctSystemPdfCalculationLine.Variable("Throw", "Distance, ft, to terminal velocities of 150, 100 and 50 fpm: published.")
+                };
+
     private static IReadOnlyList<DuctSystemPdfCalculationSection> BuildGrdPdfCalculations(
         FittingCalculationResult result, GrdPerformanceSelection selection)
     {
@@ -3650,17 +3772,8 @@ internal sealed partial class DuctSystemScreen
             new(label, value, IsEquation: true);
         var grille = string.Equals(result.Definition.Code, GrdPerformanceCatalog.Titus350RCode,
             StringComparison.OrdinalIgnoreCase);
-        var table = new List<DuctSystemPdfCalculationLine>
-        {
-            L(grille
-                ? "Core velocity | CFM | Velocity pressure | Negative static pressure | NC"
-                : "CFM | Total pressure | Static pressure | NC | Throw (ft to 150/100/50 fpm)")
-        };
-        table.AddRange(selection.PublishedTable.Select(point => L(
-            point == selection.Selected ? "> SELECTED" : string.Empty,
-            grille
-                ? $"{point.CoreVelocityFpm:0} fpm | {point.AirflowCfm:0} | {point.VelocityPressureInWg:0.###} | -{point.TotalPressureInWg:0.###} | {point.SoundNc}"
-                : $"{point.AirflowCfm:0} | {point.TotalPressureInWg:0.###} | {(point.StaticPressureInWg ?? 0):0.###} | {point.SoundNc} | {point.ThrowFt}")));
+        var table = GrdTableLines(selection, grille);
+        var roundingLine = GrdRoundingLine(selection);
         var configurationInputs = grille
             ? new[] { Input("Nominal duct size", $"{selection.NominalDuctSizeIn} in") }
             : string.Equals(result.Definition.Code, GrdPerformanceCatalog.PriceScdCode,
@@ -3693,7 +3806,8 @@ internal sealed partial class DuctSystemScreen
             }),
             new DuctSystemPdfCalculationSection("INPUT PARAMETERS", configurationInputs.Prepend(
                 Input("Requested airflow", $"{selection.RequestedAirflowCfm:0.##} cfm")).ToArray()),
-            new DuctSystemPdfCalculationSection("RECREATED PUBLISHED PERFORMANCE TABLE", table),
+            new DuctSystemPdfCalculationSection("PUBLISHED PERFORMANCE TABLE (MANUFACTURER DATA)", table, Wide: true),
+            new DuctSystemPdfCalculationSection("SELECTION FROM THE TABLE", new[] { roundingLine }),
             new DuctSystemPdfCalculationSection("SELECTED OUTPUTS", new[]
             {
                 Solved("Published airflow", $"{selection.Selected.AirflowCfm:0} cfm"),
@@ -3704,6 +3818,7 @@ internal sealed partial class DuctSystemScreen
                 Solved("Sound", $"NC {selection.Selected.SoundNc}"),
                 Solved("Throw", grille ? "Not published for 350R" : $"{selection.Selected.ThrowFt} ft to 150/100/50 fpm")
             }),
+            new DuctSystemPdfCalculationSection("VARIABLES AND WHERE THEY COME FROM", GrdVariables(grille)),
             new DuctSystemPdfCalculationSection("NOTES", new[]
             {
                 L(grille
@@ -3750,32 +3865,58 @@ internal sealed partial class DuctSystemScreen
                     ? GrdPerformanceCatalog.SelectPriceScd(requestedCfm, Convert.ToInt32(node.GrdFaceSizeIn), Convert.ToInt32(node.GrdNeckDiameterIn))
                     : GrdPerformanceCatalog.SelectTitusTbd80(requestedCfm, Convert.ToInt32(node.GrdLengthFt),
                         node.GrdSlotWidthIn, node.GrdSlotCount);
-            var lines = new List<DuctSystemPdfCalculationLine>
+            var method = grille
+                ? "The selected nominal duct-size chart is used and the airflow is rounded upward to the next published point."
+                : selection.InletDiameterIn is null
+                    ? "The requested airflow is rounded upward to the first published airflow at or above the request."
+                    : "The smallest published inlet covering the requested airflow is selected, then the airflow is rounded upward to the next listed cfm.";
+            var configuration = new List<DuctSystemPdfCalculationLine>
             {
-                L(selection.Product), L(selection.Configuration),
-                L("Selection method", grille
-                    ? "The selected nominal duct-size chart is used and airflow is rounded upward to the next published point."
-                    : selection.InletDiameterIn is null
-                    ? "Requested airflow is rounded upward to the first published airflow at or above the request."
-                    : "The smallest published inlet covering the requested airflow is selected before rounding upward to the next listed cfm."),
-                L("Reference", string.IsNullOrWhiteSpace(selection.SourceReference)
-                    ? "Published manufacturer performance data." : selection.SourceReference),
-                L("Requested airflow", $"{requestedCfm:0.##} cfm"),
-                L(grille
-                    ? "Core velocity | CFM | Velocity pressure | Negative static pressure | NC"
-                    : "CFM | Total pressure | Static pressure | NC | Throw (ft to 150/100/50 fpm)")
+                L("Requested airflow Q", $"{requestedCfm:0.##} cfm")
             };
-            lines.AddRange(selection.PublishedTable.Select(point => L(point == selection.Selected ? "> SELECTED" : string.Empty,
-                grille
-                    ? $"{point.CoreVelocityFpm:0} fpm | {point.AirflowCfm:0} | {point.VelocityPressureInWg:0.###} | -{point.TotalPressureInWg:0.###} | {point.SoundNc}"
-                    : $"{point.AirflowCfm:0} | {point.TotalPressureInWg:0.###} | {(point.StaticPressureInWg ?? 0):0.###} | {point.SoundNc} | {point.ThrowFt}")));
-            lines.Add(L("Selected performance",
-                grille
-                    ? $"{selection.NominalDuctSizeIn} in; {selection.Selected.AirflowCfm:0} cfm; {selection.Selected.CoreVelocityFpm:0} fpm; pressure loss {selection.Selected.TotalPressureInWg:0.###} in. w.c.; NC {selection.Selected.SoundNc}"
-                    : $"{selection.Selected.AirflowCfm:0} cfm; {selection.Selected.TotalPressureInWg:0.###} in. w.c.; NC {selection.Selected.SoundNc}; throw {selection.Selected.ThrowFt} ft"));
-            lines.Add(L($"SPout = SPin - DeltaP = {inlet:0.####} - {selection.Selected.TotalPressureInWg:0.####} =",
-                $"{outlet:0.####} in. w.c."));
-            return new[] { new DuctSystemPdfCalculationSection("MANUFACTURER GRD PERFORMANCE SELECTION", lines) };
+            if (grille)
+                configuration.Add(L("Nominal duct size", $"{selection.NominalDuctSizeIn} in"));
+            else if (selection.InletDiameterIn is int inletDiameter)
+                configuration.Add(L("Selected inlet", $"{inletDiameter:0} in"));
+            var pressureLoss = selection.Selected.TotalPressureInWg;
+            // The system uses the pressure drop stored on the outlet when it was last defined or edited. If the airflow has
+            // changed since, the stored value no longer matches the table at the current airflow: say so, never hide it.
+            var storedLoss = UnitConversions.PaToInchesWater(node.PressureDropPa);
+            var stale = Math.Abs(storedLoss - pressureLoss) > 0.0005;
+            var review = stale
+                ? new[]
+                {
+                    new DuctSystemPdfCalculationSection("REVIEW REQUIRED - STORED PRESSURE DROP IS OUT OF DATE", new[]
+                    {
+                        L($"The system calculation used {storedLoss:0.###} in. w.c., stored when this outlet was last defined, but the published " +
+                          $"value at the current {requestedCfm:0.##} cfm is {pressureLoss:0.###} in. w.c. Open the outlet and save it to update the stored value.")
+                    })
+                }
+                : Array.Empty<DuctSystemPdfCalculationSection>();
+            return review.Concat(new[]
+            {
+                new DuctSystemPdfCalculationSection("MANUFACTURER SOURCE AND METHOD", new[]
+                {
+                    L(selection.Product), L(selection.Configuration), L($"Selection method: {method}"),
+                    L($"Reference: {(string.IsNullOrWhiteSpace(selection.SourceReference) ? "Published manufacturer performance data." : selection.SourceReference)}")
+                }),
+                new DuctSystemPdfCalculationSection("INPUT PARAMETERS", configuration),
+                new DuctSystemPdfCalculationSection("PUBLISHED PERFORMANCE TABLE (MANUFACTURER DATA)", GrdTableLines(selection, grille), Wide: true),
+                new DuctSystemPdfCalculationSection("SELECTION FROM THE TABLE", new[] { GrdRoundingLine(selection) }),
+                new DuctSystemPdfCalculationSection("SELECTED PERFORMANCE AND PRESSURE", new[]
+                {
+                    L("Published airflow used Q_pub", $"{selection.Selected.AirflowCfm:0} cfm"),
+                    L(grille ? "Pressure loss |SP| at Q_pub" : "Pressure loss TP at Q_pub", $"{pressureLoss:0.###} in. w.c."),
+                    L(grille ? "Core velocity" : "Throw (ft to 150/100/50 fpm)", grille ? $"{selection.Selected.CoreVelocityFpm:0} fpm" : $"{selection.Selected.ThrowFt}"),
+                    L("Sound", $"NC {selection.Selected.SoundNc}"),
+                    new DuctSystemPdfCalculationLine("SP_{out} = SP_{in} - \\Delta P", $"{outlet:0.####} in. w.c.", true,
+                        InputSubstitution: $"SPin = {inlet:0.####} in. w.c.; ΔP = {storedLoss:0.####} in. w.c. (used by the system)")
+                }),
+                new DuctSystemPdfCalculationSection("VARIABLES AND WHERE THEY COME FROM", GrdVariables(grille)
+                    .Append(DuctSystemPdfCalculationLine.Variable("SP_{in}, SP_{out}", "Static pressure entering and leaving the outlet, in. w.c.: from the system calculation."))
+                    .Append(DuctSystemPdfCalculationLine.Variable("\\Delta P", "Pressure drop of the outlet used by the system, in. w.c.: stored from the table when the outlet was defined."))
+                    .ToArray())
+            }).ToArray();
         }
         if (node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CustomComponent)
             return new[] { new DuctSystemPdfCalculationSection("COMPONENT PRESSURE LOSS", new[]

@@ -53,7 +53,7 @@ internal sealed partial class LayoutDesignerScreen
             Margin = new Padding(12, 0, 0, 0),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.White,
-            ForeColor = Color.FromArgb(28, 69, 108),
+            ForeColor = Color.FromArgb(16, 45, 84),
             Font = new Font("Segoe UI", 8.5F),
             AccessibleName = "Hide the bottom panel"
         };

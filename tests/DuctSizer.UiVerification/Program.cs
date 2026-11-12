@@ -380,7 +380,7 @@ internal static class Program
                     && form.Text.Contains("Untitled Project", StringComparison.Ordinal),
                 "The top bar and window title should show the project identity.");
             Require(projectIdentityHeader.Height <= Px(50) && ribbon.Height <= Px(104)
-                    && projectHeaderBrand.Text == "FanWorks"
+                    && projectHeaderBrand.Text == "fan works"
                     && projectHeaderAppIcon.Image is not null
                     && projectIdentityHeader.GetType().Name == "ProjectIdentityHeaderPanel"
                     && Find<Control>(form, "MainTopTabs").Parent == projectIdentityHeader
@@ -412,10 +412,10 @@ internal static class Program
                     && ductCalculationDetails.Text.Contains("SOLVED PARAMETERS — EQUATION SUBSTITUTIONS", StringComparison.Ordinal)
                     && (ductCalculationDetails.Rtf ?? "").Contains("\\emfblip", StringComparison.Ordinal)
                     && (ductCalculationDetails.Rtf ?? "").Contains("\\red190\\green44\\blue44", StringComparison.Ordinal)
-                    && (ductCalculationDetails.Rtf ?? "").Contains("\\red0\\green105\\blue154", StringComparison.Ordinal),
+                    && (ductCalculationDetails.Rtf ?? "").Contains("\\red10\\green88\\blue187", StringComparison.Ordinal),
                 "The Duct Calculator should show equations first, organized parameters, red inputs, and blue solved equation substitutions. "
                 + $"Headings={ductCalculationDetails.Text.Contains("REQUIRED EQUATIONS", StringComparison.Ordinal)}/{ductCalculationDetails.Text.Contains("PARAMETERS AND SUB-EQUATIONS", StringComparison.Ordinal)}/{ductCalculationDetails.Text.Contains("INPUT VALUES", StringComparison.Ordinal)}/{ductCalculationDetails.Text.Contains("SOLVED PARAMETERS — EQUATION SUBSTITUTIONS", StringComparison.Ordinal)}, "
-                + $"emf={(ductCalculationDetails.Rtf ?? "").Contains("\\emfblip", StringComparison.Ordinal)}, red={(ductCalculationDetails.Rtf ?? "").Contains("\\red190\\green44\\blue44", StringComparison.Ordinal)}, blue={(ductCalculationDetails.Rtf ?? "").Contains("\\red0\\green105\\blue154", StringComparison.Ordinal)}, length={ductCalculationDetails.TextLength}, box={ductCalculationDetails.Bounds}, visible={ductCalculationDetails.Visible}.");
+                + $"emf={(ductCalculationDetails.Rtf ?? "").Contains("\\emfblip", StringComparison.Ordinal)}, red={(ductCalculationDetails.Rtf ?? "").Contains("\\red190\\green44\\blue44", StringComparison.Ordinal)}, blue={(ductCalculationDetails.Rtf ?? "").Contains("\\red10\\green88\\blue187", StringComparison.Ordinal)}, length={ductCalculationDetails.TextLength}, box={ductCalculationDetails.Bounds}, visible={ductCalculationDetails.Visible}.");
             Require(ductCalculationDetails.Text.Contains("1. FINAL DUCT GEOMETRY", StringComparison.Ordinal)
                     && ductCalculationDetails.Text.Contains("2. AIR PROPERTIES", StringComparison.Ordinal)
                     && ductCalculationDetails.Text.Contains("Sutherland relation", StringComparison.Ordinal)
@@ -744,6 +744,23 @@ internal static class Program
                     && ScreenBounds(fittingSummary).Top >= ScreenBounds(fittingInputScroll).Bottom
                     && ScreenBounds(fittingSummary).Bottom <= ScreenBounds(calculateFitting).Top,
                 "Fitting outputs should remain visible between the scrollable inputs and bottom action row.");
+            {
+                // The Calculate button must stay inside its card on a short window (it was pushed out of view).
+                var fittingCard = Find<Control>(form, "FittingInputCard");
+                var sizeBeforeShort = form.Size;
+                form.Size = new Size(form.Width, Math.Max(form.MinimumSize.Height, 650));
+                Application.DoEvents();
+                // Compare with the visible page area (the card itself can be clipped by its parent).
+                var visibleArea = fittingCard.Parent;
+                while (visibleArea is not null && visibleArea is not TableLayoutPanel)
+                    visibleArea = visibleArea.Parent;
+                var cardBounds = Rectangle.Intersect(ScreenBounds(fittingCard), ScreenBounds(visibleArea ?? fittingCard));
+                var buttonBounds = ScreenBounds(calculateFitting);
+                Require(calculateFitting.Visible && buttonBounds.Bottom <= cardBounds.Bottom && buttonBounds.Top >= cardBounds.Top,
+                    $"The Fitting Calculator's Calculate button should stay visible inside its card on a short window. visible card={cardBounds}, button={buttonBounds}");
+                form.Size = sizeBeforeShort;
+                Application.DoEvents();
+            }
             var fittingPageCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_FITTING_PAGE_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(fittingPageCapturePath))
             {
@@ -891,7 +908,7 @@ internal static class Program
                 "The Titus DESV VAV-with-reheat calculator should expose size, rows, airflow, interpolation, and manufacturer pressure drop without unrelated duct geometry inputs.");
             var vavPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(UiMember.Method("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
                 .Invoke(null, new object[] { vavCalculation }) ?? Array.Empty<DuctSystemPdfCalculationSection>());
-            Require(vavPdfSections.Any(section => section.Heading == "RECREATED PUBLISHED PERFORMANCE TABLE"
+            Require(vavPdfSections.Any(section => section.Heading == "PUBLISHED PERFORMANCE TABLE (MANUFACTURER DATA)"
                                                    && section.Lines.Count == 10)
                     && vavPdfSections.Any(section => section.Heading == "INPUT / INTERPOLATION / SOLVED RESULT"
                                                    && section.Lines.Any(line => line.Formula.Contains("frac", StringComparison.Ordinal)))
@@ -2740,7 +2757,7 @@ internal static class Program
                     "The saved project file should carry the full model, including the graphical layout.");
 
             }
-            var greenSavePdf = Encoding.ASCII.GetString(File.ReadAllBytes(greenSavePdfPath));
+            var greenSavePdf = PdfText.Plain(File.ReadAllBytes(greenSavePdfPath));
             var greenProjectSummaryIndex = greenSavePdf.IndexOf("Project Summary", StringComparison.Ordinal);
             var greenFirstViewIndex = greenSavePdf.IndexOf("Layout Designer - Isometric Positive", StringComparison.Ordinal);
             var greenFirstComponentIndex = greenSavePdf.IndexOf($"{fanNode.Id} - ", StringComparison.Ordinal);
@@ -2775,7 +2792,7 @@ internal static class Program
                     && frictionResultText == "Darcy friction factor (f) = 0.018659"
                     && pressureResultText == "Pressure drop (Delta P) = 0.0458 in. w.c."
                     && reynoldsResultText == "Reynolds number (Re) = 116475"
-                    && referenceBasisResultText == "Reference velocity basis: upstream/reference duct"
+                    && referenceBasisResultText == "upstream/reference duct"
                     && greenProjectSummaryIndex >= 0
                     && greenFirstViewIndex > greenProjectSummaryIndex
                     && greenFirstComponentIndex > greenFirstViewIndex
@@ -2980,11 +2997,14 @@ internal static class Program
                         && item.Calculations?.Any(section => section.Heading == "4. DARCY FRICTION FACTOR"
                             && section.Lines.Any(line => line.Formula.Contains("Colebrook", StringComparison.Ordinal))) == true)
                     && pdfReportItems.Any(item => item.Id == mainDuct1().Id
-                        && item.Calculations?.Any(section => section.Heading == "REQUIRED EQUATIONS"
-                            && section.Lines.Any(line => line.Formula == "\\frac{1}{\\sqrt{f}} = -2 log_{10}(X)")
-                            && section.Lines.Any(line => line.Formula == "X = \\frac{\\epsilon}{3.7D} + \\frac{2.51}{Re\\sqrt{f}}")
-                            && section.Lines.All(line => !line.Formula.Contains("[", StringComparison.Ordinal)
-                                && !line.Formula.Contains("]", StringComparison.Ordinal))) == true
+                        // Round T: the Colebrook equation is written out in step 4, and every symbol is defined with its source.
+                        && item.Calculations?.Any(section => section.Heading == "4. DARCY FRICTION FACTOR"
+                            && section.Lines.Any(line => line.Formula.StartsWith("\\frac{1}{\\sqrt{f}} = -2\\log_{10}(", StringComparison.Ordinal))) == true
+                        && item.Calculations?.Any(section => section.Heading == "VARIABLES AND WHERE THEY COME FROM"
+                            && new[] { "Q", "Re", "f", "\\rho", "\\mu", "VP", "L", "\\Delta P" }.All(symbol => section.Lines.Any(line =>
+                                line.Kind == DuctSystemPdfLineKind.Variable && line.Formula == symbol && line.HighlightValue.Length > 10))) == true
+                        && item.Calculations?.All(section => section.Heading != "REQUIRED EQUATIONS"
+                            && section.Lines.All(line => !line.Formula.Contains("[", StringComparison.Ordinal))) == true
                         && item.Calculations?.Any(section => section.Heading == "INPUT VALUES"
                             && section.Lines.Any(line => line.HighlightAsInput)) == true
                         && item.Calculations?.Any(section => section.Heading == "5. VELOCITY PRESSURE AND DUCT LOSS"
@@ -2998,14 +3018,17 @@ internal static class Program
                         {
                             "Fitting type / name", "Fitting C-value", "Pressure drop"
                         }) == true
-                        && item.Calculations?.Any(section => section.Heading == "PUBLISHED TABLE / EQUATION INPUTS") == true
+                        && item.Calculations?.Any(section => section.Heading == "COEFFICIENT AND PRESSURE LOSS") == true
+                        && item.Calculations?.Any(section => section.Heading == "VARIABLES AND WHERE THEY COME FROM"
+                            && section.Lines.Any(line => line.Formula == "C")) == true
                         && !string.IsNullOrWhiteSpace(item.ReferenceImageJpegBase64)
                         && item.ReferenceImagePixelWidth > 0 && item.ReferenceImagePixelHeight > 0),
                 "The PDF detail report should follow connected-system order and include comprehensive duct, fitting, and equipment inputs and calculated outputs.");
             var titusPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(UiMember.Method("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
                 .Invoke(null, new object[] { titusCalculation }) ?? Array.Empty<DuctSystemPdfCalculationSection>());
-            Require(titusPdfSections.Any(section => section.Heading == "RECREATED PUBLISHED PERFORMANCE TABLE"
-                                                    && section.Lines.Count >= 8)
+            Require(titusPdfSections.Any(section => section.Heading == "PUBLISHED PERFORMANCE TABLE (MANUFACTURER DATA)" && section.Wide
+                                                    && section.Lines.Count >= 8
+                                                    && section.Lines.Count(line => line.Kind == DuctSystemPdfLineKind.TableRowSelected) == 1)
                     && titusPdfSections.SelectMany(section => section.Lines)
                         .Any(line => line.HighlightValue.Contains("courtesy of Titus", StringComparison.OrdinalIgnoreCase))
                     && titusPdfSections.SelectMany(section => section.Lines)
@@ -3013,10 +3036,13 @@ internal static class Program
                 "The exported Titus calculation should include the selected performance chart, inlet, and manufacturer reference.");
             var titus350RPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(UiMember.Method("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
                 .Invoke(null, new object[] { titus350RCalculation }) ?? Array.Empty<DuctSystemPdfCalculationSection>());
-            Require(titus350RPdfSections.Any(section => section.Heading == "RECREATED PUBLISHED PERFORMANCE TABLE"
-                                                         && section.Lines.Count == 10)
-                    && titus350RPdfSections.SelectMany(section => section.Lines)
-                        .Any(line => line.Formula.Contains("Negative static pressure", StringComparison.Ordinal))
+            Require(titus350RPdfSections.Any(section => section.Heading == "PUBLISHED PERFORMANCE TABLE (MANUFACTURER DATA)"
+                                                         && section.Lines.Count == 10
+                                                         && section.Lines[0].Kind == DuctSystemPdfLineKind.TableHeader
+                                                         && section.Lines[0].Cells.Contains("Static pressure (in. w.c.)")
+                                                         && section.Lines.Skip(1).All(line => line.Cells[3].StartsWith('-')))
+                    && titus350RPdfSections.Any(section => section.Heading == "SELECTION FROM THE TABLE"
+                                                         && section.Lines.Single().Formula.Contains("published", StringComparison.Ordinal))
                     && titus350RPdfSections.SelectMany(section => section.Lines)
                         .Any(line => line.HighlightValue.Contains("courtesy of Titus", StringComparison.OrdinalIgnoreCase)),
                 "The exported Titus 350R calculation should include its nine-point chart, negative static pressure, and manufacturer reference.");
@@ -3100,7 +3126,7 @@ internal static class Program
                         "1,000 cfm", "0.350 in. w.c.", "70%", "0.079 hp", "L-001 to L-006"),
                     pdfLayout, reportItemsWithTitus, pdfSchematics);
                 var exportedPdf = File.ReadAllBytes(fullReportPath);
-                var exportedText = Encoding.ASCII.GetString(exportedPdf);
+                var exportedText = PdfText.Plain(exportedPdf);
                 var projectSummaryIndex = exportedText.IndexOf("Project Summary", StringComparison.Ordinal);
                 var fanSheetIndex = exportedText.IndexOf($"{fanNode.Id} - FAN", StringComparison.Ordinal);
                 var firstDuctSheetIndex = exportedText.IndexOf("D-001 - STRAIGHT DUCT", StringComparison.Ordinal);
@@ -3985,7 +4011,7 @@ internal static class Program
             Require(File.Exists(printedReport) && new FileInfo(printedReport).Length > 10_000
                     && File.ReadAllBytes(printedReport).Take(5).SequenceEqual("%PDF-"u8.ToArray()),
                 "Print Report should write the report PDF.");
-            var printedText = Encoding.ASCII.GetString(File.ReadAllBytes(printedReport));
+            var printedText = PdfText.Plain(File.ReadAllBytes(printedReport));
             Require(printedText.Contains("(DUCT PRESSURE CLASS AND LEAKAGE \\(SMACNA\\))", StringComparison.Ordinal)
                     && printedText.Contains("(SURFACE AREA CALCULATION)", StringComparison.Ordinal)
                     && printedText.Contains("(PRESSURE DROP ALONG EACH PATH)", StringComparison.Ordinal)
@@ -4429,3 +4455,42 @@ internal sealed class UiField(FieldInfo field, Func<object?, object?>? owner)
     public object? GetValue(object? target) => field.GetValue(owner is null ? target : owner(target));
     public void SetValue(object? target, object? value) => field.SetValue(owner is null ? target : owner(target), value);
 }
+
+/// <summary>A PDF's bytes with its compressed (FlateDecode) page streams expanded, for text checks.</summary>
+internal static class PdfText
+{
+    public static string Plain(byte[] pdf)
+    {
+        var text = Encoding.Latin1.GetString(pdf);
+        var result = new StringBuilder();
+        var position = 0;
+        while (true)
+        {
+            var marker = text.IndexOf(">>\nstream\n", position, StringComparison.Ordinal);
+            if (marker < 0)
+            {
+                result.Append(text, position, text.Length - position);
+                break;
+            }
+            var dataStart = marker + ">>\nstream\n".Length;
+            var end = text.IndexOf("\nendstream", dataStart, StringComparison.Ordinal);
+            var dictionaryStart = text.LastIndexOf("<<", marker, StringComparison.Ordinal);
+            var dictionary = dictionaryStart >= 0 ? text[dictionaryStart..marker] : string.Empty;
+            result.Append(text, position, dataStart - position);
+            if (dictionary.Contains("/FlateDecode", StringComparison.Ordinal) && !dictionary.Contains("/Image", StringComparison.Ordinal)
+                && !dictionary.Contains("/Length1", StringComparison.Ordinal))
+            {
+                using var input = new MemoryStream(pdf, dataStart, end - dataStart);
+                using var zlib = new System.IO.Compression.ZLibStream(input, System.IO.Compression.CompressionMode.Decompress);
+                using var output = new MemoryStream();
+                zlib.CopyTo(output);
+                result.Append(Encoding.Latin1.GetString(output.ToArray()));
+            }
+            else
+                result.Append(text, dataStart, end - dataStart);
+            position = end;
+        }
+        return result.ToString();
+    }
+}
+

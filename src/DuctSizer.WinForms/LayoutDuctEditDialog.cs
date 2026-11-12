@@ -136,7 +136,7 @@ internal sealed class LayoutDuctEditDialog : DpiScaledForm, IInlineEditable
             new InlineEditRow("Duct material", _material)
         });
         _result.Dock = DockStyle.Fill;
-        _result.ForeColor = Color.FromArgb(28, 69, 108);
+        _result.ForeColor = Color.FromArgb(16, 45, 84);
         _result.Font = new Font("Segoe UI Semibold", 9F);
         _result.TextAlign = ContentAlignment.MiddleLeft;
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
@@ -148,7 +148,7 @@ internal sealed class LayoutDuctEditDialog : DpiScaledForm, IInlineEditable
         _updateButton.Text = "Update Duct";
         _updateButton.Width = 120;
         _updateButton.Height = 32;
-        _updateButton.BackColor = Color.FromArgb(42, 135, 91);
+        _updateButton.BackColor = Color.FromArgb(14, 111, 230);
         _updateButton.ForeColor = Color.White;
         _updateButton.FlatStyle = FlatStyle.Flat;
         _updateButton.Enabled = false;
@@ -158,7 +158,7 @@ internal sealed class LayoutDuctEditDialog : DpiScaledForm, IInlineEditable
             Text = "Calculate",
             Width = 105,
             Height = 32,
-            BackColor = Color.FromArgb(31, 111, 168),
+            BackColor = Color.FromArgb(14, 111, 230),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };
@@ -250,7 +250,7 @@ internal sealed class LayoutDuctEditDialog : DpiScaledForm, IInlineEditable
             _result.Text = _units == UnitSystem.Imperial
                 ? $"{size}   •   {UnitConversions.MpsToFpm(calculation.ActualVelocityMPerS):0} fpm   •   {UnitConversions.PaToInchesWater(calculation.TotalPressureLossPa):0.###} in. w.g."
                 : $"{size}   •   {calculation.ActualVelocityMPerS:0.##} m/s   •   {calculation.TotalPressureLossPa:0.##} Pa";
-            _result.ForeColor = Color.FromArgb(28, 69, 108);
+            _result.ForeColor = Color.FromArgb(16, 45, 84);
             Result = draft;
             _updateButton.Enabled = true;
         }

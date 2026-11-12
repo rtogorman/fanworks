@@ -536,3 +536,17 @@ snap-back from the view list; PDF underlay in all views at its Z; Auto Duct Size
 Checks: engine 74/74, interface 24/24 (+ new label/orbit/underlay check) at 100 % and 150 % under Wine.
 Notes for Ryan: components are placed and moved only in the standard views (free view is for looking); the report's
 isometric drawings do not show the underlay (only the Designer does); the title-bar colour needs Windows 11.
+
+### Round T (requested 2026-11-11 23:16, after v0.100.0) — v0.101.0
+
+Done: Duct Calculator ribbon icon = plain isometric duct outline; Fitting Calculator Calculate button kept visible on
+short windows (the page row had no size style); table look-ups recorded and shown (interpolation equation with points,
+exact, edge, conservative column), 5-24 main between As/Ac columns now takes the larger coefficient, junctions read only
+the selected path; report: embedded Nunito + symbol font (no hand-drawn symbols), measured wrapping, one sheet per duct
+and fitting (test project 39 -> 29 pages), full-width manufacturer tables, variables-and-sources list on every sheet,
+stale outlet pressure-drop flag; brand palette, mark and wordmark across app and report.
+Checks: engine 78/78 (4 new), interface 24/24 at 100 % and 150 % under Wine.
+Open with Ryan: the brand mark is cut from the concept board image (raster); a vector version would be sharper at
+large sizes. Outlet pressure drops are stored when the outlet is defined; the report now flags a mismatch, but the
+value is not refreshed automatically when the airflow changes (his decision whether it should be).
+

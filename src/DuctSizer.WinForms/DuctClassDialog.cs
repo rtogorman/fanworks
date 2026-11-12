@@ -52,7 +52,7 @@ internal sealed class DuctClassDialog : DpiScaledForm
         {
             Text = "Duct pressure class and seal class",
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(22, 50, 78),
+            ForeColor = Color.FromArgb(11, 31, 59),
             Font = new Font("Segoe UI Semibold", 11F),
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
@@ -106,7 +106,7 @@ internal sealed class DuctClassDialog : DpiScaledForm
         table.Controls.Add(RowLabel("Seal class"), 0, 2);
         _recommendedSeal.Dock = DockStyle.Fill;
         _recommendedSeal.TextAlign = ContentAlignment.MiddleLeft;
-        _recommendedSeal.ForeColor = Color.FromArgb(22, 65, 102);
+        _recommendedSeal.ForeColor = Color.FromArgb(11, 31, 59);
         _recommendedSeal.Font = new Font("Segoe UI Semibold", 9F);
         table.Controls.Add(_recommendedSeal, 1, 2);
         table.Controls.Add(_overrideSeal, 2, 2);
@@ -116,7 +116,7 @@ internal sealed class DuctClassDialog : DpiScaledForm
         root.Controls.Add(card, 0, 2);
 
         _preview.Dock = DockStyle.Fill;
-        _preview.ForeColor = Color.FromArgb(22, 65, 102);
+        _preview.ForeColor = Color.FromArgb(11, 31, 59);
         _preview.Padding = new Padding(2, 4, 2, 0);
         root.Controls.Add(_preview, 0, 3);
 
@@ -164,7 +164,7 @@ internal sealed class DuctClassDialog : DpiScaledForm
         static Label Value(string text) => new()
         {
             Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true,
-            ForeColor = Color.FromArgb(22, 65, 102), Font = new Font("Segoe UI Semibold", 9F)
+            ForeColor = Color.FromArgb(11, 31, 59), Font = new Font("Segoe UI Semibold", 9F)
         };
     }
 

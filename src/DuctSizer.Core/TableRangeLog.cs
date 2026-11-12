@@ -17,6 +17,7 @@ internal sealed class TableRangeLog : IDisposable
 
     private readonly TableRangeLog? _outer;
     private readonly List<(double Value, double Minimum, double Maximum)> _events = new();
+    private readonly List<TableLookupStep> _lookups = new();
 
     private TableRangeLog(TableRangeLog? outer) => _outer = outer;
 
@@ -37,6 +38,32 @@ internal sealed class TableRangeLog : IDisposable
         if (value < minimum - tolerance || value > maximum + tolerance)
             _current._events.Add((value, minimum, maximum));
     }
+
+    /// <summary>
+    /// Records one table look-up (how the value was taken from the published table) so the worksheet can show the
+    /// interpolation with its inputs and output. Axis names are filled in later by <see cref="Lookups"/>.
+    /// </summary>
+    public static void Lookup(TableLookupStep step)
+    {
+        if (_current is not null)
+            _current._lookups.Add(step);
+    }
+
+    /// <summary>The recorded look-ups in calculation order, with each axis named after the matching input.</summary>
+    public IReadOnlyList<TableLookupStep> Lookups(FittingDefinition definition, IReadOnlyDictionary<string, double> inputs) =>
+        _lookups.Select(step => step with
+        {
+            Axes = step.Axes.Select(axis => string.IsNullOrEmpty(axis.Name)
+                ? axis with
+                {
+                    Name = inputs
+                        .Where(pair => !string.Equals(pair.Key, "path", StringComparison.OrdinalIgnoreCase)
+                                       && Math.Abs(pair.Value - axis.Value) <= 1e-12 * Math.Max(1.0, Math.Abs(axis.Value)))
+                        .Select(pair => InputName(definition, pair.Key))
+                        .FirstOrDefault() ?? "Table input"
+                }
+                : axis).ToArray()
+        }).ToArray();
 
     /// <summary>Plain-language warnings, naming the input when its value can be matched to one.</summary>
     public IReadOnlyList<string> Describe(FittingDefinition definition, IReadOnlyDictionary<string, double> inputs)
@@ -77,3 +104,44 @@ internal sealed class TableRangeLog : IDisposable
             _ => key
         };
 }
+
+/// <summary>How a coefficient was taken from a published table.</summary>
+public enum TableLookupKind
+{
+    /// <summary>The input is a published table point; the table value is used as printed.</summary>
+    Exact,
+    /// <summary>Straight-line interpolation between two published points on one axis.</summary>
+    Linear,
+    /// <summary>Interpolation on two axes: along the columns on the two bracketing rows, then between the rows.</summary>
+    Bilinear,
+    /// <summary>Interpolation on three axes (the same straight-line rule applied on each axis in turn).</summary>
+    Trilinear,
+    /// <summary>The input is outside the published table; the edge value is used (no extrapolation).</summary>
+    HeldAtEdge,
+    /// <summary>
+    /// The table cannot be interpolated between two published columns, so both are evaluated and the larger
+    /// (conservative, higher-loss) coefficient is used.
+    /// </summary>
+    ConservativeColumn
+}
+
+/// <summary>One axis of a table look-up: the input value and the published points either side of it.</summary>
+/// <param name="Name">The input's name (filled in from the fitting's inputs; empty while recording).</param>
+/// <param name="Value">The input value used for the look-up (before any holding at the table edge).</param>
+/// <param name="Lower">The published point at or below the value.</param>
+/// <param name="Upper">The published point at or above the value.</param>
+/// <param name="OutsideTable">True when the value is outside the published range and was held at the edge.</param>
+public sealed record TableLookupAxis(string Name, double Value, double Lower, double Upper, bool OutsideTable)
+{
+    /// <summary>Position of the value between the two points (0 at Lower, 1 at Upper).</summary>
+    public double Fraction => Math.Abs(Upper - Lower) < 1e-15 ? 0 : (Math.Clamp(Value, Math.Min(Lower, Upper), Math.Max(Lower, Upper)) - Lower) / (Upper - Lower);
+}
+
+/// <summary>
+/// One table look-up. <see cref="Values"/> holds the published values used: Linear [y1, y2]; Bilinear
+/// [z(r1,c1), z(r1,c2), z(r2,c1), z(r2,c2)] for axes [row, column]; Trilinear the eight corners in axis order;
+/// Exact and HeldAtEdge [y]; ConservativeColumn [value at the lower column, value at the upper column].
+/// </summary>
+public sealed record TableLookupStep(TableLookupKind Kind, IReadOnlyList<TableLookupAxis> Axes,
+    IReadOnlyList<double> Values, double Result, string? Note = null);
+

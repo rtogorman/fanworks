@@ -11,7 +11,7 @@
     <AssemblyName>FanWorks</AssemblyName>
     <Product>FanWorks</Product>
     <Description>Standalone HVAC duct sizing and pressure-loss calculator.</Description>
-    <Version>0.100.0</Version>
+    <Version>0.101.0</Version>
     <ApplicationIcon>Assets\DuctSizerCentrifugalIcon.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
@@ -38,6 +38,10 @@
     <None Include="Assets\OpenSourceIcons\PDFIUM-WINDOWS-NOTICE.txt" Link="THIRD-PARTY-NOTICES\PDFIUM-WINDOWS-NOTICE.txt"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <None Include="Assets\OpenSourceIcons\TOOLBOX-ICON-SOURCE-NOTICE.txt" Link="THIRD-PARTY-NOTICES\TOOLBOX-ICON-SOURCE-NOTICE.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="..\DuctSizer.Core\Fonts\OFL-Nunito.txt" Link="THIRD-PARTY-NOTICES\OFL-Nunito.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="..\DuctSizer.Core\Fonts\OFL-MPLUSRounded1c.txt" Link="THIRD-PARTY-NOTICES\OFL-MPLUSRounded1c.txt"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 </Project>

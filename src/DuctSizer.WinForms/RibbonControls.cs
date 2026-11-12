@@ -6,19 +6,19 @@ namespace DuctSizer.WinForms;
 /// <summary>Colours of the window frame: top tab bar, ribbon and their borders.</summary>
 internal static class RibbonPalette
 {
-    internal static readonly Color TopBar = Color.FromArgb(27, 58, 90);
-    internal static readonly Color TopBarText = Color.FromArgb(214, 226, 238);
-    internal static readonly Color TopBarHover = Color.FromArgb(42, 78, 114);
+    internal static readonly Color TopBar = Color.FromArgb(11, 31, 59);
+    internal static readonly Color TopBarText = Color.FromArgb(206, 226, 248);
+    internal static readonly Color TopBarHover = Color.FromArgb(24, 55, 98);
     internal static readonly Color Ribbon = Color.White;
     internal static readonly Color RibbonBorder = Color.FromArgb(201, 214, 226);
     internal static readonly Color GroupSeparator = Color.FromArgb(220, 227, 234);
     internal static readonly Color Caption = Color.FromArgb(74, 91, 106);
     internal static readonly Color Ink = Color.FromArgb(27, 39, 51);
-    internal static readonly Color Icon = Color.FromArgb(31, 78, 121);
-    internal static readonly Color IconAccent = Color.FromArgb(66, 139, 202);
-    internal static readonly Color Hover = Color.FromArgb(234, 241, 248);
-    internal static readonly Color Checked = Color.FromArgb(220, 235, 247);
-    internal static readonly Color CheckedBorder = Color.FromArgb(127, 174, 219);
+    internal static readonly Color Icon = Color.FromArgb(16, 45, 84);
+    internal static readonly Color IconAccent = Color.FromArgb(14, 111, 230);
+    internal static readonly Color Hover = Color.FromArgb(232, 242, 255);
+    internal static readonly Color Checked = Color.FromArgb(214, 233, 255);
+    internal static readonly Color CheckedBorder = Color.FromArgb(126, 199, 255);
     internal static readonly Color Disabled = Color.FromArgb(160, 170, 180);
 }
 
@@ -73,18 +73,14 @@ internal static class RibbonIcons
                 graphics.DrawLine(pen, 8, 18, 13, 18);
                 break;
             case RibbonIcon.DuctCalculator:
-                // A length of rectangular duct seen in perspective, with a joint seam and the airflow arrow.
-                using (var front = new GraphicsPath())
+                // A plain length of rectangular duct drawn in isometric: outline only.
+                graphics.DrawPolygon(pen, new[]
                 {
-                    front.AddRectangle(new RectangleF(2.5f, 9.5f, 8, 10));
-                    graphics.FillPath(accentFill, front);
-                    graphics.DrawPath(pen, front);
-                }
-                graphics.DrawLines(pen, new[] { new PointF(2.5f, 9.5f), new PointF(13.5f, 4), new PointF(21.5f, 4), new PointF(10.5f, 9.5f) });
-                graphics.DrawLines(pen, new[] { new PointF(21.5f, 4), new PointF(21.5f, 14), new PointF(10.5f, 19.5f) });
-                graphics.DrawLines(pen, new[] { new PointF(15f, 7f), new PointF(15f, 16.8f) });
-                graphics.DrawLine(accentPen, 4.5f, 14.5f, 8.5f, 14.5f);
-                graphics.DrawLines(accentPen, new[] { new PointF(7, 13), new PointF(8.5f, 14.5f), new PointF(7, 16) });
+                    new PointF(2.5f, 9.5f), new PointF(13.5f, 4), new PointF(21.5f, 4), new PointF(21.5f, 14),
+                    new PointF(10.5f, 19.5f), new PointF(2.5f, 19.5f)
+                });
+                graphics.DrawLines(pen, new[] { new PointF(2.5f, 9.5f), new PointF(10.5f, 9.5f), new PointF(21.5f, 4) });
+                graphics.DrawLine(pen, 10.5f, 9.5f, 10.5f, 19.5f);
                 break;
             case RibbonIcon.QuickCalc:
                 graphics.DrawRectangle(pen, 5, 2.5f, 14, 19);

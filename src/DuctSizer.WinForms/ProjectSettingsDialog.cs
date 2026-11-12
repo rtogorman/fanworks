@@ -194,7 +194,7 @@ internal sealed class ProjectSettingsDialog : DpiScaledForm
             WrapContents = false,
             BackColor = BackColor
         };
-        var save = new Button { Text = "Save", Width = 94, Height = 34, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(42, 135, 91), ForeColor = Color.White };
+        var save = new Button { Text = "Save", Width = 94, Height = 34, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(14, 111, 230), ForeColor = Color.White };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 94, Height = 34, FlatStyle = FlatStyle.Flat };
         UiPolish.RoundButton(save, 8);
         UiPolish.RoundButton(cancel, 8);

@@ -200,7 +200,7 @@ internal sealed class FittingImageViewer : DpiScaledForm
             Text = definition.Code.StartsWith("GRD-", StringComparison.OrdinalIgnoreCase)
                 ? $"{definition.Code} - {definition.Description}\r\nTechnical GRD reference drawing and published-performance identification"
                 : $"{definition.Code} - {definition.Description}\r\nComplete reference section from the supplied ASHRAE fitting-loss PDF",
-            ForeColor = Color.FromArgb(28, 69, 108),
+            ForeColor = Color.FromArgb(16, 45, 84),
             Font = new Font("Segoe UI Semibold", 10F),
             TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = false,
@@ -212,7 +212,7 @@ internal sealed class FittingImageViewer : DpiScaledForm
             Dock = DockStyle.Bottom,
             Height = 42,
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(28, 69, 108),
+            BackColor = Color.FromArgb(16, 45, 84),
             ForeColor = Color.White
         };
         close.FlatAppearance.BorderSize = 0;

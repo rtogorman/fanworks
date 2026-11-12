@@ -286,7 +286,7 @@ public sealed partial class MainForm : DpiScaledForm
         CalculatorScreen._ductEditingLabel.AutoSize = true;
         CalculatorScreen._ductEditingLabel.Dock = DockStyle.Top;
         CalculatorScreen._ductEditingLabel.BackColor = Color.FromArgb(232, 244, 253);
-        CalculatorScreen._ductEditingLabel.ForeColor = Color.FromArgb(22, 65, 102);
+        CalculatorScreen._ductEditingLabel.ForeColor = Color.FromArgb(11, 31, 59);
         CalculatorScreen._ductEditingLabel.Font = new Font("Segoe UI Semibold", 9F);
         CalculatorScreen._ductEditingLabel.Padding = new Padding(10, 7, 10, 7);
         CalculatorScreen._ductEditingLabel.Margin = new Padding(0, 0, 0, 4);
@@ -339,7 +339,7 @@ public sealed partial class MainForm : DpiScaledForm
             Name = "CalculateButton",
             Text = "Calculate",
             Size = new Size(120, 34),
-            BackColor = Color.FromArgb(31, 120, 180),
+            BackColor = Color.FromArgb(14, 111, 230),
             ForeColor = Color.White,
             Font = new Font("Segoe UI Semibold", 9F),
             FlatStyle = FlatStyle.Flat
@@ -352,7 +352,7 @@ public sealed partial class MainForm : DpiScaledForm
         DuctSystemScreen._addDuctButton.Text = DuctSystemScreen.DefaultDuctActionText;
         DuctSystemScreen._addDuctButton.Size = new Size(175, 34);
         DuctSystemScreen._addDuctButton.Margin = Padding.Empty;
-        DuctSystemScreen._addDuctButton.BackColor = Color.FromArgb(42, 135, 91);
+        DuctSystemScreen._addDuctButton.BackColor = Color.FromArgb(14, 111, 230);
         DuctSystemScreen._addDuctButton.ForeColor = Color.White;
         DuctSystemScreen._addDuctButton.Font = new Font("Segoe UI Semibold", 8.5F);
         DuctSystemScreen._addDuctButton.FlatStyle = FlatStyle.Flat;
@@ -798,7 +798,7 @@ public sealed partial class MainForm : DpiScaledForm
         Dock = DockStyle.Fill,
         AutoEllipsis = true,
         TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = Color.FromArgb(22, 65, 102),
+        ForeColor = Color.FromArgb(11, 31, 59),
         Font = new Font("Segoe UI Semibold", 12F),
         Padding = Padding.Empty
     };

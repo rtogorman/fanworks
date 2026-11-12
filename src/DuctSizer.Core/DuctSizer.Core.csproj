@@ -11,5 +11,12 @@
   <ItemGroup>
     <EmbeddedResource Include="Data\TitusTbd80D.csv" />
     <EmbeddedResource Include="Data\Titus350R.csv" />
+    <EmbeddedResource Include="Fonts\Nunito-Regular.ttf" />
+    <EmbeddedResource Include="Fonts\Nunito-Bold.ttf" />
+    <EmbeddedResource Include="Fonts\Nunito-Italic.ttf" />
+    <EmbeddedResource Include="Fonts\Nunito-ExtraBold.ttf" />
+    <EmbeddedResource Include="Fonts\FanWorksSymbols.ttf" />
+    <EmbeddedResource Include="Brand\mark-rgb.jpg" />
+    <EmbeddedResource Include="Brand\mark-alpha.z" />
   </ItemGroup>
 </Project>

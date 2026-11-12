@@ -99,8 +99,16 @@ public sealed record FittingCalculationResult(
     double? AirflowM3PerS = null,
     DuctGeometry? ReferenceGeometry = null,
     JunctionFlowData? Junction = null,
-    IReadOnlyList<string>? RangeWarnings = null)
+    IReadOnlyList<string>? RangeWarnings = null,
+    IReadOnlyList<TableLookupStep>? Lookups = null)
 {
+    /// <summary>
+    /// The table look-ups behind the coefficient, in calculation order: each says whether the value was a published
+    /// point, an interpolation (with the bracketing points), held at a table edge, or the conservative choice of two
+    /// published columns. Empty for fixed coefficients and equation-only fittings.
+    /// </summary>
+    public IReadOnlyList<TableLookupStep> TableLookups => Lookups ?? Array.Empty<TableLookupStep>();
+
     /// <summary>
     /// Inputs that fell outside a published ASHRAE table and were held at the table edge. Empty when every lookup
     /// stayed inside the published range. A non-empty list means the coefficient is an edge value, not an
@@ -202,10 +210,12 @@ public static class FittingCalculator
         var air = AirProperties.Calculate(temperatureC, relativeHumidity, atmosphericPressurePa);
         double coefficient;
         IReadOnlyList<string> rangeWarnings;
+        IReadOnlyList<TableLookupStep> lookups;
         using (var rangeLog = TableRangeLog.Begin())
         {
             coefficient = definition.CalculateCoefficient(inputs);
             rangeWarnings = rangeLog.Describe(definition, inputs);
+            lookups = rangeLog.Lookups(definition, inputs);
         }
         var velocityPressure = air.DensityKgPerM3 * referenceVelocityMPerS * referenceVelocityMPerS / 2.0;
         return new FittingCalculationResult(
@@ -216,7 +226,8 @@ public static class FittingCalculator
             coefficient,
             velocityPressure,
             coefficient * velocityPressure,
-            RangeWarnings: rangeWarnings);
+            RangeWarnings: rangeWarnings,
+            Lookups: lookups);
     }
 }
 
@@ -887,16 +898,16 @@ public static class FittingCatalog
 
         Replace(items, Junction("5-1", Array.Empty<FittingInputSpec>(), v =>
             JunctionPathValue(v,
-                I2(JunctionFlowFraction, JunctionAreaRatio, A5_1_Branch, v["qbqc"], v["abac"]),
-                I2(JunctionFlowFraction, JunctionAreaRatio, A5_1_Main, v["qbqc"], v["abac"]))));
+                () => I2(JunctionFlowFraction, JunctionAreaRatio, A5_1_Branch, v["qbqc"], v["abac"]),
+                () => I2(JunctionFlowFraction, JunctionAreaRatio, A5_1_Main, v["qbqc"], v["abac"]))));
         Replace(items, Junction("5-2", Array.Empty<FittingInputSpec>(), v =>
             JunctionPathValue(v,
-                I2(JunctionFlowFraction, JunctionAreaRatio, A5_2_Branch, v["qbqc"], v["abac"]),
-                I2(JunctionFlowFraction, JunctionAreaRatio, A5_2_Main, v["qbqc"], v["abac"]))));
+                () => I2(JunctionFlowFraction, JunctionAreaRatio, A5_2_Branch, v["qbqc"], v["abac"]),
+                () => I2(JunctionFlowFraction, JunctionAreaRatio, A5_2_Main, v["qbqc"], v["abac"]))));
         Replace(items, Junction("5-3", Array.Empty<FittingInputSpec>(), v =>
             JunctionPathValue(v,
-                I2(JunctionFlowFraction, JunctionAreaRatio, A5_3_Branch, v["qsqc"], v["abac"]),
-                I1(JunctionFlowFraction, A5_3_Main, v["qsqc"]))));
+                () => I2(JunctionFlowFraction, JunctionAreaRatio, A5_3_Branch, v["qsqc"], v["abac"]),
+                () => I1(JunctionFlowFraction, A5_3_Main, v["qsqc"]))));
 
         var convergingRectangularConfigurations = new[]
         {
@@ -912,44 +923,44 @@ public static class FittingCatalog
             {
                 var row = (int)Math.Round(v["configuration"]);
                 return JunctionPathValue(v,
-                    I1(A5_6_Flow, GetRow(A5_6_Branch, row), v["qbqc"]),
-                    I1(A5_6_Flow, GetRow(A5_6_Main, row), v["qbqs"]));
+                    () => I1(A5_6_Flow, GetRow(A5_6_Branch, row), v["qbqc"]),
+                    () => I1(A5_6_Flow, GetRow(A5_6_Main, row), v["qbqs"]));
             }, " Select the published Ab/As and Ab/Ac row."));
         Replace(items, Junction("5-7", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, JunctionVelocityBand(v, A5_7_Branch),
-                I1(JunctionFlowFraction, A5_3_Main, v["qsqc"]))));
+            JunctionPathValue(v, () => JunctionVelocityBand(v, A5_7_Branch),
+                () => I1(JunctionFlowFraction, A5_3_Main, v["qsqc"]))));
         Replace(items, Junction("5-8", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, JunctionVelocityBand(v, A5_8_Branch),
-                I1(JunctionFlowFraction, A5_3_Main, v["qsqc"]))));
+            JunctionPathValue(v, () => JunctionVelocityBand(v, A5_8_Branch),
+                () => I1(JunctionFlowFraction, A5_3_Main, v["qsqc"]))));
         Replace(items, Junction("5-9", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, JunctionVelocityBand(v, A5_9_Branch),
-                I1(JunctionFlowFraction, A5_3_Main, v["qsqc"]))));
+            JunctionPathValue(v, () => JunctionVelocityBand(v, A5_9_Branch),
+                () => I1(JunctionFlowFraction, A5_3_Main, v["qsqc"]))));
 
         Replace(items, Junction("5-10", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_10_Branch, v["vbvs"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_10_Branch, v["vbvs"]), () => JunctionMain(v))));
         Replace(items, Junction("5-11", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_11_Branch, v["vbvc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_11_Branch, v["vbvc"]), () => JunctionMain(v))));
         Replace(items, Junction("5-12", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_12_Branch, v["vbvc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_12_Branch, v["vbvc"]), () => JunctionMain(v))));
         Replace(items, Junction("5-13", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_13_Branch, v["vbvc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_13_Branch, v["vbvc"]), () => JunctionMain(v))));
         Replace(items, Junction("5-14", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_14_Branch, v["vbvs"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_14_Branch, v["vbvs"]), () => JunctionMain(v))));
         Replace(items, Junction("5-15", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_15_Branch, v["vbvc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_15_Branch, v["vbvc"]), () => JunctionMain(v))));
         Replace(items, Junction("5-16", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_16_Branch, v["vbvc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_16_Branch, v["vbvc"]), () => JunctionMain(v))));
         Replace(items, Junction("5-17", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(A5_17_BranchAxis, A5_17_Branch, v["vbvc"]),
-                I1(A5_17_MainAxis, A5_17_Main, v["vsvc"]))));
+            JunctionPathValue(v, () => I1(A5_17_BranchAxis, A5_17_Branch, v["vbvc"]),
+                () => I1(A5_17_MainAxis, A5_17_Main, v["vsvc"]))));
         Replace(items, Junction("5-18", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_18_Branch, v["vbvc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_18_Branch, v["vbvc"]), () => JunctionMain(v))));
         Replace(items, Junction("5-19", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_19_Branch, v["vbvc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_19_Branch, v["vbvc"]), () => JunctionMain(v))));
         Replace(items, Junction("5-20", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_20_Branch, v["vbvc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_20_Branch, v["vbvc"]), () => JunctionMain(v))));
         Replace(items, Junction("5-21", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, I1(JunctionVelocityRatio, A5_21_Branch, v["vbvc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => I1(JunctionVelocityRatio, A5_21_Branch, v["vbvc"]), () => JunctionMain(v))));
 
         var configurations = new[]
         {
@@ -965,42 +976,42 @@ public static class FittingCatalog
             {
                 var row = (int)Math.Round(v["configuration"]);
                 return JunctionPathValue(v,
-                    I1(A5_22_Flow, GetRow(A5_22_Branch, row), v["qbqc"]),
-                    I1(A5_22_Flow, GetRow(A5_22_Main, row), v["qbqc"]));
+                    () => I1(A5_22_Flow, GetRow(A5_22_Branch, row), v["qbqc"]),
+                    () => I1(A5_22_Flow, GetRow(A5_22_Main, row), v["qbqc"]));
             }, " Select the published Ab/As and Ab/Ac row."));
 
         Replace(items, Junction("5-23", new[]
             {
                 ChoiceAxis("angle", "Branch angle", 45,
                     ("30°", 30d), ("45°", 45d), ("60°", 60d), ("90°", 90d))
-            }, v => JunctionPathValue(v, JunctionFiveTwentyThreeBranch(v), JunctionMain(v)),
+            }, v => JunctionPathValue(v, () => JunctionFiveTwentyThreeBranch(v), () => JunctionMain(v)),
             " The complete branch interpolation domain is 0.2 <= Ab/Ac <= 0.8; the partial 0.1 row is intentionally excluded."));
 
         Replace(items, Junction("5-24", new[]
             {
                 ChoiceAxis("angle", "Branch angle", 45, ("15°", 15d), ("30°", 30d), ("45°", 45d), ("60°", 60d), ("90°", 90d))
             }, v => JunctionPathValue(v,
-                I2(A5_24_Angle, A5_24_Velocity, A5_24_Branch, v["angle"], v["vbvc"]),
-                JunctionFiveTwentyFourMain(v))));
+                () => I2(A5_24_Angle, A5_24_Velocity, A5_24_Branch, v["angle"], v["vbvc"]),
+                () => JunctionFiveTwentyFourMain(v))));
 
         Replace(items, Junction("5-25", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, RaggedJunction(A5_25_Branch, v["vbvc"], v["qbqs"]), JunctionMain(v))));
+            JunctionPathValue(v, () => RaggedJunction(A5_25_Branch, v["vbvc"], v["qbqs"]), () => JunctionMain(v))));
         Replace(items, Junction("5-26", Array.Empty<FittingInputSpec>(), v =>
             JunctionPathValue(v,
-                I1(new[] { .4,.5,.75,1,1.3,1.5 }, new[] { .80,.83,.90,1,1.1,1.4 }, v["vbvc"]),
-                JunctionMain(v))));
+                () => I1(new[] { .4,.5,.75,1,1.3,1.5 }, new[] { .80,.83,.90,1,1.1,1.4 }, v["vbvc"]),
+                () => JunctionMain(v))));
         Replace(items, Junction("5-27", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, RaggedJunction(A5_27_Branch, v["vbvc"], v["qbqs"]), JunctionMain(v))));
+            JunctionPathValue(v, () => RaggedJunction(A5_27_Branch, v["vbvc"], v["qbqs"]), () => JunctionMain(v))));
         Replace(items, Junction("5-28", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, RaggedJunction(A5_28_Branch, v["vbvc"], v["qbqc"]), JunctionMain(v))));
+            JunctionPathValue(v, () => RaggedJunction(A5_28_Branch, v["vbvc"], v["qbqc"]), () => JunctionMain(v))));
         Replace(items, Junction("5-29", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, RaggedJunction(A5_29_Branch, v["vbvc"], v["qbqc"]), JunctionFiveThirtyOneMain(v)),
+            JunctionPathValue(v, () => RaggedJunction(A5_29_Branch, v["vbvc"], v["qbqc"]), () => JunctionFiveThirtyOneMain(v)),
             " ASHRAE labels this dampered arrangement poor and says it should not be used."));
         Replace(items, Junction("5-30", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, RaggedJunction(A5_30_Branch, v["vbvc"], v["qbqc"]), JunctionFiveThirtyOneMain(v)),
+            JunctionPathValue(v, () => RaggedJunction(A5_30_Branch, v["vbvc"], v["qbqc"]), () => JunctionFiveThirtyOneMain(v)),
             " ASHRAE labels this dampered arrangement poor and says it should not be used."));
         Replace(items, Junction("5-31", Array.Empty<FittingInputSpec>(), v =>
-            JunctionPathValue(v, RaggedJunction(A5_31_Branch, v["vbvc"], v["qbqc"]), JunctionFiveThirtyOneMain(v)),
+            JunctionPathValue(v, () => RaggedJunction(A5_31_Branch, v["vbvc"], v["qbqc"]), () => JunctionFiveThirtyOneMain(v)),
             " ASHRAE labels this extractor arrangement poor and says it should not be used."));
         Replace(items, Junction("5-32", new[]
             {
@@ -1037,8 +1048,12 @@ public static class FittingCatalog
             " For converging flow, select the published second-branch flow and first-branch area ratios; for diverging flow, fitting 5-23 is used."));
     }
 
-    private static double JunctionPathValue(IReadOnlyDictionary<string, double> values, double branch, double straight) =>
-        values["path"] < .5 ? branch : straight;
+    /// <summary>
+    /// The coefficient of the selected junction path. Only that path's table is read, so the other path can neither
+    /// fail the calculation nor add its look-ups or range warnings to this one.
+    /// </summary>
+    private static double JunctionPathValue(IReadOnlyDictionary<string, double> values, Func<double> branch, Func<double> straight) =>
+        values["path"] < .5 ? branch() : straight();
 
     private static double JunctionMain(IReadOnlyDictionary<string, double> values) =>
         I1(A5_23_MainAxis, A5_23_Main, values["vsvc"]);
@@ -1065,17 +1080,52 @@ public static class FittingCatalog
 
     private static double JunctionFiveTwentyFourMain(IReadOnlyDictionary<string, double> values)
     {
-        var column = 0;
-        if (Math.Round(values["angle"]) == 90)
+        if (Math.Round(values["angle"]) != 90)
+            return FiveTwentyFourMainColumn(0, values["vsvc"]);
+
+        // At 90° the main coefficient is published in As/Ac columns (0.4, 0.5, 0.6, 0.7, 0.8; 0.4 also covers
+        // smaller ratios). The columns end at different Vs/Vc, so they are not interpolated: a ratio between two
+        // columns uses both and keeps the larger (conservative) coefficient.
+        var area = values["asac"];
+        var columnRatios = A5_24_MainAreaColumns;
+        if (area <= columnRatios[0] || area >= columnRatios[^1]
+            || columnRatios.Any(ratio => Math.Abs(ratio - area) < 1e-9))
         {
-            var area = values["asac"];
-            column = area <= .4 ? 0 : area < .55 ? 1 : area < .65 ? 2 : area < .75 ? 3 : 4;
+            var exact = area <= columnRatios[0] ? 0
+                : area >= columnRatios[^1] ? columnRatios.Length - 1
+                : Array.FindIndex(columnRatios, ratio => Math.Abs(ratio - area) < 1e-9);
+            return FiveTwentyFourMainColumn(exact, values["vsvc"]);
         }
-        var row = GetColumn(A5_24_Main, column);
+        var upper = Array.FindIndex(columnRatios, ratio => ratio > area);
+        var lower = upper - 1;
+        var candidates = new List<(int Column, double Value)>();
+        foreach (var column in new[] { lower, upper })
+            if (values["vsvc"] <= A5_24_MainMaximumVelocity[column])
+                candidates.Add((column, FiveTwentyFourMainColumn(column, values["vsvc"])));
+        if (candidates.Count == 0)
+            throw new ArgumentOutOfRangeException("vsvc",
+                $"The 5-24 main columns As/Ac = {columnRatios[lower]:g} and {columnRatios[upper]:g} end at Vs/Vc = {A5_24_MainMaximumVelocity[lower]:g} and {A5_24_MainMaximumVelocity[upper]:g}.");
+        var chosen = candidates.MaxBy(candidate => candidate.Value);
+        // NaN marks a column that is not published at this Vs/Vc.
+        double ValueAt(int column) => candidates.Any(candidate => candidate.Column == column)
+            ? candidates.First(candidate => candidate.Column == column).Value
+            : double.NaN;
+        TableRangeLog.Lookup(new TableLookupStep(TableLookupKind.ConservativeColumn,
+            new[] { new TableLookupAxis("", area, columnRatios[lower], columnRatios[upper], false) },
+            new[] { ValueAt(lower), ValueAt(upper) },
+            chosen.Value,
+            candidates.Count == 1 ? "Only one of the two columns is published at this Vs/Vc; that column is used." : null));
+        return chosen.Value;
+    }
+
+    private static readonly double[] A5_24_MainAreaColumns = { .4, .5, .6, .7, .8 };
+
+    private static double FiveTwentyFourMainColumn(int column, double vsvc)
+    {
         var maximumVelocity = A5_24_MainMaximumVelocity[column];
-        if (values["vsvc"] > maximumVelocity)
+        if (vsvc > maximumVelocity)
             throw new ArgumentOutOfRangeException("vsvc", $"The selected 5-24 main table ends at Vs/Vc = {maximumVelocity:g}.");
-        return I1(A5_24_MainVelocity, row, values["vsvc"]);
+        return I1(A5_24_MainVelocity, GetColumn(A5_24_Main, column), vsvc);
     }
 
     private static double JunctionFiveThirtyOneMain(IReadOnlyDictionary<string, double> values) =>
@@ -1102,7 +1152,7 @@ public static class FittingCatalog
             {
                 ["angle"] = cross ? 90 : 45
             };
-            return JunctionPathValue(values, JunctionFiveTwentyThreeBranch(diverging), JunctionMain(values));
+            return JunctionPathValue(values, () => JunctionFiveTwentyThreeBranch(diverging), () => JunctionMain(values));
         }
 
         var areaIndex = Array.IndexOf(cross ? A5_35_AreaChoices : A5_34_AreaChoices, values["branchArea"]);
@@ -1143,7 +1193,13 @@ public static class FittingCatalog
         if (fraction >= 1 - 1e-12)
             return At(upper);
         var low = At(lower);
-        return low + fraction * (At(upper) - low);
+        var high = At(upper);
+        var blended = low + fraction * (high - low);
+        TableRangeLog.Lookup(new TableLookupStep(TableLookupKind.Linear,
+            new[] { new TableLookupAxis("", outerValue, A5_RaggedVelocity[lower], A5_RaggedVelocity[upper], false) },
+            new[] { low, high }, blended,
+            "Between the two published rows: the row values are the two look-ups just above."));
+        return blended;
     }
 
     private static double[] GetColumn(double[,] table, int column)
@@ -1161,12 +1217,26 @@ public static class FittingCatalog
         if (axis.Length != values.Length || axis.Length == 0)
             throw new InvalidOperationException("Invalid fitting lookup table.");
         TableRangeLog.Note(x, axis[0], axis[^1]);
-        if (x <= axis[0]) return values[0];
-        if (x >= axis[^1]) return values[^1];
+        if (x <= axis[0] || x >= axis[^1])
+        {
+            var edge = x <= axis[0] ? 0 : axis.Length - 1;
+            var outside = x < axis[0] || x > axis[^1];
+            TableRangeLog.Lookup(new TableLookupStep(outside ? TableLookupKind.HeldAtEdge : TableLookupKind.Exact,
+                new[] { new TableLookupAxis("", x, axis[edge], axis[edge], outside) }, new[] { values[edge] }, values[edge]));
+            return values[edge];
+        }
         var upper = Array.FindIndex(axis, a => a >= x);
         var lower = upper - 1;
         var fraction = (x - axis[lower]) / (axis[upper] - axis[lower]);
-        return values[lower] + fraction * (values[upper] - values[lower]);
+        var result = values[lower] + fraction * (values[upper] - values[lower]);
+        if (fraction >= 1 - 1e-12)
+            TableRangeLog.Lookup(new TableLookupStep(TableLookupKind.Exact,
+                new[] { new TableLookupAxis("", x, axis[upper], axis[upper], false) }, new[] { values[upper] }, values[upper]));
+        else
+            TableRangeLog.Lookup(new TableLookupStep(TableLookupKind.Linear,
+                new[] { new TableLookupAxis("", x, axis[lower], axis[upper], false) },
+                new[] { values[lower], values[upper] }, result));
+        return result;
     }
 
     private static double I2(double[] rows, double[] columns, double[,] values, double rowValue, double columnValue)
@@ -1175,18 +1245,38 @@ public static class FittingCatalog
             throw new InvalidOperationException("Invalid fitting lookup matrix.");
         TableRangeLog.Note(rowValue, rows[0], rows[^1]);
         TableRangeLog.Note(columnValue, columns[0], columns[^1]);
+        var originalRow = rowValue;
+        var originalColumn = columnValue;
         rowValue = Math.Clamp(rowValue, rows[0], rows[^1]);
         columnValue = Math.Clamp(columnValue, columns[0], columns[^1]);
         var r1 = rowValue >= rows[^1] ? rows.Length - 1 : Math.Max(1, Array.FindIndex(rows, x => x >= rowValue));
         var c1 = columnValue >= columns[^1] ? columns.Length - 1 : Math.Max(1, Array.FindIndex(columns, x => x >= columnValue));
         var r0 = r1 == 0 ? 0 : r1 - 1;
         var c0 = c1 == 0 ? 0 : c1 - 1;
-        if (r0 == r1 && c0 == c1) return values[r0, c0];
+        if (r0 == r1 && c0 == c1)
+        {
+            TableRangeLog.Lookup(new TableLookupStep(TableLookupKind.Exact,
+                new[]
+                {
+                    new TableLookupAxis("", originalRow, rows[r0], rows[r0], originalRow < rows[0] || originalRow > rows[^1]),
+                    new TableLookupAxis("", originalColumn, columns[c0], columns[c0], originalColumn < columns[0] || originalColumn > columns[^1])
+                }, new[] { values[r0, c0] }, values[r0, c0]));
+            return values[r0, c0];
+        }
         var rf = r0 == r1 ? 0 : (rowValue - rows[r0]) / (rows[r1] - rows[r0]);
         var cf = c0 == c1 ? 0 : (columnValue - columns[c0]) / (columns[c1] - columns[c0]);
         var low = values[r0, c0] + cf * (values[r0, c1] - values[r0, c0]);
         var high = values[r1, c0] + cf * (values[r1, c1] - values[r1, c0]);
-        return low + rf * (high - low);
+        var result = low + rf * (high - low);
+        TableRangeLog.Lookup(new TableLookupStep(
+            (rf <= 1e-12 || rf >= 1 - 1e-12) && (cf <= 1e-12 || cf >= 1 - 1e-12) ? TableLookupKind.Exact : TableLookupKind.Bilinear,
+            new[]
+            {
+                new TableLookupAxis("", originalRow, rows[r0], rows[r1], originalRow < rows[0] || originalRow > rows[^1]),
+                new TableLookupAxis("", originalColumn, columns[c0], columns[c1], originalColumn < columns[0] || originalColumn > columns[^1])
+            },
+            new[] { values[r0, c0], values[r0, c1], values[r1, c0], values[r1, c1] }, result));
+        return result;
     }
 
     private static double CommonReFactor(double reynoldsNumber) =>
@@ -1299,6 +1389,10 @@ public static class FittingCatalog
     {
         if (values.GetLength(0) != firstAxis.Length || values.GetLength(1) != secondAxis.Length || values.GetLength(2) != thirdAxis.Length)
             throw new InvalidOperationException("Invalid fitting lookup cube.");
+        TableRangeLog.Note(first, firstAxis[0], firstAxis[^1]);
+        TableRangeLog.Note(second, secondAxis[0], secondAxis[^1]);
+        TableRangeLog.Note(third, thirdAxis[0], thirdAxis[^1]);
+        var (firstInput, secondInput, thirdInput) = (first, second, third);
         first = Math.Clamp(first, firstAxis[0], firstAxis[^1]);
         second = Math.Clamp(second, secondAxis[0], secondAxis[^1]);
         third = Math.Clamp(third, thirdAxis[0], thirdAxis[^1]);
@@ -1308,7 +1402,22 @@ public static class FittingCatalog
         double Blend(int ai, int bi) => values[ai, bi, c0] + cf * (values[ai, bi, c1] - values[ai, bi, c0]);
         var lowA = Blend(a0, b0) + bf * (Blend(a0, b1) - Blend(a0, b0));
         var highA = Blend(a1, b0) + bf * (Blend(a1, b1) - Blend(a1, b0));
-        return lowA + af * (highA - lowA);
+        var result = lowA + af * (highA - lowA);
+        static bool Outside(double value, double[] axis) => value < axis[0] || value > axis[^1];
+        TableRangeLog.Lookup(new TableLookupStep(
+            af <= 1e-12 && bf <= 1e-12 && cf <= 1e-12 ? TableLookupKind.Exact : TableLookupKind.Trilinear,
+            new[]
+            {
+                new TableLookupAxis("", firstInput, firstAxis[a0], firstAxis[a1], Outside(firstInput, firstAxis)),
+                new TableLookupAxis("", secondInput, secondAxis[b0], secondAxis[b1], Outside(secondInput, secondAxis)),
+                new TableLookupAxis("", thirdInput, thirdAxis[c0], thirdAxis[c1], Outside(thirdInput, thirdAxis))
+            },
+            new[]
+            {
+                values[a0, b0, c0], values[a0, b0, c1], values[a0, b1, c0], values[a0, b1, c1],
+                values[a1, b0, c0], values[a1, b0, c1], values[a1, b1, c0], values[a1, b1, c1]
+            }, result));
+        return result;
     }
 
     private static (int Lower, int Upper, double Fraction) Bracket(double[] axis, double value)

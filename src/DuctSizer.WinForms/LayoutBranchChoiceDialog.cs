@@ -71,7 +71,7 @@ internal sealed class LayoutBranchChoiceDialog : DpiScaledForm
             Text = "Connect",
             DialogResult = DialogResult.OK,
             Size = new Size(110, 32),
-            BackColor = Color.FromArgb(42, 135, 91),
+            BackColor = Color.FromArgb(14, 111, 230),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };

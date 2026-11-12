@@ -112,7 +112,7 @@ internal sealed class LayoutFittingNodeDialog : DpiScaledForm, IInlineEditable
             AutoEllipsis = false,
             UseMnemonic = false,
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(28, 69, 108),
+            ForeColor = Color.FromArgb(16, 45, 84),
             Font = new Font("Segoe UI Semibold", 9F),
             Padding = new Padding(0, 5, 0, 5)
         }, 112);
@@ -159,7 +159,7 @@ internal sealed class LayoutFittingNodeDialog : DpiScaledForm, IInlineEditable
             DialogResult = DialogResult.None,
             Width = 135,
             Height = 32,
-            BackColor = Color.FromArgb(42, 135, 91),
+            BackColor = Color.FromArgb(14, 111, 230),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };

@@ -700,13 +700,13 @@ internal sealed class LayoutDesignerCanvas : Panel
             var selectionBounds = Rectangle.Inflate(bounds, Math.Max(6, (int)Math.Round(8 * ZoomFactor)),
                 Math.Max(6, (int)Math.Round(8 * ZoomFactor)));
             using var selectionFill = new SolidBrush(Color.FromArgb(28, 45, 105, 170));
-            using var selectionPen = new Pen(Color.FromArgb(45, 105, 170), Math.Max(1.4F, 1.8F * ZoomFactor));
+            using var selectionPen = new Pen(Color.FromArgb(14, 111, 230), Math.Max(1.4F, 1.8F * ZoomFactor));
             graphics.FillRectangle(selectionFill, selectionBounds);
             graphics.DrawRectangle(selectionPen, selectionBounds);
         }
         var iconColor = node.AirflowOverride
             ? Color.FromArgb(222, 126, 34)
-            : node.IsDefined ? Color.FromArgb(21, 83, 99) : Color.FromArgb(196, 48, 48);
+            : node.IsDefined ? Color.FromArgb(10, 88, 187) : Color.FromArgb(196, 48, 48);
         var iconSize = Math.Max(22, (int)Math.Round(34 * ZoomFactor));
         var iconBounds = node.Type == LayoutNodeType.Duct
             ? new Rectangle(bounds.Left + 3, bounds.Top + 3, bounds.Width - 6, Math.Max(14, bounds.Height - 6))
@@ -863,7 +863,7 @@ internal sealed class LayoutDesignerCanvas : Panel
         const int axisLength = 25;
         using var xPen = new Pen(Color.FromArgb(195, 65, 65), 2F) { EndCap = LineCap.ArrowAnchor };
         using var yPen = new Pen(Color.FromArgb(42, 135, 91), 2F) { EndCap = LineCap.ArrowAnchor };
-        using var zPen = new Pen(Color.FromArgb(45, 105, 170), 2F) { EndCap = LineCap.ArrowAnchor };
+        using var zPen = new Pen(Color.FromArgb(14, 111, 230), 2F) { EndCap = LineCap.ArrowAnchor };
         if (_orbitView is (double, double) angles)
         {
             var legendOrigin = new PointF(axisOrigin.X, axisOrigin.Y);
@@ -917,7 +917,7 @@ internal sealed class LayoutDesignerCanvas : Panel
         var haloRadius = Math.Max(7, (int)Math.Round(9 * ZoomFactor));
         var dotRadius = Math.Max(3, (int)Math.Round(4 * ZoomFactor));
         using var halo = new SolidBrush(Color.FromArgb(55, 31, 120, 180));
-        using var dot = new SolidBrush(Color.FromArgb(31, 120, 180));
+        using var dot = new SolidBrush(Color.FromArgb(14, 111, 230));
         using var outline = new Pen(Color.White, Math.Max(1F, 1.5F * ZoomFactor));
         graphics.FillEllipse(halo, center.X - haloRadius, center.Y - haloRadius, haloRadius * 2, haloRadius * 2);
         graphics.FillEllipse(dot, center.X - dotRadius, center.Y - dotRadius, dotRadius * 2, dotRadius * 2);
@@ -990,7 +990,7 @@ internal sealed class LayoutDesignerCanvas : Panel
         };
         if (string.Equals(_selectedConnectionKey, ConnectionKey(connectionRef), StringComparison.OrdinalIgnoreCase))
         {
-            using var selected = new Pen(Color.FromArgb(45, 105, 170), Math.Max(6F, 7F * ZoomFactor))
+            using var selected = new Pen(Color.FromArgb(14, 111, 230), Math.Max(6F, 7F * ZoomFactor))
             {
                 StartCap = LineCap.Round,
                 EndCap = LineCap.Round
@@ -1057,7 +1057,7 @@ internal sealed class LayoutDesignerCanvas : Panel
             // Handle to drag the leader's end onto the duct or fitting it points to.
             var radius = Math.Max(3F, 3.5F * ZoomFactor);
             using var handleFill = new SolidBrush(Color.White);
-            using var handlePen = new Pen(Color.FromArgb(45, 105, 170), 1.2F);
+            using var handlePen = new Pen(Color.FromArgb(14, 111, 230), 1.2F);
             graphics.FillEllipse(handleFill, end.X - radius, end.Y - radius, radius * 2, radius * 2);
             graphics.DrawEllipse(handlePen, end.X - radius, end.Y - radius, radius * 2, radius * 2);
         }
@@ -1765,7 +1765,7 @@ internal sealed class LayoutDesignerCanvas : Panel
                 continue;
             var hover = index == _hoverCubeCorner;
             var radius = hover ? 5.5F : 3.6F;
-            using var dot = new SolidBrush(hover ? Color.FromArgb(31, 120, 180) : Color.FromArgb(70, 110, 140));
+            using var dot = new SolidBrush(hover ? Color.FromArgb(14, 111, 230) : Color.FromArgb(70, 110, 140));
             graphics.FillEllipse(dot, corner.Point.X - radius, corner.Point.Y - radius, radius * 2, radius * 2);
         }
         using var captionFont = new Font("Segoe UI", 6.5F);

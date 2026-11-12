@@ -346,7 +346,7 @@ internal sealed partial class DuctCalculatorScreen
             if (box.TextLength > 0)
                 EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            box.SelectionColor = Color.FromArgb(28, 69, 108);
+            box.SelectionColor = Color.FromArgb(16, 45, 84);
             EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionFont = box.Font;
             box.SelectionColor = box.ForeColor;
@@ -382,7 +382,7 @@ internal sealed partial class DuctCalculatorScreen
         void Step(string title, string explanation)
         {
             EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
-            box.SelectionColor = Color.FromArgb(28, 69, 108);
+            box.SelectionColor = Color.FromArgb(16, 45, 84);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
             EngineeringMathRichText.AppendAtEnd(box, title + Environment.NewLine);
             box.SelectionColor = box.ForeColor;
@@ -397,7 +397,7 @@ internal sealed partial class DuctCalculatorScreen
                 box.SelectionColor = part.Tone switch
                 {
                     EngineeringMathRichText.MathTone.Input => Color.FromArgb(190, 44, 44),
-                    EngineeringMathRichText.MathTone.Solved => Color.FromArgb(0, 105, 154),
+                    EngineeringMathRichText.MathTone.Solved => Color.FromArgb(10, 88, 187),
                     _ => box.ForeColor
                 };
                 box.SelectionFont = part.Tone == EngineeringMathRichText.MathTone.Formula
@@ -497,7 +497,7 @@ internal sealed partial class DuctCalculatorScreen
 
         Heading("SOLVED PARAMETERS — EQUATION SUBSTITUTIONS");
         Line(("Entered values are red; solved results are blue.", false), ("  INPUT", true), ("  ", false));
-        box.SelectionColor = Color.FromArgb(0, 105, 154);
+        box.SelectionColor = Color.FromArgb(10, 88, 187);
         box.SelectionFont = new Font(box.Font, FontStyle.Bold);
         EngineeringMathRichText.AppendAtEnd(box, "SOLVED" + Environment.NewLine);
         box.SelectionColor = box.ForeColor;

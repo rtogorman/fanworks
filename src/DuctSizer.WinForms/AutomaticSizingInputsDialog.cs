@@ -374,7 +374,7 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
             Text = "FITTING INPUTS",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 9F),
-            ForeColor = Color.FromArgb(28, 69, 108),
+            ForeColor = Color.FromArgb(16, 45, 84),
             TextAlign = ContentAlignment.MiddleLeft
         };
         host.Controls.Add(heading, 0, 0);

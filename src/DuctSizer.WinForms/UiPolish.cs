@@ -10,11 +10,11 @@ internal static class UiPalette
     internal static readonly Color CardBorder = Color.FromArgb(184, 202, 215);
     internal static readonly Color CardHighlight = Color.FromArgb(255, 255, 255);
     internal static readonly Color CardShadow = Color.FromArgb(128, 151, 168);
-    internal static readonly Color Navy = Color.FromArgb(8, 32, 50);
-    internal static readonly Color Blue = Color.FromArgb(19, 72, 108);
-    internal static readonly Color Teal = Color.FromArgb(21, 144, 156);
-    internal static readonly Color Cyan = Color.FromArgb(55, 213, 221);
-    internal static readonly Color Ink = Color.FromArgb(30, 55, 78);
+    internal static readonly Color Navy = Color.FromArgb(11, 31, 59);
+    internal static readonly Color Blue = Color.FromArgb(18, 52, 96);
+    internal static readonly Color Teal = Color.FromArgb(14, 111, 230);
+    internal static readonly Color Cyan = Color.FromArgb(126, 199, 255);
+    internal static readonly Color Ink = Color.FromArgb(11, 31, 59);
 }
 
 internal sealed class PolishedTabControl : TabControl
@@ -131,7 +131,7 @@ internal sealed class SectionTitlePanel : Panel
         var graphics = eventArgs.Graphics;
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         using var fill = new LinearGradientBrush(ClientRectangle,
-            Color.FromArgb(15, 58, 92), Color.FromArgb(24, 91, 122), LinearGradientMode.Horizontal);
+            Color.FromArgb(11, 31, 59), Color.FromArgb(19, 49, 90), LinearGradientMode.Horizontal);
         graphics.FillRectangle(fill, ClientRectangle);
         using var underlay = new SolidBrush(Color.FromArgb(30, 3, 28, 46));
         graphics.FillRectangle(underlay, 0, Height - 7, Width, 7);
@@ -145,14 +145,14 @@ internal sealed class SectionTitlePanel : Panel
             var length = maximumLength * (1F - progress * .28F);
             var alpha = (int)Math.Round(62 - progress * 40);
             var y = 11F + index * Math.Max(9F, (Height - 27F) / (lineCount - 1F));
-            using var line = new Pen(Color.FromArgb(alpha, 78, 222, 226), index == 0 ? 1.8F : 1.1F)
+            using var line = new Pen(Color.FromArgb(alpha, 126, 199, 255), index == 0 ? 1.8F : 1.1F)
             {
                 StartCap = LineCap.Round,
                 EndCap = LineCap.Round
             };
             graphics.DrawLine(line, motifRight, y, motifRight - length, y);
         }
-        using var edge = new Pen(Color.FromArgb(128, 8, 39, 61), 1F);
+        using var edge = new Pen(Color.FromArgb(128, 11, 31, 59), 1F);
         graphics.DrawLine(edge, 0, Height - 1, Width, Height - 1);
     }
 }

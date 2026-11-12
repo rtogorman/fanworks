@@ -279,7 +279,7 @@ internal sealed class SlimScrollArea : Panel
             using (var track = new SolidBrush(Color.FromArgb(236, 241, 246)))
                 e.Graphics.FillPath(track, trackPath);
             using var thumbPath = UiPolish.CreateRoundedPath(Thumb, (Width - 6) / 2F);
-            using var thumb = new SolidBrush(_dragging || _hover ? Color.FromArgb(31, 108, 168) : Color.FromArgb(150, 178, 202));
+            using var thumb = new SolidBrush(_dragging || _hover ? Color.FromArgb(14, 111, 230) : Color.FromArgb(150, 178, 202));
             e.Graphics.FillPath(thumb, thumbPath);
         }
 

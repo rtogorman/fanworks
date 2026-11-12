@@ -93,7 +93,7 @@ internal sealed class ProjectExplorer : Panel
         _reopenButton.Dock = DockStyle.Fill;
         _reopenButton.Visible = false;
         _reopenButton.FlatStyle = FlatStyle.Flat;
-        _reopenButton.ForeColor = Color.FromArgb(28, 69, 108);
+        _reopenButton.ForeColor = Color.FromArgb(16, 45, 84);
         _reopenButton.BackColor = Color.FromArgb(235, 242, 247);
         _reopenButton.Font = new Font("Segoe UI Semibold", 8.2F);
         _reopenButton.Click += (_, _) => SetCollapsed(false);

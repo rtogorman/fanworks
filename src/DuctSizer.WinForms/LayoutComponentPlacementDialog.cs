@@ -76,7 +76,7 @@ internal sealed class LayoutComponentPlacementDialog : DpiScaledForm
                     : $"{node.Id} on {connectedItemId} duct — adjust {editableAxis} only",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(28, 69, 108),
+            ForeColor = Color.FromArgb(16, 45, 84),
             Font = new Font("Segoe UI Semibold", 9F)
         });
         var positionCaption = units == UnitSystem.Imperial ? "Relative ΔX / ΔY / ΔZ (ft)" : "Relative ΔX / ΔY / ΔZ (m)";
@@ -99,7 +99,7 @@ internal sealed class LayoutComponentPlacementDialog : DpiScaledForm
             buttonRow = 3;
         }
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
-        var save = new Button { Text = "Confirm Coordinates", Width = 152, Height = 32, BackColor = Color.FromArgb(42, 135, 91), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+        var save = new Button { Text = "Confirm Coordinates", Width = 152, Height = 32, BackColor = Color.FromArgb(14, 111, 230), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 32, FlatStyle = FlatStyle.Flat };
         UiPolish.RoundButton(save, 7);
         UiPolish.RoundButton(cancel, 7);

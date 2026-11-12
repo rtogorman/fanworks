@@ -185,3 +185,22 @@ the first starts a secondary calculation drawn after the assumptions with a divi
   the redesigned windows (header, cards, field rows, button bar, `SlimScrollArea`). `WindowLook` sets the app icon
   and a navy title bar (Windows 11 DWM attributes; ignored elsewhere).
 
+## Report typography, table look-ups and brand (v0.101)
+
+- **Fonts** (`Core/PdfFonts.cs`, `Core/Fonts/`): the PDF embeds Nunito Regular, Bold, Italic and ExtraBold as TrueType
+  fonts (WinAnsi encoding) and `FanWorksSymbols`, a small font built from M PLUS Rounded 1c whose single-byte codes map
+  to Greek letters and maths signs (with a ToUnicode map). `PdfFonts.Show` splits text into runs by font;
+  `PdfFonts.Measure` uses the fonts' real advance widths, so wrapping is by measured width. Both fonts are SIL OFL
+  (licences in Fonts/ and THIRD-PARTY-NOTICES). Page streams and font files are Flate-compressed.
+- **Display text** (`EngineeringText.Pretty`): substitution text written as "rho", "deg F", "ft2" is shown as ρ, °F, ft².
+- **Worksheet layout** (`DuctSystemPdf.BuildItemSheets`): steps, then any secondary calculation after a divider, then one
+  merged "Variables and where they come from" list and the assumptions. Blocks flow down two columns; sections marked
+  `Wide` (tables) run across both. The type size is the largest (6.8 to 5.2 pt) at which the sheet fits one page.
+  Line kinds: `Variable`, `TableHeader`, `TableRow`, `TableRowSelected`.
+- **Table look-ups** (`TableRangeLog.Lookup`, `TableLookupStep`): `FittingCatalog`'s I1/I2/I3 and the ragged junction
+  tables record each look-up (exact, linear, bilinear, trilinear, held at edge, conservative column) with its bracketing
+  points; `FittingCalculationResult.TableLookups` carries them and `WorksheetLookups` writes them out.
+  `JunctionPathValue` evaluates only the selected path.
+- **Brand**: report header mark is an RGB JPEG with an 8-bit soft mask (`Core/Brand/`); the app's top bar uses the
+  same mark and Nunito ExtraBold through `BrandFonts` (private font collection).
+

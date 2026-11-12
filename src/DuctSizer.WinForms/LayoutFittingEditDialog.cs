@@ -83,7 +83,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
             Margin = new Padding(8, 0, 0, 0),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.White,
-            ForeColor = Color.FromArgb(28, 69, 108)
+            ForeColor = Color.FromArgb(16, 45, 84)
         };
         _galleryButton = browseGallery;
         UiPolish.RoundButton(browseGallery, 6);
@@ -99,7 +99,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
 
         _description.Dock = DockStyle.Fill;
         _description.AutoEllipsis = false;
-        _description.ForeColor = Color.FromArgb(28, 69, 108);
+        _description.ForeColor = Color.FromArgb(16, 45, 84);
         _description.Font = new Font("Segoe UI Semibold", 9F);
         _description.TextAlign = ContentAlignment.MiddleLeft;
         _shape.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -194,14 +194,14 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
         _result.Dock = DockStyle.Fill;
         _result.TextAlign = ContentAlignment.MiddleLeft;
         _result.Font = new Font("Segoe UI Semibold", 9F);
-        _result.ForeColor = Color.FromArgb(28, 69, 108);
+        _result.ForeColor = Color.FromArgb(16, 45, 84);
         root.Controls.Add(_result, 0, 3);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
         _updateButton.Name = "LayoutFittingDirectUpdateButton";
         _updateButton.Text = "Update Fitting";
         _updateButton.Width = 130;
         _updateButton.Height = 32;
-        _updateButton.BackColor = Color.FromArgb(42, 135, 91);
+        _updateButton.BackColor = Color.FromArgb(14, 111, 230);
         _updateButton.ForeColor = Color.White;
         _updateButton.FlatStyle = FlatStyle.Flat;
         _updateButton.Enabled = false;
@@ -211,7 +211,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
             Text = "Calculate",
             Width = 105,
             Height = 32,
-            BackColor = Color.FromArgb(31, 111, 168),
+            BackColor = Color.FromArgb(14, 111, 230),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };
@@ -451,7 +451,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
             _result.Text = _units == UnitSystem.Imperial
                 ? $"C {calculation.Coefficient:0.###}   •   VP {UnitConversions.PaToInchesWater(calculation.VelocityPressurePa):0.###} in. w.g.   •   Loss {UnitConversions.PaToInchesWater(calculation.PressureLossPa):0.###} in. w.g."
                 : $"C {calculation.Coefficient:0.###}   •   VP {calculation.VelocityPressurePa:0.##} Pa   •   Loss {calculation.PressureLossPa:0.##} Pa";
-            _result.ForeColor = Color.FromArgb(28, 69, 108);
+            _result.ForeColor = Color.FromArgb(16, 45, 84);
             Result = fitting;
             _updateButton.Enabled = true;
         }

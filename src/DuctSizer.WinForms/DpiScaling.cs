@@ -185,7 +185,7 @@ public class DpiScaledForm : Form
 internal static class WindowLook
 {
     /// <summary>FanWorks navy, used for the title bar of every window (Windows 11; earlier Windows keep the system colour).</summary>
-    internal static readonly Color TitleBar = Color.FromArgb(24, 62, 92);
+    internal static readonly Color TitleBar = Color.FromArgb(11, 31, 59);
 
     private static Icon? _icon;
     private static bool _iconLoaded;
@@ -240,3 +240,44 @@ internal static class WindowLook
 
     private static int ToColorRef(Color color) => color.R | color.G << 8 | color.B << 16;
 }
+
+/// <summary>
+/// The brand typeface (Nunito ExtraBold, SIL Open Font License) for the "fan works" wordmark, loaded from the
+/// engine's embedded font into a private font collection. Falls back to Segoe UI Semibold if it cannot be loaded.
+/// </summary>
+internal static class BrandFonts
+{
+    private static System.Drawing.Text.PrivateFontCollection? _collection;
+    private static bool _attempted;
+
+    internal static Font Wordmark(float size)
+    {
+        var family = BrandFamily();
+        return family is null ? new Font("Segoe UI Semibold", size) : new Font(family, size, FontStyle.Regular);
+    }
+
+    private static FontFamily? BrandFamily()
+    {
+        if (!_attempted)
+        {
+            _attempted = true;
+            try
+            {
+                var bytes = DuctSizer.Core.BrandAssets.WordmarkFont();
+                // The collection keeps a pointer to the font data, so the memory is never freed.
+                var memory = System.Runtime.InteropServices.Marshal.AllocCoTaskMem(bytes.Length);
+                System.Runtime.InteropServices.Marshal.Copy(bytes, 0, memory, bytes.Length);
+                var collection = new System.Drawing.Text.PrivateFontCollection();
+                collection.AddMemoryFont(memory, bytes.Length);
+                _collection = collection;
+            }
+            catch (Exception exception) when (exception is ArgumentException or System.Runtime.InteropServices.ExternalException or IOException or InvalidOperationException)
+            {
+                DiagnosticLog.Warning("The brand font could not be loaded; using Segoe UI.", exception);
+                _collection = null;
+            }
+        }
+        return _collection?.Families.FirstOrDefault();
+    }
+}
+

@@ -232,7 +232,7 @@ internal static class DialogStyle
                 args.Graphics.FillRectangle(fill, args.Bounds);
             if (selected)
             {
-                using var accent = new SolidBrush(Color.FromArgb(31, 108, 168));
+                using var accent = new SolidBrush(Color.FromArgb(14, 111, 230));
                 args.Graphics.FillRectangle(accent, args.Bounds.Left, args.Bounds.Top, DpiScaling.Scale(3), args.Bounds.Height);
             }
             var text = list.GetItemText(list.Items[args.Index]);
@@ -258,9 +258,9 @@ internal static class DialogStyle
     // ---- Web-style inputs, cards and buttons (round S) ------------------------------------------------------------
 
     internal static readonly Color InputBorder = Color.FromArgb(196, 208, 220);
-    internal static readonly Color InputFocus = Color.FromArgb(31, 108, 168);
+    internal static readonly Color InputFocus = Color.FromArgb(14, 111, 230);
     internal static readonly Color InputDisabled = Color.FromArgb(243, 246, 249);
-    internal static readonly Color Accent = Color.FromArgb(31, 108, 168);
+    internal static readonly Color Accent = Color.FromArgb(14, 111, 230);
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Control, object> StyledInputs = new();
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Control, object> PaintedParents = new();

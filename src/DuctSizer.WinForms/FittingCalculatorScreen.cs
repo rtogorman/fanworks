@@ -209,6 +209,9 @@ internal sealed partial class FittingCalculatorScreen
         };
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        // The cards fill the window height; without this the row sized itself to the cards' preferred height and,
+        // on a short window, pushed the Calculate button below the visible area.
+        content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _fittingContentLayout = content;
 
         var inputCard = new RoundedPanel
@@ -245,7 +248,7 @@ internal sealed partial class FittingCalculatorScreen
         _fittingEditingLabel.AutoSize = true;
         _fittingEditingLabel.Dock = DockStyle.Top;
         _fittingEditingLabel.BackColor = Color.FromArgb(232, 244, 253);
-        _fittingEditingLabel.ForeColor = Color.FromArgb(22, 65, 102);
+        _fittingEditingLabel.ForeColor = Color.FromArgb(11, 31, 59);
         _fittingEditingLabel.Font = new Font("Segoe UI Semibold", 9F);
         _fittingEditingLabel.Padding = new Padding(10, 7, 10, 7);
         _fittingEditingLabel.Margin = new Padding(0, 0, 0, 4);
@@ -315,7 +318,7 @@ internal sealed partial class FittingCalculatorScreen
             Name = "CalculateFittingButton",
             Text = "Calculate",
             Size = new Size(112, 30),
-            BackColor = Color.FromArgb(31, 120, 180),
+            BackColor = Color.FromArgb(14, 111, 230),
             ForeColor = Color.White,
             Font = new Font("Segoe UI Semibold", 9F),
             FlatStyle = FlatStyle.Flat
@@ -327,7 +330,7 @@ internal sealed partial class FittingCalculatorScreen
         _addFittingButton.Text = DuctSystemScreen.DefaultFittingActionText;
         _addFittingButton.Size = new Size(176, 30);
         _addFittingButton.Margin = Padding.Empty;
-        _addFittingButton.BackColor = Color.FromArgb(42, 135, 91);
+        _addFittingButton.BackColor = Color.FromArgb(14, 111, 230);
         _addFittingButton.ForeColor = Color.White;
         _addFittingButton.Font = new Font("Segoe UI Semibold", 8.5F);
         _addFittingButton.FlatStyle = FlatStyle.Flat;
@@ -433,9 +436,15 @@ internal sealed partial class FittingCalculatorScreen
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
+        // The Calculate / Add buttons are docked to the bottom of the card rather than placed in the last table
+        // row, so they stay visible when the window is short (the table row could be pushed below the card).
         MainForm.ConfigureCalculatorInputBody(inputBody, _fittingInputScroll, inputTable,
-            outputHeading, summary, actionRow, 108, 40);
+            outputHeading, summary, new Panel { Margin = Padding.Empty }, 108, 0);
+        actionRow.Dock = DockStyle.Bottom;
+        actionRow.Height = 46;
+        actionRow.Padding = new Padding(0, 4, 14, 8);
         inputCard.Controls.Add(inputBody);
+        inputCard.Controls.Add(actionRow);
         inputCard.Controls.Add(inputHeader);
 
         _fittingCalculationDetails.Dock = DockStyle.Fill;
@@ -812,7 +821,7 @@ internal sealed partial class FittingCalculatorScreen
         _browseFittingImagesButton.Height = 32;
         _browseFittingImagesButton.FlatStyle = FlatStyle.Flat;
         _browseFittingImagesButton.BackColor = Color.White;
-        _browseFittingImagesButton.ForeColor = Color.FromArgb(28, 69, 108);
+        _browseFittingImagesButton.ForeColor = Color.FromArgb(16, 45, 84);
         _browseFittingImagesButton.FlatAppearance.BorderColor = Color.FromArgb(164, 184, 201);
         UiPolish.RoundButton(_browseFittingImagesButton);
         _browseFittingImagesButton.Click += (_, _) => ShowFittingGallery();
@@ -1052,7 +1061,7 @@ internal sealed partial class FittingCalculatorScreen
             Text = "JUNCTION FLOW PATHS",
             Dock = DockStyle.Fill,
             Height = 30,
-            ForeColor = Color.FromArgb(28, 69, 108),
+            ForeColor = Color.FromArgb(16, 45, 84),
             Font = new Font("Segoe UI Semibold", 9F),
             TextAlign = ContentAlignment.MiddleLeft
         };
@@ -1359,7 +1368,7 @@ internal sealed partial class FittingCalculatorScreen
         {
             if (box.TextLength > 0) EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            box.SelectionColor = Color.FromArgb(28, 69, 108);
+            box.SelectionColor = Color.FromArgb(16, 45, 84);
             EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionFont = box.Font;
             box.SelectionColor = box.ForeColor;
@@ -1374,9 +1383,9 @@ internal sealed partial class FittingCalculatorScreen
         }
 
         Heading("MANUFACTURER PERFORMANCE SELECTION");
-        Line(selection.Product, Color.FromArgb(28, 69, 108), FontStyle.Bold);
+        Line(selection.Product, Color.FromArgb(16, 45, 84), FontStyle.Bold);
         Line(selection.Configuration);
-        Line(selection.SourceReference, Color.FromArgb(28, 69, 108), FontStyle.Italic);
+        Line(selection.SourceReference, Color.FromArgb(16, 45, 84), FontStyle.Italic);
         Line($"Requested airflow: {selection.RequestedAirflowCfm:0.##} cfm", Color.FromArgb(190, 44, 44), FontStyle.Bold);
 
         Heading("RECREATED PUBLISHED AIRSIDE PRESSURE TABLE");
@@ -1386,7 +1395,7 @@ internal sealed partial class FittingCalculatorScreen
         foreach (var point in selection.PublishedTable)
         {
             var bound = point == selection.LowerPoint || point == selection.UpperPoint;
-            box.SelectionColor = bound ? Color.FromArgb(0, 103, 145) : box.ForeColor;
+            box.SelectionColor = bound ? Color.FromArgb(10, 88, 187) : box.ForeColor;
             box.SelectionFont = new Font("Consolas", 9F, bound ? FontStyle.Bold : FontStyle.Regular);
             EngineeringMathRichText.AppendAtEnd(box, $"{(bound ? ">" : " ")} {point.AirflowCfm,8:0}       {point.PressureDropInWg,8:0.###}\r\n");
         }
@@ -1403,7 +1412,7 @@ internal sealed partial class FittingCalculatorScreen
         else
             Line("The requested airflow exactly matches a published table point.");
         Line($"Selected airside pressure drop: {selection.PressureDropInWg:0.###} in. w.c.",
-            Color.FromArgb(0, 103, 145), FontStyle.Bold);
+            Color.FromArgb(10, 88, 187), FontStyle.Bold);
         Heading("BASIS AND ASSUMPTIONS");
         Line(selection.Product.Contains("with Reheat", StringComparison.OrdinalIgnoreCase)
             ? "Airside ΔPs is the hot-water coil air pressure drop for the selected Titus DESV size and coil-row count. No extrapolation is permitted outside the published airflow range."
@@ -1502,7 +1511,7 @@ internal sealed partial class FittingCalculatorScreen
         {
             if (box.TextLength > 0) EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            box.SelectionColor = Color.FromArgb(28, 69, 108);
+            box.SelectionColor = Color.FromArgb(16, 45, 84);
             EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionFont = box.Font;
             box.SelectionColor = box.ForeColor;
@@ -1517,10 +1526,10 @@ internal sealed partial class FittingCalculatorScreen
         }
 
         Heading("MANUFACTURER PERFORMANCE SELECTION");
-        Line(selection.Product, Color.FromArgb(28, 69, 108), FontStyle.Bold);
+        Line(selection.Product, Color.FromArgb(16, 45, 84), FontStyle.Bold);
         Line(selection.Configuration);
         if (!string.IsNullOrWhiteSpace(selection.SourceReference))
-            Line(selection.SourceReference, Color.FromArgb(28, 69, 108), FontStyle.Italic);
+            Line(selection.SourceReference, Color.FromArgb(16, 45, 84), FontStyle.Italic);
         Line($"Requested airflow: {selection.RequestedAirflowCfm:0.##} cfm", Color.FromArgb(190, 44, 44), FontStyle.Bold);
         Line(selection.InletDiameterIn is null
             ? "Selection rule: round upward to the first published airflow at or above the request."
@@ -1538,7 +1547,7 @@ internal sealed partial class FittingCalculatorScreen
         foreach (var point in selection.PublishedTable)
         {
             var marker = ReferenceEquals(point, selection.Selected) || point == selection.Selected ? ">" : " ";
-            box.SelectionColor = point == selection.Selected ? Color.FromArgb(0, 103, 145) : box.ForeColor;
+            box.SelectionColor = point == selection.Selected ? Color.FromArgb(10, 88, 187) : box.ForeColor;
             box.SelectionFont = new Font("Consolas", 8.3F, point == selection.Selected ? FontStyle.Bold : FontStyle.Regular);
             EngineeringMathRichText.AppendAtEnd(box, grille
                 ? $"{marker}{point.CoreVelocityFpm,5:0}   {point.AirflowCfm,6:0}   {point.VelocityPressureInWg,6:0.###}   {point.TotalPressureInWg,6:0.###}   {point.SoundNc,4}\r\n"
@@ -1548,23 +1557,23 @@ internal sealed partial class FittingCalculatorScreen
         box.SelectionColor = box.ForeColor;
 
         Heading("SELECTED OUTPUTS");
-        Line($"Published airflow: {selection.Selected.AirflowCfm:0} cfm", Color.FromArgb(0, 103, 145), FontStyle.Bold);
+        Line($"Published airflow: {selection.Selected.AirflowCfm:0} cfm", Color.FromArgb(10, 88, 187), FontStyle.Bold);
         if (selection.InletDiameterIn is int inletDiameter)
-            Line($"Automatically selected inlet diameter: {inletDiameter} in", Color.FromArgb(0, 103, 145), FontStyle.Bold);
+            Line($"Automatically selected inlet diameter: {inletDiameter} in", Color.FromArgb(10, 88, 187), FontStyle.Bold);
         if (grille)
         {
-            Line($"Nominal duct size: {selection.NominalDuctSizeIn} in", Color.FromArgb(0, 103, 145), FontStyle.Bold);
+            Line($"Nominal duct size: {selection.NominalDuctSizeIn} in", Color.FromArgb(10, 88, 187), FontStyle.Bold);
             Line($"Core velocity: {selection.Selected.CoreVelocityFpm:0} fpm");
             Line($"Velocity pressure: {selection.Selected.VelocityPressureInWg:0.###} in. w.c.");
-            Line($"Negative static pressure / pressure drop: {selection.Selected.TotalPressureInWg:0.###} in. w.c.", Color.FromArgb(0, 103, 145), FontStyle.Bold);
+            Line($"Negative static pressure / pressure drop: {selection.Selected.TotalPressureInWg:0.###} in. w.c.", Color.FromArgb(10, 88, 187), FontStyle.Bold);
         }
         else
-            Line($"Total pressure drop: {selection.Selected.TotalPressureInWg:0.###} in. w.c.", Color.FromArgb(0, 103, 145), FontStyle.Bold);
+            Line($"Total pressure drop: {selection.Selected.TotalPressureInWg:0.###} in. w.c.", Color.FromArgb(10, 88, 187), FontStyle.Bold);
         if (selection.Selected.StaticPressureInWg is double staticPressure)
             Line($"Published static pressure: {staticPressure:0.###} in. w.c.");
-        Line($"Sound: NC {selection.Selected.SoundNc}", Color.FromArgb(0, 103, 145), FontStyle.Bold);
+        Line($"Sound: NC {selection.Selected.SoundNc}", Color.FromArgb(10, 88, 187), FontStyle.Bold);
         if (!grille)
-            Line($"Throw to 150/100/50 fpm terminal velocities: {selection.Selected.ThrowFt} ft", Color.FromArgb(0, 103, 145), FontStyle.Bold);
+            Line($"Throw to 150/100/50 fpm terminal velocities: {selection.Selected.ThrowFt} ft", Color.FromArgb(10, 88, 187), FontStyle.Bold);
 
         Heading("BASIS AND ASSUMPTIONS");
         if (grille)
@@ -1670,7 +1679,7 @@ internal sealed partial class FittingCalculatorScreen
             if (box.TextLength > 0)
                 EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
             box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            box.SelectionColor = Color.FromArgb(28, 69, 108);
+            box.SelectionColor = Color.FromArgb(16, 45, 84);
             EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
             box.SelectionFont = box.Font;
             box.SelectionColor = box.ForeColor;
@@ -1809,6 +1818,24 @@ internal sealed partial class FittingCalculatorScreen
             StyledMathLine(($"{FittingIntermediateLabel(derived.Key)} = ", EngineeringMathRichText.MathTone.Formula),
                 ($"{derived.Value:0.####}", EngineeringMathRichText.MathTone.Solved));
 
+        var lookupLines = WorksheetLookups.Lines(result);
+        if (lookupLines.Count > 0)
+        {
+            // How each coefficient was read from its published table (interpolation, exact point, edge or conservative).
+            Heading("TABLE LOOK-UP (HOW C WAS READ FROM THE TABLE)");
+            foreach (var lookup in lookupLines)
+            {
+                if (lookup.IsEquation)
+                {
+                    StyledMathLine((lookup.Formula + " = ", EngineeringMathRichText.MathTone.Formula),
+                        (lookup.HighlightValue, EngineeringMathRichText.MathTone.Solved));
+                    Line(("    with ", false), (lookup.InputSubstitution, true));
+                }
+                else
+                    Line((lookup.Formula, false), (string.IsNullOrWhiteSpace(lookup.HighlightValue) ? string.Empty : "  " + lookup.HighlightValue, true));
+            }
+        }
+
         Heading("COEFFICIENT AND PRESSURE LOSS");
         StyledMathLine(("C = C_{ASHRAE}(", EngineeringMathRichText.MathTone.Formula),
             ("table inputs", EngineeringMathRichText.MathTone.Input),
@@ -1836,6 +1863,14 @@ internal sealed partial class FittingCalculatorScreen
         box.SelectionStart = 0;
         box.ScrollToCaret();
     }
+
+    /// <summary>Short symbol for a derived junction ratio, e.g. "Qb/Qc".</summary>
+    internal static string FittingIntermediateSymbol(string key) => key.ToLowerInvariant() switch
+    {
+        "qbqc" => "Qb/Qc", "qsqc" => "Qs/Qc", "qbqs" => "Qb/Qs", "abac" => "Ab/Ac", "asac" => "As/Ac", "abas" => "Ab/As",
+        "vbvc" => "Vb/Vc", "vsvc" => "Vs/Vc", "vbvs" => "Vb/Vs", "vcfpm" => "Vc (fpm)", "re" => "Re",
+        _ => key
+    };
 
     internal static string FittingIntermediateLabel(string key) => key.ToLowerInvariant() switch
     {

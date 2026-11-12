@@ -39,7 +39,7 @@ internal sealed class RoundingIncrementDialog : DpiScaledForm
         {
             Text = "Custom rounding increment",
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(22, 50, 78),
+            ForeColor = Color.FromArgb(11, 31, 59),
             Font = new Font("Segoe UI Semibold", 11F),
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
@@ -75,7 +75,7 @@ internal sealed class RoundingIncrementDialog : DpiScaledForm
         var save = new Button
         {
             Name = "RoundingIncrementSaveButton", Text = "Save", Width = 100, Height = 32,
-            BackColor = Color.FromArgb(42, 135, 91), ForeColor = Color.White, FlatStyle = FlatStyle.Flat
+            BackColor = Color.FromArgb(14, 111, 230), ForeColor = Color.White, FlatStyle = FlatStyle.Flat
         };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 32, FlatStyle = FlatStyle.Flat };
         UiPolish.RoundButton(save, 7);

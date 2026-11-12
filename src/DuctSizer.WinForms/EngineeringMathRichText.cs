@@ -23,7 +23,7 @@ internal static class EngineeringMathRichText
     private const float BasePointSize = 10.8F;
     private static readonly Color EquationColor = Color.FromArgb(39, 58, 75);
     private static readonly Color InputColor = Color.FromArgb(190, 44, 44);
-    private static readonly Color SolvedColor = Color.FromArgb(0, 105, 154);
+    private static readonly Color SolvedColor = Color.FromArgb(10, 88, 187);
 
     private abstract record MathElement(MathTone Tone);
     private sealed record MathText(string Value, MathTone Tone, bool Symbol = false) : MathElement(Tone);

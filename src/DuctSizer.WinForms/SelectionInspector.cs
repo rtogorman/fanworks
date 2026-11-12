@@ -194,7 +194,7 @@ internal sealed class SelectionInspector : Panel
         _editButton.Height = 32;
         _editButton.Margin = new Padding(6, 6, 0, 4);
         _editButton.FlatStyle = FlatStyle.Flat;
-        _editButton.BackColor = Color.FromArgb(31, 111, 168);
+        _editButton.BackColor = Color.FromArgb(14, 111, 230);
         _editButton.ForeColor = Color.White;
         _editButton.Font = new Font("Segoe UI Semibold", 9F);
         _editButton.FlatAppearance.BorderSize = 0;
@@ -204,7 +204,7 @@ internal sealed class SelectionInspector : Panel
         _reopenButton.Dock = DockStyle.Fill;
         _reopenButton.Visible = false;
         _reopenButton.FlatStyle = FlatStyle.Flat;
-        _reopenButton.ForeColor = Color.FromArgb(28, 69, 108);
+        _reopenButton.ForeColor = Color.FromArgb(16, 45, 84);
         _reopenButton.BackColor = Color.FromArgb(235, 242, 247);
         _reopenButton.Font = new Font("Segoe UI Semibold", 8.2F);
         _reopenButton.Click += (_, _) => SetCollapsed(false);
@@ -472,9 +472,7 @@ internal sealed class SelectionInspector : Panel
     }
 
     /// <summary>The report uses plain-ASCII unit names for its PDF fonts; the screen shows the usual symbols.</summary>
-    private static string DisplayUnits(string value) => value
-        .Replace("degF", "°F", StringComparison.Ordinal)
-        .Replace("degC", "°C", StringComparison.Ordinal);
+    private static string DisplayUnits(string value) => EngineeringText.Pretty(value);
 
     private static string FriendlyType(string reportType)
     {
@@ -596,7 +594,7 @@ internal sealed class SelectionInspector : Panel
                 Name = "InspectorUpdateButton",
                 Text = _session.UpdateText,
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(42, 135, 91),
+                BackColor = Color.FromArgb(14, 111, 230),
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI Semibold", 9F),
                 Cursor = Cursors.Hand
@@ -610,7 +608,7 @@ internal sealed class SelectionInspector : Panel
                 Text = "Cancel",
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.White,
-                ForeColor = Color.FromArgb(28, 69, 108),
+                ForeColor = Color.FromArgb(16, 45, 84),
                 Font = new Font("Segoe UI", 9F),
                 Cursor = Cursors.Hand,
                 Enabled = _sessionDirty
@@ -644,7 +642,7 @@ internal sealed class SelectionInspector : Panel
                     Text = text,
                     FlatStyle = FlatStyle.Flat,
                     BackColor = Color.White,
-                    ForeColor = Color.FromArgb(28, 69, 108),
+                    ForeColor = Color.FromArgb(16, 45, 84),
                     Font = new Font("Segoe UI", 9F),
                     Cursor = Cursors.Hand,
                     Height = DpiScaling.Scale(30)
@@ -940,9 +938,25 @@ internal sealed class SelectionInspector : Panel
                 continue;
             }
             first = false;
-            Write(section.Heading.ToUpperInvariant() + "\r\n", heading, Color.FromArgb(31, 78, 121));
+            Write(section.Heading.ToUpperInvariant() + "\r\n", heading, Color.FromArgb(18, 52, 96));
             foreach (var line in section.Lines)
             {
+                if (line.Kind == DuctSystemPdfLineKind.Variable)
+                {
+                    // A variable definition: the symbol, then what it is and where its value comes from.
+                    _calculations.SelectionStart = _calculations.TextLength;
+                    EngineeringMathRichText.AppendStyledEquation(_calculations,
+                        (line.Formula + "  ", EngineeringMathRichText.MathTone.Formula));
+                    Write($"    {DisplayUnits(line.HighlightValue)}\r\n", body, RibbonPalette.Caption);
+                    continue;
+                }
+                if (line.Kind is DuctSystemPdfLineKind.TableHeader or DuctSystemPdfLineKind.TableRow or DuctSystemPdfLineKind.TableRowSelected)
+                {
+                    var cells = string.Join("   ", line.Cells.Where(cell => cell.Length > 0));
+                    Write(DisplayUnits(cells) + "\r\n", line.Kind == DuctSystemPdfLineKind.TableRow ? body : value,
+                        line.Kind == DuctSystemPdfLineKind.TableRowSelected ? Color.FromArgb(14, 111, 230) : RibbonPalette.Ink);
+                    continue;
+                }
                 // Report lines often end with "=": the value then follows on the same line.
                 var formula = line.Formula.TrimEnd();
                 var endsWithEquals = formula.EndsWith('=');
@@ -966,7 +980,7 @@ internal sealed class SelectionInspector : Panel
                         Write($"    = {DisplayUnits(line.InputSubstitution)}\r\n", body, Color.FromArgb(62, 78, 94));
                     if (!string.IsNullOrWhiteSpace(line.HighlightValue))
                         Write($"    = {DisplayUnits(line.HighlightValue)}\r\n", value,
-                            line.HighlightAsInput ? Color.FromArgb(42, 110, 60) : Color.FromArgb(31, 78, 121));
+                            line.HighlightAsInput ? Color.FromArgb(42, 110, 60) : Color.FromArgb(18, 52, 96));
                     continue;
                 }
                 Write(DisplayUnits(formula), body, RibbonPalette.Ink);
@@ -978,7 +992,7 @@ internal sealed class SelectionInspector : Panel
                 }
                 if (!string.IsNullOrWhiteSpace(line.HighlightValue))
                     Write(endsWithEquals ? $" {DisplayUnits(line.HighlightValue)}" : $"\r\n    = {DisplayUnits(line.HighlightValue)}", value,
-                        line.HighlightAsInput ? Color.FromArgb(42, 110, 60) : Color.FromArgb(31, 78, 121));
+                        line.HighlightAsInput ? Color.FromArgb(42, 110, 60) : Color.FromArgb(18, 52, 96));
                 Write("\r\n", body, RibbonPalette.Ink);
             }
             Write("\r\n", body, RibbonPalette.Ink);
@@ -1277,7 +1291,7 @@ internal sealed class SelectionInspector : Panel
                 AutoEllipsis = true,
                 UseMnemonic = false,
                 TextAlign = ContentAlignment.MiddleLeft,
-                ForeColor = Color.FromArgb(31, 78, 121),
+                ForeColor = Color.FromArgb(18, 52, 96),
                 Font = new Font("Segoe UI Semibold", 8.5F)
             };
             toolTips.SetToolTip(_caption, caption);
@@ -1535,14 +1549,14 @@ internal sealed class SelectionInspector : Panel
             var bounds = new Rectangle((Width - size) / 2, (Height - size) / 2, size, size);
             if (kind == LayoutNodeType.Duct)
             {
-                using var pen = new Pen(Color.FromArgb(21, 83, 99), 2F);
+                using var pen = new Pen(Color.FromArgb(10, 88, 187), 2F);
                 using var fill = new SolidBrush(Color.FromArgb(220, 235, 247));
                 var duct = new Rectangle(bounds.Left, bounds.Top + bounds.Height / 3, bounds.Width, bounds.Height / 3);
                 e.Graphics.FillRectangle(fill, duct);
                 e.Graphics.DrawRectangle(pen, duct);
                 return;
             }
-            LayoutIconPainter.Draw(e.Graphics, kind, bounds, Color.FromArgb(21, 83, 99), Group);
+            LayoutIconPainter.Draw(e.Graphics, kind, bounds, Color.FromArgb(10, 88, 187), Group);
         }
     }
 
@@ -1581,12 +1595,12 @@ internal sealed class SelectionInspector : Panel
             e.Graphics.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
             if (_selected)
             {
-                using var underline = new SolidBrush(Color.FromArgb(31, 111, 168));
+                using var underline = new SolidBrush(Color.FromArgb(14, 111, 230));
                 e.Graphics.FillRectangle(underline, 1, Height - 3, Width - 2, 3);
             }
             using var font = new Font("Segoe UI", 9F, _selected ? FontStyle.Bold : FontStyle.Regular);
             TextRenderer.DrawText(e.Graphics, Text, font, ClientRectangle,
-                _selected ? Color.FromArgb(22, 65, 102) : RibbonPalette.Caption,
+                _selected ? Color.FromArgb(11, 31, 59) : RibbonPalette.Caption,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             if (Focused && ShowFocusCues)
                 ControlPaint.DrawFocusRectangle(e.Graphics, new Rectangle(3, 3, Width - 6, Height - 6));
@@ -1627,7 +1641,7 @@ internal sealed class SelectionInspector : Panel
             using (var path = UiPolish.CreateRoundedPath(new RectangleF(0, 0, Width - 1, Height - 1), 4))
             using (var fill = new SolidBrush(Color.FromArgb(232, 239, 246)))
                 e.Graphics.FillPath(fill, path);
-            using var arrow = new SolidBrush(Color.FromArgb(31, 78, 121));
+            using var arrow = new SolidBrush(Color.FromArgb(18, 52, 96));
             var cy = Height / 2f;
             var u = DpiScaling.Factor;
             e.Graphics.FillPolygon(arrow, _expanded
@@ -1636,7 +1650,7 @@ internal sealed class SelectionInspector : Panel
             using var font = new Font("Segoe UI Semibold", 9F);
             var textLeft = DpiScaling.Scale(24);
             TextRenderer.DrawText(e.Graphics, Text, font, new Rectangle(textLeft, 0, Width - textLeft - DpiScaling.Scale(4), Height),
-                Color.FromArgb(22, 50, 78), TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
+                Color.FromArgb(11, 31, 59), TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
             if (Focused && ShowFocusCues)
                 ControlPaint.DrawFocusRectangle(e.Graphics, new Rectangle(2, 2, Width - 4, Height - 4));
         }

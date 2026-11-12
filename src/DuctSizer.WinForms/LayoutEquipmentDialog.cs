@@ -202,7 +202,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
                 : grd ? "Select the outlet type and enter its airflow and pressure drop"
                 : "Leaving-air temperature and coil pressure drop",
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(28, 69, 108),
+            ForeColor = Color.FromArgb(16, 45, 84),
             Font = new Font("Segoe UI Semibold", 9F),
             TextAlign = ContentAlignment.MiddleLeft
         });
@@ -277,7 +277,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
         }
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
-        var ok = new Button { Text = "Save", DialogResult = DialogResult.None, Width = 90, Height = 32, BackColor = Color.FromArgb(42, 135, 91), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+        var ok = new Button { Text = "Save", DialogResult = DialogResult.None, Width = 90, Height = 32, BackColor = Color.FromArgb(14, 111, 230), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 32, FlatStyle = FlatStyle.Flat };
         UiPolish.RoundButton(ok, 7);
         UiPolish.RoundButton(cancel, 7);
@@ -323,7 +323,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
         PopulateGrdNeckChoices(node.GrdNeckDiameterIn);
         _grdPerformanceResult.AutoSize = true;
         _grdPerformanceResult.MaximumSize = new Size(260, 0);
-        _grdPerformanceResult.ForeColor = Color.FromArgb(28, 69, 108);
+        _grdPerformanceResult.ForeColor = Color.FromArgb(16, 45, 84);
         _grdPerformanceResult.Font = new Font("Segoe UI Semibold", 8F);
         // Only a GRD with a published selection takes its pressure drop from the catalog; every other component
         // (coil, filter, custom, fan static pressure, source pressure) keeps the box editable.

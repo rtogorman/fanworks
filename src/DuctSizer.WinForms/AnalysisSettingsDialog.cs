@@ -54,7 +54,7 @@ internal sealed class AnalysisSettingsDialog : DpiScaledForm
             Text = "Expected value ranges",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(22, 50, 78),
+            ForeColor = Color.FromArgb(11, 31, 59),
             Font = new Font("Segoe UI Semibold", 11F)
         }, 0, 0);
         root.Controls.Add(new Label
@@ -107,7 +107,7 @@ internal sealed class AnalysisSettingsDialog : DpiScaledForm
         var save = new Button
         {
             Name = "AnalysisSettingsSaveButton", Text = "Save", Width = 100, Height = 32,
-            BackColor = Color.FromArgb(42, 135, 91), ForeColor = Color.White, FlatStyle = FlatStyle.Flat
+            BackColor = Color.FromArgb(14, 111, 230), ForeColor = Color.White, FlatStyle = FlatStyle.Flat
         };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 32, FlatStyle = FlatStyle.Flat };
         var clear = new Button { Name = "AnalysisSettingsClearButton", Text = "Clear All", Width = 96, Height = 32, FlatStyle = FlatStyle.Flat };

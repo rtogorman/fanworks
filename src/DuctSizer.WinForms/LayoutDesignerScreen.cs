@@ -282,7 +282,7 @@ internal sealed partial class LayoutDesignerScreen
         _layoutSummaryReopenButton.Height = 26;
         _layoutSummaryReopenButton.Visible = false;
         _layoutSummaryReopenButton.FlatStyle = FlatStyle.Flat;
-        _layoutSummaryReopenButton.ForeColor = Color.FromArgb(28, 69, 108);
+        _layoutSummaryReopenButton.ForeColor = Color.FromArgb(16, 45, 84);
         _layoutSummaryReopenButton.BackColor = Color.FromArgb(235, 242, 247);
         _layoutSummaryReopenButton.Font = new Font("Segoe UI Semibold", 8.2F);
         _layoutSummaryReopenButton.Click += (_, _) => SetLayoutSummaryCollapsed(false);
@@ -847,7 +847,7 @@ internal sealed partial class LayoutDesignerScreen
         RefreshLayoutDesigner();
         _host.DuctSystemScreen.RefreshDuctSystemGrid();
         _layoutStatusLabel.Text = status;
-        _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+        _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
         UpdateLayoutHistoryButtons();
     }
 
@@ -869,19 +869,19 @@ internal sealed partial class LayoutDesignerScreen
         _selectedLayoutFittingGroup = null;
         _layoutRearrangeButton.Text = _layoutRearrangeMode ? "Done" : "Move";
         _layoutRearrangeButton.BackColor = _layoutRearrangeMode
-            ? Color.FromArgb(31, 120, 180)
+            ? Color.FromArgb(14, 111, 230)
             : Color.White;
         _layoutRearrangeButton.ForeColor = _layoutRearrangeMode
             ? Color.White
             : Color.FromArgb(34, 62, 88);
         _layoutRearrangeButton.FlatAppearance.BorderColor = _layoutRearrangeMode
-            ? Color.FromArgb(31, 120, 180)
+            ? Color.FromArgb(14, 111, 230)
             : Color.FromArgb(180, 194, 207);
         _layoutStatusLabel.Text = _layoutRearrangeMode
             ? "Move mode is active. Drag components to clean up the drawing; all existing connections and calculations remain unchanged."
             : "Move mode ended. Component placement, connection, selection, and editing are active again.";
         _layoutStatusLabel.ForeColor = _layoutRearrangeMode
-            ? Color.FromArgb(31, 120, 180)
+            ? Color.FromArgb(14, 111, 230)
             : Color.FromArgb(72, 92, 110);
         NotifyLayoutCommandStateChanged();
     }
@@ -1240,7 +1240,7 @@ internal sealed partial class LayoutDesignerScreen
             InsertLayoutNodeIntoConnection(node, ductConnection);
             _layoutStatusLabel.Text = $"Inserted {node.Id} into the existing duct. "
                                       + $"It was split along the {insertionAxis} axis; both segments inherited its inputs and updated lengths. Review or re-size both segments as needed.";
-            _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+            _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
         }
         CommitLayoutHistoryState(historyState);
         _host.DuctSystemScreen.SaveDuctSystem();
@@ -1253,7 +1253,7 @@ internal sealed partial class LayoutDesignerScreen
                 ? $"Placed {node.Id} on {LayoutConnectionCaption(insertionConnection!.Value)} without splitting the duct."
                 : $"Placed {node.Id} at the selected location without connecting it. Drag between connector circles to create a duct.";
             _layoutStatusLabel.ForeColor = type == LayoutNodeType.CalculationPoint
-                ? Color.FromArgb(31, 120, 180)
+                ? Color.FromArgb(14, 111, 230)
                 : Color.Firebrick;
         }
     }
@@ -1943,7 +1943,7 @@ internal sealed partial class LayoutDesignerScreen
                 RefreshLayoutDesigner();
                 _host.DuctSystemScreen.RefreshDuctSystemGrid();
                 _layoutStatusLabel.Text = $"Moved {node.Id} onto {LayoutConnectionCaption(observedConnection)} without changing the duct topology.";
-                _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+                _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
             }
             else
             {
@@ -1959,7 +1959,7 @@ internal sealed partial class LayoutDesignerScreen
             _host.DuctSystemScreen.SaveDuctSystem();
             RefreshLayoutDesigner();
             _layoutStatusLabel.Text = $"Moved {node.Id} visually. Existing connections, duct data, and fitting data were preserved.";
-            _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+            _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
             return;
         }
         var parentId = !string.IsNullOrWhiteSpace(node.ParentNodeId)
@@ -2007,7 +2007,7 @@ internal sealed partial class LayoutDesignerScreen
         RefreshLayoutDesigner();
         _host.DuctSystemScreen.RefreshDuctSystemGrid();
         _layoutStatusLabel.Text = $"Moved {node.Id} without creating or changing any nearby connection.";
-        _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+        _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
     }
 
     private void ActivateLayoutNode(SavedLayoutNode node)
@@ -3050,7 +3050,7 @@ internal sealed partial class LayoutDesignerScreen
         _layoutCriticalPathButton.BackColor = _layoutCriticalPathHighlighted
             ? Color.FromArgb(230, 145, 31) : Color.White;
         _layoutCriticalPathButton.ForeColor = _layoutCriticalPathHighlighted
-            ? Color.White : Color.FromArgb(28, 69, 108);
+            ? Color.White : Color.FromArgb(16, 45, 84);
         NotifyLayoutCommandStateChanged();
     }
 
@@ -3454,7 +3454,7 @@ internal sealed partial class LayoutDesignerScreen
         }
         ApplyBalancedBoundaryAirflows(boundaries);
         _layoutStatusLabel.Text = "Source and sink airflow balance updated. Connected ductwork is red until re-sized.";
-        _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+        _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
         return true;
     }
 
@@ -3755,7 +3755,7 @@ internal sealed partial class LayoutDesignerScreen
             {
                 _layoutCanvas?.Invalidate();
                 _layoutStatusLabel.Text = "Back to the standard view.";
-                _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+                _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
             }
             return;
         }
@@ -3776,7 +3776,7 @@ internal sealed partial class LayoutDesignerScreen
             LayoutViewMode.IsometricNegative => "Isometric Negative view active: the positive grid is rotated 90 degrees counterclockwise (+Y follows the former +X direction; +X follows the former -Y direction).",
             _ => "Isometric Positive view active."
         };
-        _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+        _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
     }
 
     private const string FreeViewEntry = "Free view";
@@ -3797,7 +3797,7 @@ internal sealed partial class LayoutDesignerScreen
         }
         _layoutStatusLabel.Text = "Free view: Ctrl + middle-drag to rotate, or click a corner of the cube. Choose a view in the list to snap back; "
                                   + "place and move components in a standard view.";
-        _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+        _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
     }
 
     private void RemoveFreeViewEntry()

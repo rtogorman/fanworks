@@ -50,7 +50,7 @@ internal sealed class PdfBackgroundImportDialog : DpiScaledForm
             Text = "PDF PLAN BACKGROUND\r\nChoose a page, define its architectural scale, and place its center in the system coordinates.",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 10F),
-            ForeColor = Color.FromArgb(28, 69, 108),
+            ForeColor = Color.FromArgb(16, 45, 84),
             TextAlign = ContentAlignment.MiddleLeft
         };
         root.Controls.Add(heading, 0, 0);
@@ -143,7 +143,7 @@ internal sealed class PdfBackgroundImportDialog : DpiScaledForm
         _import.Name = "PdfImportButton";
         _import.Text = "Import Background";
         _import.Size = new Size(200, 32);
-        _import.BackColor = Color.FromArgb(42, 135, 91);
+        _import.BackColor = Color.FromArgb(14, 111, 230);
         _import.ForeColor = Color.White;
         _import.FlatStyle = FlatStyle.Flat;
         var cancel = new Button
@@ -305,7 +305,7 @@ internal sealed class PdfBackgroundImportDialog : DpiScaledForm
     private static Label Section(string text) => new()
     {
         Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft,
-        Font = new Font("Segoe UI Semibold", 8F), ForeColor = Color.FromArgb(28, 69, 108),
+        Font = new Font("Segoe UI Semibold", 8F), ForeColor = Color.FromArgb(16, 45, 84),
         Padding = new Padding(0, 8, 0, 2)
     };
 
