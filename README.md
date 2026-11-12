@@ -197,6 +197,27 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.98.0
+
+- **Pop-up windows**: every editor and settings window lays out its fields to suit their content — numbers in
+  short boxes, names and descriptions in wider ones, drop-downs as wide as their longest choice — level with
+  their labels. Lists have roomier, clearly selected rows. Offset positions are labelled ΔX / ΔY / ΔZ.
+- **Selection Inspector**: each X / Y / Z (or ΔX / ΔY / ΔZ) label sits directly beside its box, and the caption
+  reads, for example, "Offset from Fan-001 (ft)".
+- **Drawing shortcuts**: Esc deselects the selected (or just-dropped) item; Delete removes it at once (Ctrl+Z
+  restores it); right-clicking a component or duct offers **Edit** (opens it in the Selection Inspector) and
+  **Delete**. The toolbar's Delete button still asks first.
+- **Analysis Settings** (Analysis ribbon): optional low and high values you expect for duct pressure drop rate
+  (in. w.c./100 ft), duct velocity, fitting velocity and fitting pressure loss. FanWorks supplies no defaults; an
+  empty value is not checked. Once saved (with the project, file format 16), the "Highest pressure drops" list
+  shows **Within expected range** — Yes, No, or Not set — for each duct and fitting, with the comparison in a
+  tooltip. A duct in transitional flow is within range only if its whole friction band is.
+- **Pressure drop along each path** (Analysis tab): a line graph with one line per path from each start component
+  to each end component — component number along the path across, running pressure drop (in. w.c.) up — with the
+  critical path in amber. A path with an item that cannot be calculated is left out and named in a note.
+- **Report title page**: condensed; shows the number of paths (branches) and the same graph, and the System Summary
+  is a donut of duct segments, fittings and components, each labelled with its quantity.
+
 ## What changed in 0.97.0 (polish)
 
 - **Display scaling**: FanWorks now scales to the Windows display setting (125 %, 150 %, 175 % ...). Before, text

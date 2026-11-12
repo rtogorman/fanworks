@@ -145,3 +145,14 @@ while an edit is being applied.
 `DuctSystemPdf.BuildItemSheets` lays out one item per sheet (left column `DrawSideRows`, worksheet
 `DrawCalculationBlocks` in two columns) and continues on extra sheets when needed; page numbers are counted in a
 first pass. `BuildTitleSheet` receives the report contents for its page list.
+
+## Analysis ranges and path profiles (v0.98)
+
+`AnalysisExpectations` (Core, `DuctSystemDocument.AnalysisExpectations`, schema 16) holds optional SI ranges;
+`AnalysisRangeCheck` compares a duct's friction rate (both transitional bounds) and velocity, and a fitting's
+reference velocity and loss. `SystemPathProfiles.Build` walks every root-to-terminal route with the same charges as
+`CriticalPathAnalyzer.Analyze` (verified against it) and returns each route's items with running totals. The
+Analysis tab (`PressureProfileChart`) and the report title sheet both draw `DuctSystemPdfPressureProfile`, built
+once by `DuctSystemScreen.BuildPressureProfile` in project units. Pop-up forms get a shared field-layout pass
+(`DialogStyle`, attached by `DpiScaledForm`; the main window opts out).
+

@@ -481,7 +481,20 @@ Wine DPI test: `/home/claude/dpi.sh 168` then screenshot at 2688x1680 (`/home/cl
   (duct segments / fittings / components) with leader labels and quantities.
 - Q6 All pop-up forms: inputs far too long, poor formatting (e.g. Sizing Criteria). Redesign consistently.
 
-| Q1 | Pending | Q2 | Pending | Q3 | Pending | Q4 | Pending | Q5 | Pending | Q6 | Pending |
+| Q1 | Done | Q2 | Done | Q3 | Done | Q4 | Done | Q5 | Done | Q6 | Done |
+
+Record:
+- Q6: `DialogStyle` (shared field-layout pass for every `DpiScaledForm` except `MainForm`); axis labels sized to text
+  (`LayoutDialogControls.CreateLocationEditor/CreatePositionEditor`).
+- Q1: `InspectorAxisGroup`, `InlineEditRow.ForPosition`, sentence-case captions.
+- Q2: Esc/Delete in `TryHandleCommandKey`; right-click menu `LayoutItemMenu`; Delete key / menu delete skip the
+  confirmation (`DeleteSelectedItemImmediately`, undoable), the toolbar Delete still asks.
+- Q3: `AnalysisExpectations`/`AnalysisRangeCheck` (Core), schema 16, `AnalysisSettingsDialog`, top-10 column "Range".
+- Q4: `SystemPathProfiles` (Core, checked against the critical-path analysis), `PressureProfileChart`.
+- Q5: `BuildTitleSheet` rewritten (condensed project block, contents + donut left, path graph right).
+- Checks: engine 71/71 (6 new), interface 23/23 at 100 % and 150 % under Wine (2 new groups).
+- Test project with 4 paths: `/home/claude/mkproj` writes `/tmp/branches.fanworks`; report with
+  `REPORTPROJ=branches /home/claude/report.sh`.
 
 ### Resume notes (update as work proceeds)
 
