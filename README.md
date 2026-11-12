@@ -197,7 +197,7 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
-## What changed in 0.98.0
+## What changed in 0.98.0 and 0.98.1
 
 - **Pop-up windows**: every editor and settings window lays out its fields to suit their content — numbers in
   short boxes, names and descriptions in wider ones, drop-downs as wide as their longest choice — level with
