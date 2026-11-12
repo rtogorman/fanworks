@@ -88,8 +88,8 @@ internal sealed partial class DuctSystemScreen
         // SMACNA duct construction and leakage (pressure class, seal class, allowable leakage).
         overviewLayout.Controls.Add(Tile("Duct pressure class", _analysisPressureClassValue, _analysisPressureClassNote), 0, 3);
         overviewLayout.Controls.Add(Tile("Seal class and leakage class", _analysisSealClassValue, _analysisSealClassNote), 1, 3);
-        overviewLayout.Controls.Add(Tile("Allowable leakage factor F", _analysisFactorValue, _analysisFactorNote), 0, 4);
-        overviewLayout.Controls.Add(Tile("Allowable duct leakage", _analysisLeakageValue, _analysisLeakageNote), 1, 4);
+        overviewLayout.Controls.Add(Tile("Leakage factor F", _analysisFactorValue, _analysisFactorNote), 0, 4);
+        overviewLayout.Controls.Add(Tile("Duct leakage", _analysisLeakageValue, _analysisLeakageNote), 1, 4);
         _analysisLeakageDetail.Dock = DockStyle.Fill;
         _analysisLeakageDetail.Margin = new Padding(0, 4, 8, 0);
         _analysisLeakageDetail.Font = new Font("Segoe UI", 8.25F);
@@ -116,7 +116,7 @@ internal sealed partial class DuctSystemScreen
         var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = Color.White };
         topLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         topLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        topLayout.Controls.Add(SectionTitle("Highest pressure drops (top 10)"), 0, 0);
+        topLayout.Controls.Add(SectionTitle("Critical path pressure drops"), 0, 0);
         _analysisTopLossGrid.Name = "AnalysisTopLossGrid";
         _analysisTopLossGrid.Dock = DockStyle.Fill;
         _analysisTopLossGrid.ReadOnly = true;
@@ -142,7 +142,7 @@ internal sealed partial class DuctSystemScreen
         foreach (var (name, header, width) in new[]
                  {
                      ("Rank", "#", 34), ("Item", "Item", 90), ("Kind", "Kind", 110), ("Loss", "Pressure drop", 120),
-                     ("Critical", "Critical path", 90), ("Range", "Within expected range", 110)
+                     ("Range", "Within expected range", 110)
                  })
             _analysisTopLossGrid.Columns.Add(new DataGridViewTextBoxColumn
             {
@@ -215,41 +215,53 @@ internal sealed partial class DuctSystemScreen
     /// saved flow path) and coils, filters, GRDs and custom components (entered or selected drop). Items whose loss
     /// cannot be calculated are left out here; they are listed on the Project tab's Errors list.
     /// </summary>
-    internal IReadOnlyList<PressureDropEntry> HighestPressureDrops(int count = 10)
+    /// <summary>
+    /// Every item on the critical path with its pressure drop on that path (a junction fitting at the critical
+    /// path's flow path), highest first. The drops add up to the critical-path total. Empty when no complete critical
+    /// path exists.
+    /// </summary>
+    internal IReadOnlyList<PressureDropEntry> CriticalPathDrops()
     {
-        var entries = new List<PressureDropEntry>();
-        foreach (var duct in _ductSystem.Ducts)
-            entries.Add(new PressureDropEntry(duct.Id, "Duct", SystemSolver.DuctLoss(_ductSystem, duct.Sequence),
-                _criticalPathItemKeys.Contains(DuctKey(duct.Sequence)),
-                AnalysisRangeCheck.CheckDuct(_ductSystem.AnalysisExpectations, duct)));
-        foreach (var fitting in _ductSystem.Fittings)
-        {
-            var kind = "Fitting";
-            try
+        var profiles = SystemPathProfiles.Build(_ductSystem);
+        if (profiles.Truncated || profiles.CompletePathCount != profiles.Paths.Count
+            || profiles.Paths.FirstOrDefault(path => path.IsCritical) is not { } critical)
+            return Array.Empty<PressureDropEntry>();
+        var ducts = _ductSystem.Ducts.ToDictionary(duct => DuctKey(duct.Sequence), StringComparer.Ordinal);
+        var fittings = _ductSystem.Fittings.ToDictionary(fitting => FittingKey(fitting.Sequence), StringComparer.Ordinal);
+        return critical.Steps
+            .Select((step, order) =>
             {
-                kind = fitting.Calculate().Definition.Category;
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException
-                                           or KeyNotFoundException)
-            {
-                // Its loss below is NaN, so it is left out of the list.
-            }
-            entries.Add(new PressureDropEntry(fitting.Id, kind, SystemSolver.FittingLoss(_ductSystem, fitting.Sequence),
-                _criticalPathItemKeys.Contains(FittingKey(fitting.Sequence)),
-                AnalysisRangeCheck.CheckFitting(_ductSystem.AnalysisExpectations, fitting)));
-        }
-        foreach (var node in _ductSystem.LayoutNodes.Where(node => node.IsDefined
-                     && node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd
-                         or LayoutNodeType.CustomComponent))
-            entries.Add(new PressureDropEntry(node.Id, node.Type == LayoutNodeType.Grd ? "GRD"
-                    : node.Type == LayoutNodeType.CustomComponent ? "Custom component" : node.Type.ToString(),
-                node.PressureDropPa, _criticalPathItemKeys.Contains(LayoutKey(node.Sequence)), NoRange));
-        return entries
-            .Where(entry => double.IsFinite(entry.LossPa) && entry.LossPa > 0)
-            .OrderByDescending(entry => entry.LossPa)
-            .ThenBy(entry => entry.Id, StringComparer.OrdinalIgnoreCase)
-            .Take(count)
+                var kind = step.Kind;
+                var range = NoRange;
+                if (ducts.TryGetValue(step.ItemKey, out var duct))
+                    range = AnalysisRangeCheck.CheckDuct(_ductSystem.AnalysisExpectations, duct);
+                else if (fittings.TryGetValue(step.ItemKey, out var fitting))
+                {
+                    range = AnalysisRangeCheck.CheckFitting(_ductSystem.AnalysisExpectations, fitting);
+                    try
+                    {
+                        kind = fitting.Calculate().Definition.Category;
+                    }
+                    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException
+                                                   or KeyNotFoundException)
+                    {
+                        kind = "Fitting";
+                    }
+                }
+                return (Entry: new PressureDropEntry(step.ItemId, kind, step.LossPa, true, range), Order: order);
+            })
+            .OrderByDescending(item => item.Entry.LossPa)
+            .ThenBy(item => item.Order)
+            .Select(item => item.Entry)
             .ToArray();
+    }
+
+    /// <summary>Row shading for the critical-path list: strongest for the largest drop, fading to white.</summary>
+    private static Color DropShade(double lossPa, double largestPa)
+    {
+        var share = largestPa > 0 ? Math.Clamp(lossPa / largestPa, 0, 1) : 0;
+        static int Blend(int strong, double t) => (int)Math.Round(255 + (strong - 255) * t);
+        return Color.FromArgb(Blend(250, share), Blend(214, share), Blend(170, share));
     }
 
     private void RefreshAnalysisSummary()
@@ -283,13 +295,14 @@ internal sealed partial class DuctSystemScreen
         _analysisTopLossGrid.Rows.Clear();
         _analysisTopLossGrid.Columns["Range"]!.Visible = _ductSystem.AnalysisExpectations.AnySet;
         var rank = 1;
-        foreach (var entry in HighestPressureDrops())
+        var drops = CriticalPathDrops();
+        var largest = drops.Count == 0 ? 0.0 : drops[0].LossPa;
+        foreach (var entry in drops)
         {
             var index = _analysisTopLossGrid.Rows.Add(rank++, entry.Id, entry.Kind, FormatSystemTotal(entry.LossPa),
-                entry.OnCriticalPath ? "Yes" : string.Empty, RangeText(entry.Range.Status));
+                RangeText(entry.Range.Status));
             var row = _analysisTopLossGrid.Rows[index];
-            if (entry.OnCriticalPath)
-                row.Cells["Critical"].Style.ForeColor = Color.FromArgb(174, 104, 0);
+            row.DefaultCellStyle.BackColor = DropShade(entry.LossPa, largest);
             var rangeCell = row.Cells["Range"];
             rangeCell.ToolTipText = RangeToolTip(entry.Range);
             rangeCell.Style.ForeColor = entry.Range.Status switch
@@ -320,7 +333,9 @@ internal sealed partial class DuctSystemScreen
     {
         var leakage = BuildLeakageSummary();
         _analysisPressureClassValue.Text = leakage.PressureClass;
-        _analysisPressureClassNote.Text = "Per SMACNA HVAC Duct Construction Standards";
+        _analysisPressureClassNote.Text = leakage.PressureBasis.StartsWith("Pressure class set", StringComparison.Ordinal)
+            ? "Override (Customize Duct Class)"
+            : "Per SMACNA HVAC Duct Construction Standards";
         _analysisSealClassValue.Text = leakage.SealClass;
         _analysisSealClassNote.Text = leakage.LeakageClass + " (SMACNA Air Duct Leakage Test Manual)";
         _analysisFactorValue.Text = leakage.Factor;
@@ -391,6 +406,33 @@ internal sealed partial class DuctSystemScreen
         };
     }
 
+    /// <summary>Customize Duct Class: shows the calculated classes and saves any overrides, then recalculates.</summary>
+    internal void EditDuctClass()
+    {
+        var expectations = _ductSystem.AnalysisExpectations;
+        var withoutOverrides = expectations.Copy();
+        withoutOverrides.PressureClassOverrideInWc = null;
+        withoutOverrides.SealClassOverride = null;
+        // The dialog shows what FanWorks calculates on its own, so analyse without the saved overrides.
+        _ductSystem.AnalysisExpectations = withoutOverrides;
+        SystemLeakageResult calculated;
+        try
+        {
+            calculated = SmacnaLeakage.Analyze(_ductSystem);
+        }
+        finally
+        {
+            _ductSystem.AnalysisExpectations = expectations;
+        }
+        using var dialog = new DuctClassDialog(calculated, expectations, _host._currentUnits);
+        if (dialog.ShowDialog(_host) != DialogResult.OK)
+            return;
+        expectations.PressureClassOverrideInWc = dialog.PressureClassOverride;
+        expectations.SealClassOverride = dialog.SealClassOverride;
+        SaveDuctSystem();
+        RefreshAnalysisSummary();
+    }
+
     /// <summary>Opens Analysis Settings (expected ranges) and applies a save.</summary>
     internal void EditAnalysisSettings()
     {
@@ -455,7 +497,7 @@ internal sealed partial class DuctSystemScreen
         var result = computed ?? SmacnaLeakage.Analyze(_ductSystem);
         var imperial = _host._currentUnits == UnitSystem.Imperial;
         const string criteria = "Per SMACNA HVAC Duct Construction Standards - Metal and Flexible (pressure and seal class) and "
-                                + "SMACNA HVAC Air Duct Leakage Test Manual (leakage class CL); allowable leakage F = CL x P^0.65.";
+                                + "SMACNA HVAC Air Duct Leakage Test Manual (leakage class CL); leakage factor F = CL x P^0.65.";
         string Pressure(double inWc) => imperial
             ? $"{inWc.ToString("0.###", CultureInfo.CurrentCulture)} in. w.c."
             : $"{UnitConversions.InchesWaterToPa(inWc).ToString("0", CultureInfo.CurrentCulture)} Pa";
@@ -467,13 +509,19 @@ internal sealed partial class DuctSystemScreen
         var classText = imperial
             ? $"{pressureClass.ToString("0.#", CultureInfo.CurrentCulture)} in. w.c."
             : $"{(pressureClass switch { 0.5 => 125, 1 => 250, 2 => 500, 3 => 750, 4 => 1000, 6 => 1500, _ => 2500 })} Pa ({pressureClass:0.#} in. w.c.)";
-        var basis = $"Design pressure {Pressure(result.DesignPressureInWc ?? 0)} ({result.DesignPressureBasis}), rounded up to the next SMACNA class";
+        var basis = result.PressureClassOverridden
+            ? "Pressure class set in Customize Duct Class"
+              + (result.CalculatedPressureClassInWc is double calculatedClass
+                  ? $" (calculated: {calculatedClass.ToString("0.#", CultureInfo.CurrentCulture)} in. w.c.)" : string.Empty)
+            : $"Design pressure {Pressure(result.DesignPressureInWc ?? 0)} ({result.DesignPressureBasis}), rounded up to the next SMACNA class";
         var sealDetail = seal switch
         {
             SmacnaSealClass.A => "All transverse joints, longitudinal seams and duct wall penetrations sealed",
             SmacnaSealClass.B => "All transverse joints and longitudinal seams sealed",
             _ => "Transverse joints sealed"
-        };
+        } + (result.SealClassOverridden && result.RecommendedSealClass is SmacnaSealClass recommendedSeal && recommendedSeal != seal
+            ? $" (set in Customize Duct Class; recommended: Seal Class {recommendedSeal})"
+            : result.SealClassOverridden ? " (set in Customize Duct Class)" : string.Empty);
         static string ShapeName(DuctShape shape) => shape == DuctShape.Round ? "round" : "rectangular";
         var shapes = result.ByShape.Count > 0
             ? result.ByShape.Select(x => x.Shape).ToArray()
@@ -492,7 +540,7 @@ internal sealed partial class DuctSystemScreen
 
         var totalCfm = result.TotalLeakageCfm;
         if (result.ByShape.Count > 1)
-            lines.Add($"Total allowable leakage = {string.Join(" + ", result.ByShape.Select(x => x.LeakageCfm.ToString("0.##", CultureInfo.InvariantCulture)))} = {totalCfm:0.##} cfm");
+            lines.Add($"Total duct leakage = {string.Join(" + ", result.ByShape.Select(x => x.LeakageCfm.ToString("0.##", CultureInfo.InvariantCulture)))} = {totalCfm:0.##} cfm");
         var leakage = imperial
             ? $"{totalCfm.ToString("0.#", CultureInfo.CurrentCulture)} cfm"
             : $"{UnitConversions.M3PerSToLps(UnitConversions.CfmToM3PerS(totalCfm)).ToString("0.#", CultureInfo.CurrentCulture)} L/s";

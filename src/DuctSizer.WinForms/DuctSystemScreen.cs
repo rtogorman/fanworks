@@ -3413,7 +3413,7 @@ internal sealed partial class DuctSystemScreen
         {
             var leakageClass = SmacnaLeakage.LeakageClass(seal, area.Shape);
             var factor = SmacnaLeakage.AllowableLeakageFactor(leakageClass, pressureClass);
-            sections.Add(new DuctSystemPdfCalculationSection("ALLOWABLE LEAKAGE OF THIS ITEM (SMACNA)", new[]
+            sections.Add(new DuctSystemPdfCalculationSection("DUCT LEAKAGE OF THIS ITEM (SMACNA)", new[]
             {
                 L($"System pressure class {pressureClass:0.#} in. w.c.; Seal Class {seal}; leakage class C_L = {leakageClass} ({(round ? "round" : "rectangular")} metal duct)."),
                 E("F = C_{L} P^{0.65}", $"{factor:0.###} cfm/100 ft2", $"C_L = {leakageClass}; P = {pressureClass:0.#} in. w.c."),

@@ -78,7 +78,7 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 16;
+    public const int CurrentSchemaVersion = 17;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -97,6 +97,12 @@ public sealed class DuctSystemDocument
     /// and loss), used only to flag items on the Analysis tab. Empty by default. Schema 16.
     /// </summary>
     public AnalysisExpectations AnalysisExpectations { get; set; } = new();
+
+    /// <summary>
+    /// Designer labels the engineer dragged away from their default place, and their leaders, keyed by
+    /// <see cref="LayoutLabelPlacement.NodeKey"/> or <see cref="LayoutLabelPlacement.ConnectionKey"/>. Schema 17.
+    /// </summary>
+    public Dictionary<string, LayoutLabelPlacement> LayoutLabelPlacements { get; set; } = new(StringComparer.Ordinal);
     public int NextSequence { get; set; } = 1;
     public int NextFittingSequence { get; set; } = 1;
     public int NextLayoutSequence { get; set; } = 1;
@@ -254,6 +260,34 @@ public enum LayoutNodeType
     CalculationPoint,
     Duct,
     CustomComponent
+}
+
+/// <summary>
+/// Where a Designer label sits relative to its default place, and its optional leader. Offsets are screen pixels at
+/// 100 % zoom (they scale with zoom). The leader runs from the label to a point offset from the item's reference
+/// point (a component's centre or a duct's midpoint).
+/// </summary>
+public sealed class LayoutLabelPlacement
+{
+    public double OffsetX { get; set; }
+    public double OffsetY { get; set; }
+    public bool HasLeader { get; set; }
+    public double LeaderX { get; set; }
+    public double LeaderY { get; set; }
+
+    public bool IsFinite => double.IsFinite(OffsetX) && double.IsFinite(OffsetY)
+                            && double.IsFinite(LeaderX) && double.IsFinite(LeaderY);
+
+    /// <summary>Key of a component's label (by its sequence, which never changes).</summary>
+    public static string NodeKey(int nodeSequence) => $"N:{nodeSequence}";
+
+    /// <summary>Key of a duct connection's label (the downstream component and which inlet).</summary>
+    public static string ConnectionKey(int downstreamSequence, bool secondary) => $"C:{downstreamSequence}:{(secondary ? 2 : 1)}";
+
+    public LayoutLabelPlacement Copy() => new()
+    {
+        OffsetX = OffsetX, OffsetY = OffsetY, HasLeader = HasLeader, LeaderX = LeaderX, LeaderY = LeaderY
+    };
 }
 
 public enum LayoutViewMode
@@ -727,6 +761,11 @@ public static class DuctSystemStore
                 pdfBackground.CenterZFeet = FiniteOrZero(pdfBackground.CenterZFeet);
             }
         }
+        document.LayoutLabelPlacements = document.LayoutLabelPlacements is null
+            ? new Dictionary<string, LayoutLabelPlacement>(StringComparer.Ordinal)
+            : new Dictionary<string, LayoutLabelPlacement>(
+                document.LayoutLabelPlacements.Where(pair => pair.Value is not null && pair.Value.IsFinite),
+                StringComparer.Ordinal);
         document.AnalysisExpectations ??= new AnalysisExpectations();
         document.AnalysisExpectations.Normalize();
         document.AutomaticSizing ??= new AutomaticSizingSettings();
@@ -821,6 +860,10 @@ public static class DuctSystemStore
         // Version 16: optional expected ranges for the Analysis tab (AnalysisExpectations; empty when absent).
         if (document.SchemaVersion == 15)
             document.SchemaVersion = 16;
+        // Version 17: duct class overrides (AnalysisExpectations) and dragged Designer labels with leaders
+        // (LayoutLabelPlacements); both empty when absent.
+        if (document.SchemaVersion == 16)
+            document.SchemaVersion = 17;
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."

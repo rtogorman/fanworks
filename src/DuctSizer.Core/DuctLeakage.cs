@@ -143,6 +143,8 @@ public sealed record LeakageByShape(DuctShape Shape, double AreaFt2, int Leakage
 /// <param name="DesignPressureBasis">Which value governed, in words.</param>
 /// <param name="PressureClassInWc">Smallest SMACNA static pressure class at or above the design pressure.</param>
 /// <param name="Problem">Why the result is not available (incomplete critical path, a duct without a size or length, pressure above 10 in. w.c.).</param>
+/// <param name="CalculatedPressureClassInWc">The class from the design pressure, before any override (null when not known).</param>
+/// <param name="RecommendedSealClass">The seal class SMACNA recommends for the pressure class in use.</param>
 public sealed record SystemLeakageResult(
     double? DesignPressureInWc,
     string DesignPressureBasis,
@@ -150,7 +152,11 @@ public sealed record SystemLeakageResult(
     SmacnaSealClass? SealClass,
     IReadOnlyList<ItemSurfaceArea> Areas,
     IReadOnlyList<LeakageByShape> ByShape,
-    string? Problem)
+    string? Problem,
+    double? CalculatedPressureClassInWc = null,
+    SmacnaSealClass? RecommendedSealClass = null,
+    bool PressureClassOverridden = false,
+    bool SealClassOverridden = false)
 {
     public bool IsAvailable => Problem is null && PressureClassInWc is not null;
     public double TotalAreaFt2 => Areas.Where(x => x.Problem is null).Sum(x => x.AreaFt2);
@@ -226,22 +232,36 @@ public static class SmacnaLeakage
             return new SystemLeakageResult(null, string.Empty, null, null, areas, Array.Empty<LeakageByShape>(),
                 "There are no ducts or fittings.");
 
+        // The design pressure and the class it gives (rounded up), then any override the engineer chose
+        // (Customize Duct Class). An overridden class does not need a complete critical path.
+        var overrides = document.AnalysisExpectations ?? new AnalysisExpectations();
+        double? design = null;
+        var basis = string.Empty;
+        string? pressureProblem = null;
         var critical = CriticalPathAnalyzer.Analyze(document);
-        if (!critical.IsComplete)
-            return new SystemLeakageResult(null, string.Empty, null, null, areas, Array.Empty<LeakageByShape>(),
-                "The critical path is not complete, so the system pressure is not known.");
-        var criticalInWc = UnitConversions.PaToInchesWater(critical.PressureLossPa);
-        var fans = document.LayoutNodes.Where(node => node.Type == LayoutNodeType.Fan).ToArray();
-        var fanInWc = fans.Length == 1 && double.IsFinite(fans[0].FanStaticPressurePa) && fans[0].FanStaticPressurePa > 0
-            ? UnitConversions.PaToInchesWater(fans[0].FanStaticPressurePa)
-            : 0.0;
-        var design = Math.Max(criticalInWc, fanInWc);
-        var basis = fanInWc > criticalInWc ? "fan static pressure" : "critical-path pressure loss";
-        var pressureClass = PressureClassFor(design);
+        if (critical.IsComplete)
+        {
+            var criticalInWc = UnitConversions.PaToInchesWater(critical.PressureLossPa);
+            var fans = document.LayoutNodes.Where(node => node.Type == LayoutNodeType.Fan).ToArray();
+            var fanInWc = fans.Length == 1 && double.IsFinite(fans[0].FanStaticPressurePa) && fans[0].FanStaticPressurePa > 0
+                ? UnitConversions.PaToInchesWater(fans[0].FanStaticPressurePa)
+                : 0.0;
+            design = Math.Max(criticalInWc, fanInWc);
+            basis = fanInWc > criticalInWc ? "fan static pressure" : "critical-path pressure loss";
+        }
+        else
+            pressureProblem = "The critical path is not complete, so the system pressure is not known.";
+        var calculatedClass = design is double known ? PressureClassFor(known) : null;
+        if (design is not null && calculatedClass is null)
+            pressureProblem = "The system pressure is above the highest SMACNA pressure class (10 in. w.c.).";
+        var pressureOverridden = overrides.PressureClassOverrideInWc is not null;
+        var pressureClass = overrides.PressureClassOverrideInWc ?? calculatedClass;
         if (pressureClass is null)
             return new SystemLeakageResult(design, basis, null, null, areas, Array.Empty<LeakageByShape>(),
-                "The system pressure is above the highest SMACNA pressure class (10 in. w.c.).");
-        var seal = SealClassFor(pressureClass.Value);
+                pressureProblem ?? "The system pressure is not known.");
+        var recommended = SealClassFor(pressureClass.Value);
+        var sealOverridden = overrides.SealClassOverride is not null;
+        var seal = overrides.SealClassOverride ?? recommended;
         var failed = areas.FirstOrDefault(x => x.Problem is not null);
         var byShape = areas.Where(x => x.Problem is null)
             .GroupBy(x => x.Shape)
@@ -255,6 +275,7 @@ public static class SmacnaLeakage
             })
             .ToArray();
         return new SystemLeakageResult(design, basis, pressureClass, seal, areas, byShape,
-            failed is null ? null : $"{failed.ItemId}: {failed.Problem}");
+            failed is null ? null : $"{failed.ItemId}: {failed.Problem}",
+            calculatedClass, recommended, pressureOverridden, sealOverridden);
     }
 }

@@ -132,8 +132,8 @@ internal sealed class MainRibbon
         AddButton(settings, "RibbonSizingCriteriaButton", "Sizing\nCriteria", RibbonIcon.SizingCriteria,
             "Automatic sizing inputs used by Auto Size for ducts and components.",
             () => SystemScreen.EditAutomaticSizingInputs(), 52);
-        _roundSizesButton = AddButton(settings, "RibbonRoundSizesButton", "Round\nSizes", RibbonIcon.RoundSizes,
-            "Round automatically sized ductwork to the nearest ½ in., 1 in. or 2 in.", () => { }, 58);
+        _roundSizesButton = AddButton(settings, "RibbonRoundSizesButton", "Auto Duct Size\nRounding", RibbonIcon.RoundSizes,
+            "Round automatically sized ductwork to the nearest 1 in., 2 in. or a custom increment.", () => { }, 86);
         _roundSizesButton.DropDownMenu = BuildRoundSizesMenu();
 
         var edit = AddGroup(page, "RibbonEditGroup", "Edit");
@@ -232,6 +232,9 @@ internal sealed class MainRibbon
         AddButton(settings, "RibbonAnalysisSettingsButton", "Analysis\nSettings", RibbonIcon.AnalysisSettings,
             "Expected ranges for duct friction rate and velocity, fitting velocity and fitting loss.",
             () => SystemScreen.EditAnalysisSettings(), 70);
+        AddButton(settings, "RibbonDuctClassButton", "Customize\nDuct Class", RibbonIcon.ProjectSettings,
+            "Calculated SMACNA pressure class and recommended seal class, with overrides.",
+            () => SystemScreen.EditDuctClass(), 76);
         return page;
     }
 
@@ -269,27 +272,36 @@ internal sealed class MainRibbon
     private ContextMenuStrip BuildRoundSizesMenu()
     {
         var menu = new ContextMenuStrip { Name = "RibbonRoundSizesMenu" };
-        foreach (var inches in new[] { 0.5, 1.0, 2.0 })
+        foreach (var inches in new[] { 1.0, 2.0 })
         {
             var item = new ToolStripMenuItem { Name = $"RoundSizes{inches.ToString("0.#", CultureInfo.InvariantCulture).Replace(".", "_", StringComparison.Ordinal)}In", Tag = inches };
-            item.Click += (_, _) =>
-            {
-                SystemScreen.SetSizingIncrement(UnitConversions.InchesToM(inches));
-                SynchronizeWithPage();
-                Layout._layoutStatusLabel.Text = $"Automatic duct sizes now round to the nearest {FormatIncrement(inches)}. Use Auto Size to re-size existing ducts.";
-                Layout._layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
-            };
+            item.Click += (_, _) => ApplyRounding(UnitConversions.InchesToM(inches));
             menu.Items.Add(item);
         }
-        var custom = new ToolStripMenuItem { Name = "RoundSizesCustom", Enabled = false, Visible = false };
+        var custom = new ToolStripMenuItem { Name = "RoundSizesCustom", Text = "Custom..." };
+        custom.Click += (_, _) =>
+        {
+            using var dialog = new RoundingIncrementDialog(SystemScreen._ductSystem.DefaultSizingIncrementM, _host._currentUnits);
+            if (dialog.ShowDialog(_host) == DialogResult.OK)
+                ApplyRounding(dialog.IncrementM);
+        };
         menu.Items.Add(custom);
         menu.Opening += (_, _) => RefreshRoundSizesMenu(menu);
         return menu;
     }
 
-    private string FormatIncrement(double inches) => _host._currentUnits == UnitSystem.Imperial
-        ? inches switch { 0.5 => "½ in.", _ => $"{inches:0.##} in." }
-        : $"{UnitConversions.MToMillimeters(UnitConversions.InchesToM(inches)):0.#} mm ({(inches == 0.5 ? "½" : inches.ToString("0.##", CultureInfo.CurrentCulture))} in.)";
+    /// <summary>Sets the automatic duct size rounding increment and says so on the Designer status line.</summary>
+    internal void ApplyRounding(double incrementM)
+    {
+        SystemScreen.SetSizingIncrement(incrementM);
+        SynchronizeWithPage();
+        Layout._layoutStatusLabel.Text = $"Automatic duct sizes now round to the nearest {FormatIncrementM(incrementM)}. Use Auto Size to re-size existing ducts.";
+        Layout._layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+    }
+
+    private string FormatIncrementM(double incrementM) => _host._currentUnits == UnitSystem.Imperial
+        ? $"{UnitConversions.MToInches(incrementM).ToString("0.####", CultureInfo.CurrentCulture)} in."
+        : $"{UnitConversions.MToMillimeters(incrementM).ToString("0.##", CultureInfo.CurrentCulture)} mm";
 
     private void RefreshRoundSizesMenu(ContextMenuStrip menu)
     {
@@ -299,15 +311,14 @@ internal sealed class MainRibbon
         {
             if (item.Tag is double inches)
             {
-                item.Text = FormatIncrement(inches);
+                item.Text = FormatIncrementM(UnitConversions.InchesToM(inches));
                 item.Checked = Math.Abs(inches - currentInches) < 1e-6;
                 matched |= item.Checked;
             }
             else
             {
-                item.Visible = !matched;
                 item.Checked = !matched;
-                item.Text = $"Custom: {(_host._currentUnits == UnitSystem.Imperial ? $"{currentInches:0.####} in." : $"{UnitConversions.MToMillimeters(SystemScreen._ductSystem.DefaultSizingIncrementM):0.##} mm")} (set in Project Settings)";
+                item.Text = matched ? "Custom..." : $"Custom... (now {FormatIncrementM(SystemScreen._ductSystem.DefaultSizingIncrementM)})";
             }
         }
     }

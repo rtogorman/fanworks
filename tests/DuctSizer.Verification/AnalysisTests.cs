@@ -105,7 +105,8 @@ internal static class AnalysisTests
             DuctSystemStore.Save(path, document);
             var loaded = DuctSystemStore.Load(path);
             var ranges = loaded.AnalysisExpectations;
-            Require(loaded.SchemaVersion == 16 && DuctSystemDocument.CurrentSchemaVersion == 16, "Ranges are saved in file format 16.");
+            Require(loaded.SchemaVersion == DuctSystemDocument.CurrentSchemaVersion && DuctSystemDocument.CurrentSchemaVersion >= 16,
+                "Ranges are saved in file format 16 and later.");
             Require(ranges.DuctPressureRatePaPerM.Low == document.AnalysisExpectations.DuctPressureRatePaPerM.Low
                     && ranges.DuctPressureRatePaPerM.High == document.AnalysisExpectations.DuctPressureRatePaPerM.High
                     && ranges.FittingVelocityMPerS.Low is null
@@ -118,11 +119,11 @@ internal static class AnalysisTests
             json.Remove("AnalysisExpectations");
             File.WriteAllText(path, json.ToJsonString());
             var older = DuctSystemStore.Load(path);
-            Require(older.SchemaVersion == 16 && older.AnalysisExpectations is { AnySet: false }
+            Require(older.SchemaVersion == DuctSystemDocument.CurrentSchemaVersion && older.AnalysisExpectations is { AnySet: false }
                     && older.AnalysisExpectations.FittingLossPa is not null && older.LayoutNodes.Count == 1,
-                "A format-15 project must open as format 16 with no ranges and nothing else changed.");
+                "A format-15 project must open in the current format with no ranges and nothing else changed.");
 
-            json["SchemaVersion"] = 16;
+            json["SchemaVersion"] = DuctSystemDocument.CurrentSchemaVersion;
             json["AnalysisExpectations"] = System.Text.Json.Nodes.JsonNode.Parse("{\"DuctVelocityMPerS\":null}");
             File.WriteAllText(path, json.ToJsonString());
             Require(DuctSystemStore.Load(path).AnalysisExpectations.DuctVelocityMPerS is { IsSet: false },
@@ -279,8 +280,51 @@ internal static class LeakageTests
             $"A fan static pressure above the critical-path loss sets the class (3.4 in. w.c. -> 4, Seal Class A). Got {withFan.PressureClassInWc}, {withFan.Problem}.");
         Near(withFan.TotalLeakageCfm, 3 * Math.Pow(4, 0.65) * area / 100, 1e-6, "Seal Class A round leakage at 4 in. w.c.");
 
+        // Customize Duct Class: the engineer's pressure class and seal class replace the calculated ones.
+        system.Document.AnalysisExpectations.PressureClassOverrideInWc = 6;
+        var classOnly = SmacnaLeakage.Analyze(system.Document);
+        Require(classOnly.PressureClassInWc == 6 && classOnly.CalculatedPressureClassInWc == 4 && classOnly.PressureClassOverridden
+                && classOnly.SealClass == SmacnaSealClass.A && classOnly.RecommendedSealClass == SmacnaSealClass.A,
+            "An overridden pressure class is used, the calculated one is still reported, and the seal class follows the override.");
+        Near(classOnly.TotalLeakageCfm, 3 * Math.Pow(6, 0.65) * area / 100, 1e-6, "leakage at the overridden class");
+        system.Document.AnalysisExpectations.SealClassOverride = SmacnaSealClass.C;
+        var both = SmacnaLeakage.Analyze(system.Document);
+        Require(both.SealClass == SmacnaSealClass.C && both.SealClassOverridden && both.RecommendedSealClass == SmacnaSealClass.A,
+            "An overridden seal class is used and the recommended one is still reported.");
+        Near(both.TotalLeakageCfm, 12 * Math.Pow(6, 0.65) * area / 100, 1e-6, "Seal Class C round leakage at 6 in. w.c.");
+
         system.BranchSink.ConnectionDuctSequence = null;
+        Require(SmacnaLeakage.Analyze(system.Document) is { IsAvailable: true, CalculatedPressureClassInWc: null, PressureClassInWc: 6 },
+            "With an overridden class the leakage is still available when the critical path is incomplete.");
+        system.Document.AnalysisExpectations.PressureClassOverrideInWc = null;
+        system.Document.AnalysisExpectations.SealClassOverride = null;
         Require(!SmacnaLeakage.Analyze(system.Document).IsAvailable, "An incomplete critical path leaves the leakage unavailable.");
+
+        // Overrides round-trip through the project file; a class that is not a SMACNA class is dropped on load.
+        var path = Path.Combine(Path.GetTempPath(), $"fanworks-class-{Guid.NewGuid():N}.json");
+        try
+        {
+            system.Document.AnalysisExpectations.PressureClassOverrideInWc = 3;
+            system.Document.AnalysisExpectations.SealClassOverride = SmacnaSealClass.B;
+            system.Document.LayoutLabelPlacements[LayoutLabelPlacement.NodeKey(system.Source.Sequence)] =
+                new LayoutLabelPlacement { OffsetX = 40, OffsetY = -12.5, HasLeader = true, LeaderX = 3, LeaderY = 4 };
+            DuctSystemStore.Save(path, system.Document);
+            var loaded = DuctSystemStore.Load(path);
+            var label = loaded.LayoutLabelPlacements[LayoutLabelPlacement.NodeKey(system.Source.Sequence)];
+            Require(loaded.AnalysisExpectations.PressureClassOverrideInWc == 3
+                    && loaded.AnalysisExpectations.SealClassOverride == SmacnaSealClass.B
+                    && label.OffsetX == 40 && label.OffsetY == -12.5 && label.HasLeader && label.LeaderX == 3 && label.LeaderY == 4,
+                "Duct class overrides and label placements must round-trip through the project file.");
+            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            json["AnalysisExpectations"]!["PressureClassOverrideInWc"] = 2.5;
+            File.WriteAllText(path, json.ToJsonString());
+            Require(DuctSystemStore.Load(path).AnalysisExpectations.PressureClassOverrideInWc is null,
+                "A pressure class that is not a SMACNA class is dropped, not rounded.");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     private static void Near(double actual, double expected, double tolerance, string what)

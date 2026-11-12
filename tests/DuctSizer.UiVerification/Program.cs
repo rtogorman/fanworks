@@ -3793,16 +3793,30 @@ internal static class Program
             var ribbonModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
             var roundSizesMenu = ((dynamic)Find<Button>(form, "RibbonRoundSizesButton")).DropDownMenu as ContextMenuStrip
                                  ?? throw new InvalidOperationException("Round Sizes should open a menu.");
-            Require(roundSizesMenu.Items.OfType<ToolStripMenuItem>().Count(item => item.Tag is double) == 3,
-                "Round Sizes should offer ½ in., 1 in. and 2 in.");
+            Require(roundSizesMenu.Items.OfType<ToolStripMenuItem>().Where(item => item.Tag is double).Select(item => (double)item.Tag!)
+                        .SequenceEqual(new[] { 1.0, 2.0 })
+                    && roundSizesMenu.Items["RoundSizesCustom"] is ToolStripMenuItem
+                    && Find<Button>(form, "RibbonRoundSizesButton").Text.Replace("\n", " ", StringComparison.Ordinal) == "Auto Duct Size Rounding",
+                "Auto Duct Size Rounding should offer 1 in., 2 in. and Custom.");
             roundSizesMenu.Items.OfType<ToolStripMenuItem>().Single(item => item.Tag is 2.0).PerformClick();
             Application.DoEvents();
             Require(Math.Abs(ribbonModel.DefaultSizingIncrementM - UnitConversions.InchesToM(2)) < 1e-12,
-                "Round Sizes should set the project's autosize increment.");
-            roundSizesMenu.Items.OfType<ToolStripMenuItem>().Single(item => item.Tag is 0.5).PerformClick();
+                "Auto Duct Size Rounding should set the project's autosize increment.");
+            using (var rounding = new RoundingIncrementDialog(ribbonModel.DefaultSizingIncrementM, UnitSystem.Imperial))
+            {
+                rounding.Show(form);
+                Application.DoEvents();
+                Find<TextBox>(rounding, "RoundingIncrementText").Text = "0.5";
+                ClickButton(Find<Button>(rounding, "RoundingIncrementSaveButton"));
+                Application.DoEvents();
+                Require(rounding.DialogResult == DialogResult.OK && Math.Abs(rounding.IncrementM - UnitConversions.InchesToM(0.5)) < 1e-12
+                        && RoundingIncrementDialog.Parse("0", true) is null && RoundingIncrementDialog.Parse("13", true) is null,
+                    "The Custom rounding window should accept 0.5 in. and refuse 0 or more than 12 in.");
+                form.Ribbon.ApplyRounding(rounding.IncrementM);
+            }
             Application.DoEvents();
             Require(Math.Abs(ribbonModel.DefaultSizingIncrementM - UnitConversions.InchesToM(0.5)) < 1e-12,
-                "Round Sizes should switch back to ½ in.");
+                "A custom rounding increment should be saved to the project.");
 
             ClickButton(Find<Button>(form, "RibbonAutoSizeButton"));
             Application.DoEvents();
@@ -3827,16 +3841,19 @@ internal static class Program
             ClickButton(Find<Button>(form, "TopTabAnalysis"));
             Application.DoEvents();
             var topLossGrid = Find<DataGridView>(form, "AnalysisTopLossGrid");
-            var expectedTop = (System.Collections.IList)UiMember.Method("HighestPressureDrops", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(form, new object[] { 10 })!;
-            Require(topLossGrid.Rows.Count == expectedTop.Count && topLossGrid.Rows.Count <= 10
+            var expectedTop = form.DuctSystemScreen.CriticalPathDrops();
+            var criticalProfile = SystemPathProfiles.Build(form.DuctSystemScreen._ductSystem).Paths.FirstOrDefault(path => path.IsCritical);
+            Require(topLossGrid.Rows.Count == expectedTop.Count
+                    && topLossGrid.Columns["Critical"] is null
+                    && (criticalProfile is null || expectedTop.Count == 0
+                        || expectedTop.Count == criticalProfile.Steps.Count
+                           && Math.Abs(expectedTop.Sum(entry => entry.LossPa) - criticalProfile.TotalLossPa) < 1e-6)
                     && Find<Label>(form, "AnalysisAirflowValue").Text.Length > 0
                     && Find<Label>(form, "AnalysisPressureValue").Text.Length > 0
                     && Find<Label>(form, "AnalysisRouteValue").Text.Length > 0
                     && ScreenBounds(Find<Control>(form, "AnalysisSummary")).Bottom <= ScreenBounds(grid).Top,
-                "The Analysis tab should show airflow, critical-path pressure drop and route items, then the top ten pressure drops, above the full table.");
-            var lossValues = expectedTop.Cast<object>()
-                .Select(entry => (double)entry.GetType().GetProperty("LossPa")!.GetValue(entry)!).ToArray();
+                "The Analysis tab should list every critical-path item (adding up to the critical-path total) above the full table.");
+            var lossValues = expectedTop.Select(entry => entry.LossPa).ToArray();
             Require(lossValues.Zip(lossValues.Skip(1)).All(pair => pair.First >= pair.Second),
                 "The top pressure drops should be listed from highest to lowest.");
 
@@ -3871,7 +3888,7 @@ internal static class Program
             }
             analysisScreen.RefreshDuctSystemGrid();
             Application.DoEvents();
-            var rangedTop = analysisScreen.HighestPressureDrops();
+            var rangedTop = analysisScreen.CriticalPathDrops();
             Require(topLossGrid.Columns["Range"]!.Visible && topLossGrid.Columns["Range"]!.HeaderText == "Within expected range"
                     && topLossGrid.Rows.Count == rangedTop.Count
                     && rangedTop.Select((entry, index) => (entry, index)).All(pair =>
@@ -3884,7 +3901,8 @@ internal static class Program
                             _ => "—"
                         }
                         && topLossGrid.Rows[pair.index].Cells["Range"].ToolTipText.Length > 0)
-                    && rangedTop.Where(entry => entry.Kind == "Duct").All(entry => entry.Range.Status is RangeCheckStatus.Within or RangeCheckStatus.Outside),
+                    && rangedTop.Where(entry => analysisScreen._ductSystem.Ducts.Any(duct => duct.Id == entry.Id))
+                        .All(entry => entry.Range.Status is RangeCheckStatus.Within or RangeCheckStatus.Outside),
                 "Saving ranges should add the 'Within expected range' column, with Yes/No for every duct and the reason in a tooltip.");
 
             var profileChart = Find<PressureProfileChart>(form, "AnalysisPressureProfileChart");

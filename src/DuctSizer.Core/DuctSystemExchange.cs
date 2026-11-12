@@ -605,7 +605,7 @@ public static class DuctSystemPdf
         var values = new[]
         {
             ("PRESSURE CLASS", leakage.PressureClass), ("SEAL CLASS", leakage.SealClass),
-            ("LEAKAGE CLASS", leakage.LeakageClass), ("ALLOWABLE LEAKAGE", leakage.Leakage)
+            ("LEAKAGE CLASS", leakage.LeakageClass), ("DUCT LEAKAGE", leakage.Leakage)
         };
         const double columnWidth = 98;
         for (var index = 0; index < values.Length; index++)
@@ -620,7 +620,7 @@ public static class DuctSystemPdf
             lines.Add(($"{leakage.PressureBasis}. {leakage.SealDetail}.", false));
         lines.AddRange(leakage.CalculationLines.Select(line => (line, true)));
         if (!string.IsNullOrWhiteSpace(leakage.LeakageDetail))
-            lines.Add(("Allowable leakage is " + leakage.LeakageDetail + ".", false));
+            lines.Add(("Duct leakage is " + leakage.LeakageDetail + ".", false));
         if (!string.IsNullOrWhiteSpace(leakage.Note))
             lines.Add(("Not available: " + leakage.Note, true));
         var y = top - 53;

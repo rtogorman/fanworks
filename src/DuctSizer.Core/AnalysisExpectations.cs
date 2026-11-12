@@ -64,6 +64,15 @@ public sealed class AnalysisExpectations
     public ExpectedRange FittingVelocityMPerS { get; set; } = new();
     public ExpectedRange FittingLossPa { get; set; } = new();
 
+    /// <summary>
+    /// Engineer's SMACNA static pressure class, in. w.c., replacing the calculated one (Customize Duct Class). Null
+    /// uses the calculated class. Must be one of <see cref="SmacnaLeakage.PressureClassesInWc"/>. Schema 17.
+    /// </summary>
+    public double? PressureClassOverrideInWc { get; set; }
+
+    /// <summary>Engineer's seal class replacing the one recommended for the pressure class. Null uses the recommendation. Schema 17.</summary>
+    public SmacnaSealClass? SealClassOverride { get; set; }
+
     /// <summary>True when any range has a bound entered.</summary>
     public bool AnySet => DuctPressureRatePaPerM.IsSet || DuctVelocityMPerS.IsSet
                           || FittingVelocityMPerS.IsSet || FittingLossPa.IsSet;
@@ -80,6 +89,10 @@ public sealed class AnalysisExpectations
     /// <summary>Replaces missing range objects (older or hand-edited files) with empty ranges. Values are kept.</summary>
     public void Normalize()
     {
+        // A pressure class that is not a SMACNA class (hand-edited file) is dropped rather than guessed at.
+        if (PressureClassOverrideInWc is double overrideClass
+            && !SmacnaLeakage.PressureClassesInWc.Any(value => Math.Abs(value - overrideClass) < 1e-9))
+            PressureClassOverrideInWc = null;
         DuctPressureRatePaPerM ??= new ExpectedRange();
         DuctVelocityMPerS ??= new ExpectedRange();
         FittingVelocityMPerS ??= new ExpectedRange();
@@ -91,7 +104,9 @@ public sealed class AnalysisExpectations
         DuctPressureRatePaPerM = DuctPressureRatePaPerM.Copy(),
         DuctVelocityMPerS = DuctVelocityMPerS.Copy(),
         FittingVelocityMPerS = FittingVelocityMPerS.Copy(),
-        FittingLossPa = FittingLossPa.Copy()
+        FittingLossPa = FittingLossPa.Copy(),
+        PressureClassOverrideInWc = PressureClassOverrideInWc,
+        SealClassOverride = SealClassOverride
     };
 }
 
