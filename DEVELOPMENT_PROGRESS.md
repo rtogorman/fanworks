@@ -487,8 +487,12 @@ Record:
 - Q6: `DialogStyle` (shared field-layout pass for every `DpiScaledForm` except `MainForm`); axis labels sized to text
   (`LayoutDialogControls.CreateLocationEditor/CreatePositionEditor`).
 - Q1: `InspectorAxisGroup`, `InlineEditRow.ForPosition`, sentence-case captions.
-- Q2: Esc/Delete in `TryHandleCommandKey`; right-click menu `LayoutItemMenu`; Delete key / menu delete skip the
-  confirmation (`DeleteSelectedItemImmediately`, undoable), the toolbar Delete still asks.
+- Q2: Esc/Delete in `TryHandleCommandKey`; right-click menu `LayoutItemMenu`. Owner decision 2026-11-11: no delete
+  confirmation for a component or duct anywhere (Delete key, menu, toolbar); status names it, Ctrl+Z undoes.
+  Clear Layout keeps its three-way prompt.
+- Terms (owner, 2026-11-11): a *path* = start of the system to one terminal outlet (the graph's lines, the
+  alternatives compared with the critical path); a *branch* = anything tapped off the main. The graph and report
+  name the path closest to the critical one (for balancing paths by rerouting).
 - Q3: `AnalysisExpectations`/`AnalysisRangeCheck` (Core), schema 16, `AnalysisSettingsDialog`, top-10 column "Range".
 - Q4: `SystemPathProfiles` (Core, checked against the critical-path analysis), `PressureProfileChart`.
 - Q5: `BuildTitleSheet` rewritten (condensed project block, contents + donut left, path graph right).

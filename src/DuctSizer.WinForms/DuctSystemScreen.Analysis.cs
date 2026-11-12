@@ -22,6 +22,7 @@ internal sealed partial class DuctSystemScreen
     private readonly DataGridView _analysisTopLossGrid = new();
     private readonly PressureProfileChart _analysisProfileChart = new();
     private readonly Label _analysisProfileSubtitle = new() { Name = "AnalysisProfileSubtitle" };
+    private readonly Label _analysisProfileComparison = new() { Name = "AnalysisProfileComparison" };
 
     private static readonly RangeCheckResult NoRange = new(RangeCheckStatus.NotApplicable, Array.Empty<RangeFinding>());
 
@@ -355,7 +356,23 @@ internal sealed partial class DuctSystemScreen
             notes.Add($"Only the first {SystemPathProfiles.MaximumPaths} paths are shown.");
         if (!allComplete && series.Length > 0)
             notes.Add("The critical path is not marked until every path can be calculated.");
-        return new DuctSystemPdfPressureProfile(unit, series, result.Paths.Count, string.Join(" ", notes));
+        // How close the next-highest path comes to the critical path (paths of similar loss are better balanced).
+        var comparison = string.Empty;
+        var criticalPath = allComplete ? result.Paths.FirstOrDefault(path => path.IsCritical) : null;
+        var nextPath = criticalPath is null ? null : result.Paths.Where(path => !path.IsCritical)
+            .OrderByDescending(path => path.TotalLossPa).FirstOrDefault();
+        if (criticalPath is not null && nextPath is not null)
+        {
+            var format = imperial ? "0.###" : "0.#";
+            double Display(double pa) => imperial ? UnitConversions.PaToInchesWater(pa) : pa;
+            var gap = criticalPath.TotalLossPa - nextPath.TotalLossPa;
+            var percent = criticalPath.TotalLossPa > 0 ? gap / criticalPath.TotalLossPa * 100 : 0;
+            comparison = $"Closest to critical: {nextPath.StartId} → {nextPath.EndId}, "
+                         + $"{Display(nextPath.TotalLossPa).ToString(format, CultureInfo.CurrentCulture)} {unit} "
+                         + $"({Display(gap).ToString(format, CultureInfo.CurrentCulture)} {unit} or {percent.ToString("0", CultureInfo.CurrentCulture)} % below "
+                         + $"{Display(criticalPath.TotalLossPa).ToString(format, CultureInfo.CurrentCulture)} {unit})";
+        }
+        return new DuctSystemPdfPressureProfile(unit, series, result.Paths.Count, string.Join(" ", notes), comparison);
     }
 
     private void RefreshPressureProfile()
@@ -366,8 +383,10 @@ internal sealed partial class DuctSystemScreen
             ? "Draw and connect the system in the Designer to see the pressure drop along each path."
             : "No path can be shown yet. " + profile.Note;
         var summary = profile.PathCount == 1 ? "1 path" : $"{profile.PathCount} paths";
-        _analysisProfileSubtitle.Text = $"Running total from the start of each path to its end  ·  {summary}"
+        _analysisProfileSubtitle.Text = $"Running pressure drop from the start of the system to each terminal outlet  ·  {summary}"
                                         + (string.IsNullOrEmpty(profile.Note) ? string.Empty : "  ·  " + profile.Note);
+        _analysisProfileComparison.Text = profile.Comparison;
+        _analysisProfileComparison.Visible = profile.Comparison.Length > 0;
         _analysisProfileSubtitle.ForeColor = string.IsNullOrEmpty(profile.Note)
             ? Color.FromArgb(74, 91, 106) : Color.FromArgb(160, 90, 0);
     }
@@ -385,9 +404,10 @@ internal sealed partial class DuctSystemScreen
             Padding = new Padding(14, 8, 14, 8),
             Margin = new Padding(0, 10, 0, 0)
         };
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.White };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, BackColor = Color.White };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.Controls.Add(new Label
         {
@@ -402,9 +422,16 @@ internal sealed partial class DuctSystemScreen
         _analysisProfileSubtitle.AutoEllipsis = true;
         _analysisProfileSubtitle.Font = new Font("Segoe UI", 8.5F);
         layout.Controls.Add(_analysisProfileSubtitle, 0, 1);
+        // The path closest to the critical one: paths of similar loss are better balanced.
+        _analysisProfileComparison.AutoSize = true;
+        _analysisProfileComparison.Margin = new Padding(0, 2, 0, 0);
+        _analysisProfileComparison.Font = new Font("Segoe UI Semibold", 8.5F);
+        _analysisProfileComparison.ForeColor = Color.FromArgb(22, 65, 102);
+        _analysisProfileComparison.Visible = false;
+        layout.Controls.Add(_analysisProfileComparison, 0, 2);
         _analysisProfileChart.Dock = DockStyle.Fill;
         _analysisProfileChart.Margin = new Padding(0, 4, 0, 0);
-        layout.Controls.Add(_analysisProfileChart, 0, 2);
+        layout.Controls.Add(_analysisProfileChart, 0, 3);
         card.Controls.Add(layout);
         return card;
     }

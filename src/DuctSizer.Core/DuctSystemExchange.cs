@@ -258,12 +258,14 @@ public sealed record DuctSystemPdfMetadata(
 /// Analysis tab graph). Series hold complete routes only; <paramref name="Note"/> says what was left out and why.
 /// </summary>
 /// <param name="UnitLabel">Unit of the values, e.g. "in. w.c." or "Pa".</param>
-/// <param name="PathCount">Routes in the system, including any left out of <paramref name="Series"/>.</param>
+/// <param name="PathCount">Paths in the system (start to each terminal outlet), including any left out of <paramref name="Series"/>.</param>
+/// <param name="Comparison">How close the next-highest path is to the critical path, e.g. for balancing paths; empty when not known.</param>
 public sealed record DuctSystemPdfPressureProfile(
     string UnitLabel,
     IReadOnlyList<DuctSystemPdfProfileSeries> Series,
     int PathCount,
-    string Note = "");
+    string Note = "",
+    string Comparison = "");
 
 /// <summary>One route: Values[i] is the running loss after component i + 1 along the route.</summary>
 public sealed record DuctSystemPdfProfileSeries(string Label, IReadOnlyList<double> Values, bool IsCritical,
@@ -705,9 +707,9 @@ public static class DuctSystemPdf
         var pathText = profile.PathCount.ToString(CultureInfo.InvariantCulture);
         TextColor(builder, left + 14, top - 42, 18, pathText, ink, bold: true);
         TextColor(builder, left + 20 + EstimatedPdfWidth(pathText, 18, true), top - 37, 6.6,
-            profile.PathCount == 1 ? "PATH (BRANCH) THROUGH THE SYSTEM" : "PATHS (BRANCHES) THROUGH THE SYSTEM", accent, bold: true);
+            profile.PathCount == 1 ? "PATH THROUGH THE SYSTEM" : "PATHS THROUGH THE SYSTEM", accent, bold: true);
         TextColor(builder, left + 20 + EstimatedPdfWidth(pathText, 18, true), top - 46, 6.4,
-            "Running total from the start of each path to its end", muted);
+            "Running pressure drop from the start of the system to each terminal outlet", muted);
         var noteLines = string.IsNullOrWhiteSpace(profile.Note)
             ? Array.Empty<string>()
             : WrapPdfText(profile.Note, 92).Take(2).ToArray();
@@ -717,7 +719,10 @@ public static class DuctSystemPdf
         var series = profile.Series.Where(x => x.Values.Count > 0).ToArray();
         var plotLeft = left + 50;
         var plotRight = left + width - 14;
-        var plotTop = top - 72;
+        var comparisonLines = string.IsNullOrWhiteSpace(profile.Comparison)
+            ? Array.Empty<string>()
+            : WrapPdfText(profile.Comparison, 82).Take(2).ToArray();
+        var plotTop = top - 72 - comparisonLines.Length * 9;
         var plotBottom = bottom + 34 + (noteLines.Length > 0 ? noteLines.Length * 8 + 2 : 0);
         if (series.Length == 0)
         {
@@ -774,6 +779,9 @@ public static class DuctSystemPdf
         foreach (var line in series.Where(x => x.IsCritical))
             Line(line, "0.84 0.50 0.00", 1.8, 1.4);
         builder.Append("0 J 0 j\n");
+
+        for (var index = 0; index < comparisonLines.Length; index++)
+            TextColor(builder, left + 14, top - 71 - index * 8.5, 6.4, comparisonLines[index], ink, bold: true);
 
         // Legend under the headline.
         var legendY = top - 60;

@@ -203,8 +203,14 @@ internal sealed class PressureProfileChart : Control
                     continue;
                 best = distance;
                 var item = line.ItemIds is { } ids && index < ids.Count ? $" ({ids[index]})" : string.Empty;
+                var total = line.Values[^1];
+                var critical = _profile.Series.FirstOrDefault(x => x.IsCritical);
+                var versus = line.IsCritical || critical is null || critical.Values.Count == 0
+                    ? string.Empty
+                    : $" ({(critical.Values[^1] - total).ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel} below the critical path)";
                 text = $"{(line.IsCritical ? "Critical path " : "Path ")}{line.Label}\n"
-                       + $"Component {index + 1}{item}: {line.Values[index].ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel}";
+                       + $"Component {index + 1}{item}: {line.Values[index].ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel}\n"
+                       + $"Path total: {total.ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel}{versus}";
             }
         return text;
     }

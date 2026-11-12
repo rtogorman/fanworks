@@ -206,16 +206,20 @@ For target-pressure-rate and target-velocity sizing, the project-wide increment 
   reads, for example, "Offset from Fan-001 (ft)".
 - **Drawing shortcuts**: Esc deselects the selected (or just-dropped) item; Delete removes it at once (Ctrl+Z
   restores it); right-clicking a component or duct offers **Edit** (opens it in the Selection Inspector) and
-  **Delete**. The toolbar's Delete button still asks first.
+  **Delete**. Deleting a component or duct no longer asks for confirmation anywhere (the status line names what
+  was deleted; Ctrl+Z undoes it). Clear Layout still asks.
 - **Analysis Settings** (Analysis ribbon): optional low and high values you expect for duct pressure drop rate
   (in. w.c./100 ft), duct velocity, fitting velocity and fitting pressure loss. FanWorks supplies no defaults; an
   empty value is not checked. Once saved (with the project, file format 16), the "Highest pressure drops" list
   shows **Within expected range** — Yes, No, or Not set — for each duct and fitting, with the comparison in a
   tooltip. A duct in transitional flow is within range only if its whole friction band is.
-- **Pressure drop along each path** (Analysis tab): a line graph with one line per path from each start component
-  to each end component — component number along the path across, running pressure drop (in. w.c.) up — with the
-  critical path in amber. A path with an item that cannot be calculated is left out and named in a note.
-- **Report title page**: condensed; shows the number of paths (branches) and the same graph, and the System Summary
+- **Pressure drop along each path** (Analysis tab): a path runs from the start of the system to one terminal
+  outlet. The line graph has one line per path — component number along the path across, running pressure drop
+  (in. w.c.) up — with the critical path in amber, so the alternatives compared against it are visible. The path
+  closest to the critical one is named with how far below it is (useful when rerouting ducts to balance paths);
+  hovering a point gives that path's total and its difference from the critical path. A path with an item that
+  cannot be calculated is left out and named in a note. (A *branch* remains anything tapped off the main.)
+- **Report title page**: condensed; shows the number of paths and the same graph, and the System Summary
   is a donut of duct segments, fittings and components, each labelled with its quantity.
 
 ## What changed in 0.97.0 (polish)

@@ -3885,6 +3885,12 @@ internal static class Program
                     && ScreenBounds(profileChart).Bottom <= ScreenBounds(grid).Top
                     && profileChart.Height > 60,
                 $"The Analysis tab should graph every complete path below the summary, the critical path's last point at its total. Paths={routeProfiles.Paths.Count}, series={shownProfile.Series.Count}.");
+            var nextRoute = routeProfiles.Paths.Where(path => !path.IsCritical).OrderByDescending(path => path.TotalLossPa).FirstOrDefault();
+            Require(criticalSeries is null || nextRoute is null
+                        ? string.IsNullOrEmpty(shownProfile.Comparison)
+                        : shownProfile.Comparison.Contains(nextRoute.EndId, StringComparison.Ordinal)
+                          && Find<Label>(form, "AnalysisProfileComparison").Text == shownProfile.Comparison,
+                $"The Analysis tab should name the path closest to the critical path when there is one. Comparison={shownProfile.Comparison}");
             analysisScreen._ductSystem.AnalysisExpectations = new AnalysisExpectations();
             analysisScreen.RefreshDuctSystemGrid();
             Application.DoEvents();
