@@ -522,3 +522,17 @@ Checks: engine 74/74 (3 new), interface 24/24 at 100 % and 150 % under Wine.
 Open with Ryan: newer SMACNA editions recommend Seal Class A for all ducts (leakage classes then by pressure class);
 FanWorks follows seal class by pressure class as he specified. Item sheets with the surface-area worksheet usually
 need a continuation sheet (report 28 -> 39 pages on the 4-path test project).
+
+### Round S (requested 2026-11-11 22:13, after v0.99.0) — v0.100.0
+
+Done: Pressure checkbox (duct inlet static pressure labels); draggable labels with right-click Add/Remove leader
+and Reset, leader end draggable, saved (schema 17) and undoable; Analysis critical-path drops list (all items,
+sorted and shaded, own scroll, System Overview height, no Critical column); Customize Duct Class window with
+pressure/seal class overrides and Leakage factor F / Duct leakage renames; all pop-up windows restyled (rounded
+inputs, cards, blue accents, navy title bar and app icon in place of the default symbol/brown border); new layouts
+for Sizing Criteria, fitting gallery, underlay Move / Change Scale (Center Z added, nothing cut off) and Source and
+Sink Editor (slim rounded scroll bar, tighter rows); Ctrl + middle-drag free rotation and a clickable view cube with
+snap-back from the view list; PDF underlay in all views at its Z; Auto Duct Size Rounding 1 in. / 2 in. / Custom.
+Checks: engine 74/74, interface 24/24 (+ new label/orbit/underlay check) at 100 % and 150 % under Wine.
+Notes for Ryan: components are placed and moved only in the standard views (free view is for looking); the report's
+isometric drawings do not show the underlay (only the Designer does); the title-bar colour needs Windows 11.

@@ -36,6 +36,12 @@ internal sealed class RoundedPanel : Panel
     internal Color BorderColor { get; set; } = UiPalette.CardBorder;
     internal bool Elevated { get; set; } = true;
 
+    /// <summary>
+    /// When false the panel paints its parent's colour in the corners instead of clipping to a window
+    /// region, so the anti-aliased border is not cut off (used by the pop-up window cards).
+    /// </summary>
+    internal bool ClipToShape { get; set; } = true;
+
     internal RoundedPanel()
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint
@@ -52,6 +58,11 @@ internal sealed class RoundedPanel : Panel
             return;
         }
 
+        if (!ClipToShape)
+        {
+            using var corners = new SolidBrush(Parent?.BackColor ?? UiPalette.Surface);
+            eventArgs.Graphics.FillRectangle(corners, ClientRectangle);
+        }
         eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         using var path = UiPolish.CreateRoundedPath(new RectangleF(0, 0, Width - 1, Height - 1), CornerRadius);
         using var fill = new SolidBrush(UiPalette.Surface);
@@ -80,7 +91,7 @@ internal sealed class RoundedPanel : Panel
 
     private void UpdateRoundedRegion()
     {
-        if (Width <= 1 || Height <= 1)
+        if (Width <= 1 || Height <= 1 || !ClipToShape)
             return;
         using var path = UiPolish.CreateRoundedPath(new RectangleF(0, 0, Width, Height), CornerRadius);
         var previous = Region;
@@ -203,27 +214,8 @@ internal static class UiPolish
     {
         form.Padding = Padding.Empty;
         form.BackColor = UiPalette.Canvas;
-        foreach (var control in Descendants(form))
-        {
-            switch (control)
-            {
-                case TextBox textBox:
-                    textBox.BorderStyle = BorderStyle.FixedSingle;
-                    textBox.BackColor = Color.White;
-                    textBox.ForeColor = UiPalette.Ink;
-                    break;
-                case ComboBox comboBox:
-                    comboBox.FlatStyle = FlatStyle.Standard;
-                    comboBox.BackColor = UiPalette.SurfaceShade;
-                    comboBox.ForeColor = UiPalette.Ink;
-                    break;
-                case NumericUpDown numeric:
-                    numeric.BorderStyle = BorderStyle.FixedSingle;
-                    numeric.BackColor = Color.White;
-                    numeric.ForeColor = UiPalette.Ink;
-                    break;
-            }
-        }
+        // Inputs get the shared rounded look (see DialogStyle).
+        DialogStyle.StyleInputs(form);
     }
 
     private static IEnumerable<Control> Descendants(Control root)

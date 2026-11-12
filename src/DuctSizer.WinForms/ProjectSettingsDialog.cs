@@ -170,7 +170,7 @@ internal sealed class ProjectSettingsDialog : DpiScaledForm
         calculationTable.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         calculationTable.Controls.Add(new Label
         {
-            Text = "The autosize increment is the same value as the ribbon's Round Sizes choice.",
+            Text = "The autosize increment is the same value as the ribbon's Auto Duct Size Rounding choice.",
             Dock = DockStyle.Top,
             AutoSize = true,
             Margin = new Padding(4, 10, 0, 0),

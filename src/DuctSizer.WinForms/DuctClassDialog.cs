@@ -38,14 +38,14 @@ internal sealed class DuctClassDialog : DpiScaledForm
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(620, 330);
+        ClientSize = new Size(700, 350);
         Font = new Font("Segoe UI", 9F);
-        BackColor = Color.FromArgb(245, 247, 250);
+        BackColor = FormKit.Background;
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(20, 16, 20, 14) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         root.Controls.Add(new Label
@@ -71,10 +71,9 @@ internal sealed class DuctClassDialog : DpiScaledForm
             ColumnCount = 4,
             RowCount = 3,
             BackColor = Color.White,
-            Padding = new Padding(14, 6, 14, 6),
-            Margin = new Padding(0, 4, 0, 6)
+            Margin = Padding.Empty
         };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
@@ -100,7 +99,7 @@ internal sealed class DuctClassDialog : DpiScaledForm
         table.Controls.Add(RowLabel("Duct pressure class"), 0, 1);
         table.Controls.Add(Value(calculated.CalculatedPressureClassInWc is double calculatedClass
             ? ClassText(calculatedClass) + (calculated.DesignPressureInWc is double design
-                ? $"  (design {design.ToString("0.###", CultureInfo.CurrentCulture)} in. w.c.)" : string.Empty)
+                ? $"  (design {design.ToString("0.###", CultureInfo.CurrentCulture)})" : string.Empty)
             : "Not available: " + (calculated.Problem ?? "the system pressure is not known")), 1, 1);
         table.Controls.Add(_overrideClass, 2, 1);
         table.Controls.Add(_classChoice, 3, 1);
@@ -112,7 +111,9 @@ internal sealed class DuctClassDialog : DpiScaledForm
         table.Controls.Add(_recommendedSeal, 1, 2);
         table.Controls.Add(_overrideSeal, 2, 2);
         table.Controls.Add(_sealChoice, 3, 2);
-        root.Controls.Add(table, 0, 2);
+        var card = FormKit.Card(table, new Padding(14, 4, 14, 4));
+        card.Margin = new Padding(0, 4, 0, 6);
+        root.Controls.Add(card, 0, 2);
 
         _preview.Dock = DockStyle.Fill;
         _preview.ForeColor = Color.FromArgb(22, 65, 102);
@@ -123,7 +124,7 @@ internal sealed class DuctClassDialog : DpiScaledForm
         var save = new Button
         {
             Name = "DuctClassSaveButton", Text = "Save", Width = 100, Height = 32,
-            BackColor = Color.FromArgb(42, 135, 91), ForeColor = Color.White, FlatStyle = FlatStyle.Flat
+            BackColor = DialogStyle.Accent, ForeColor = Color.White, FlatStyle = FlatStyle.Flat
         };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 32, FlatStyle = FlatStyle.Flat };
         UiPolish.RoundButton(save, 7);
@@ -191,7 +192,7 @@ internal sealed class DuctClassDialog : DpiScaledForm
         var pressureClass = ChosenClass;
         var recommended = pressureClass is double known ? SmacnaLeakage.SealClassFor(known) : (SmacnaSealClass?)null;
         _recommendedSeal.Text = recommended is SmacnaSealClass seal
-            ? $"Seal Class {seal} (recommended for {ClassText(pressureClass!.Value)})"
+            ? $"Seal Class {seal} (for {ClassText(pressureClass!.Value)})"
             : "Not available until the pressure class is known";
         if (!_overrideSeal.Checked && recommended is SmacnaSealClass follow)
             _sealChoice.SelectedIndex = (int)follow;

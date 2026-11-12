@@ -339,68 +339,44 @@ internal sealed class PdfBackgroundPropertiesDialog : DpiScaledForm
 
     internal PdfBackgroundPropertiesDialog(LayoutPdfBackground background)
     {
-        Text = "PDF Background Scale and Location";
-        Name = "PdfBackgroundPropertiesDialog";
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        ShowInTaskbar = false;
-        ClientSize = new Size(470, 350);
-        Font = new Font("Segoe UI", 9F);
-        BackColor = Color.FromArgb(244, 247, 249);
+        FormKit.SetUp(this, "PDF Underlay Scale and Location", "PdfBackgroundPropertiesDialog", new Size(520, 430));
         _paperInches = Input(background.PaperInches, "PdfEditPaperInchesInput");
         _drawingFeet = Input(background.DrawingFeet, "PdfEditDrawingFeetInput");
         _centerX = Input(background.CenterXFeet, "PdfEditCenterXInput");
         _centerY = Input(background.CenterYFeet, "PdfEditCenterYInput");
         _centerZ = Input(background.CenterZFeet, "PdfEditCenterZInput");
 
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 9,
-            Padding = new Padding(18), BackColor = BackColor
-        };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(22, 16, 22, 14), BackColor = BackColor };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 160));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        root.Controls.Add(FormKit.Header("Underlay scale and location",
+            $"{background.SourceFileName}, page {background.PageNumber}. The sheet keeps its proportions when the grid scale changes."), 0, 0);
+
+        // Scale: paper inches = drawing feet.
+        var scale = new FlowLayoutPanel { WrapContents = false, BackColor = Color.White, Margin = Padding.Empty, Padding = new Padding(0, 6, 0, 0) };
+        scale.Controls.Add(new Label { Text = "Scale", AutoSize = true, Margin = new Padding(0, 9, 18, 0), ForeColor = FormKit.LabelInk, Font = new Font("Segoe UI Semibold", 9F) });
+        scale.Controls.Add(_paperInches);
+        scale.Controls.Add(new Label { Text = "in. on paper  =", AutoSize = true, Margin = new Padding(2, 9, 6, 0), ForeColor = FormKit.Muted });
+        scale.Controls.Add(_drawingFeet);
+        scale.Controls.Add(new Label { Text = "ft", AutoSize = true, Margin = new Padding(2, 9, 0, 0), ForeColor = FormKit.Muted });
+        root.Controls.Add(FormKit.Card(scale), 0, 1);
+
+        var location = FormKit.FieldTable(42,
+            ("Center X", _centerX, "ft"),
+            ("Center Y", _centerY, "ft"),
+            ("Center Z (elevation)", _centerZ, "ft   (0 = floor level)"));
+        root.Controls.Add(FormKit.Card(location), 0, 2);
         root.Controls.Add(new Label
         {
-            Text = $"{background.SourceFileName} - page {background.PageNumber}\r\nThe sheet remains proportional when Grid Scale changes.",
-            Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 9F),
-            ForeColor = Color.FromArgb(28, 69, 108)
-        }, 0, 0);
-        root.Controls.Add(ScaleRow(), 0, 1);
-        root.Controls.Add(Field("Center X (ft)", _centerX), 0, 2);
-        root.Controls.Add(Field("Center Y (ft)", _centerY), 0, 3);
-        root.Controls.Add(Field("Center Z (ft)", _centerZ), 0, 4);
-        root.Controls.Add(new Label
-        {
-            Text = "Location values place the center of the PDF in the absolute system coordinates.",
-            Dock = DockStyle.Fill, ForeColor = Color.FromArgb(72, 92, 110),
-            Padding = new Padding(4, 6, 4, 4)
-        }, 0, 5);
-        var actions = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false, Padding = new Padding(0, 8, 0, 0)
-        };
-        var save = new Button
-        {
-            Name = "PdfBackgroundPropertiesSaveButton", Text = "Update",
-            Size = new Size(94, 32), BackColor = Color.FromArgb(42, 135, 91),
-            ForeColor = Color.White, FlatStyle = FlatStyle.Flat
-        };
-        var cancel = new Button
-        {
-            Text = "Cancel", DialogResult = DialogResult.Cancel,
-            Size = new Size(88, 32), FlatStyle = FlatStyle.Flat
-        };
-        UiPolish.RoundButton(save, 7);
-        UiPolish.RoundButton(cancel, 7);
-        save.Click += (_, _) => ValidateAndClose();
-        actions.Controls.Add(save);
-        actions.Controls.Add(cancel);
-        root.Controls.Add(actions, 0, 7);
+            Text = "The centre of the sheet sits at X, Y and Z in the system's absolute coordinates. The underlay shows in "
+                   + "every view (top-down, isometric and free views) at its Z elevation.",
+            Dock = DockStyle.Fill, ForeColor = FormKit.Muted, Padding = new Padding(2, 6, 2, 0)
+        }, 0, 3);
+        root.Controls.Add(FormKit.Buttons(this, "Update", "PdfBackgroundPropertiesSaveButton", ValidateAndClose), 0, 4);
         Controls.Add(root);
-        AcceptButton = save;
-        CancelButton = cancel;
     }
 
     internal double PaperInches { get; private set; }
@@ -416,21 +392,6 @@ internal sealed class PdfBackgroundPropertiesDialog : DpiScaledForm
         background.CenterXFeet = CenterXFeet;
         background.CenterYFeet = CenterYFeet;
         background.CenterZFeet = CenterZFeet;
-    }
-
-    private Control ScaleRow()
-    {
-        var row = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false, Padding = new Padding(30, 8, 0, 0)
-        };
-        row.Controls.Add(new Label { Text = "Scale", AutoSize = true, Margin = new Padding(0, 7, 8, 0) });
-        row.Controls.Add(_paperInches);
-        row.Controls.Add(new Label { Text = "inches  =", AutoSize = true, Margin = new Padding(2, 7, 5, 0) });
-        row.Controls.Add(_drawingFeet);
-        row.Controls.Add(new Label { Text = "feet", AutoSize = true, Margin = new Padding(2, 7, 0, 0) });
-        return row;
     }
 
     private void ValidateAndClose()
@@ -461,21 +422,6 @@ internal sealed class PdfBackgroundPropertiesDialog : DpiScaledForm
     private static TextBox Input(double value, string name) => new()
     {
         Name = name, Text = value.ToString("0.###", CultureInfo.CurrentCulture),
-        Width = 76, TextAlign = HorizontalAlignment.Right, Margin = new Padding(4, 3, 4, 3)
+        Width = 92, TextAlign = HorizontalAlignment.Right, Margin = new Padding(6, 6, 6, 6)
     };
-
-    private static Control Field(string label, Control input)
-    {
-        var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
-        row.Controls.Add(new Label
-        {
-            Text = label, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,
-            Padding = new Padding(0, 0, 8, 0)
-        }, 0, 0);
-        input.Dock = DockStyle.Fill;
-        row.Controls.Add(input, 1, 0);
-        return row;
-    }
 }

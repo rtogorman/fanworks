@@ -4083,6 +4083,120 @@ internal static class Program
                     && form.DuctSystemScreen._ductSystem.LayoutNodes.Any(node => node.Id == shortcutNode.Id),
                 "Undo should restore a component removed with the Delete key.");
 
+            // Round S: Pressure labels, draggable labels with leaders, free rotation and the view cube.
+            var pressureCheck = Find<CheckBox>(form, "LayoutShowPressureCheck");
+            Require(pressureCheck.Text == "Pressure" && !pressureCheck.Checked,
+                "The Project tab should have a Pressure checkbox (off by default) beside Labels, Flow and Sizes.");
+            var pressureCaptions = shortcutModel.Ducts
+                .Select(duct => form.DuctSystemScreen.DuctInletPressureCaption(duct.Sequence))
+                .ToArray();
+            Require(pressureCaptions.Any(caption => caption.Length > 0)
+                    && pressureCaptions.Where(caption => caption.Length > 0).All(caption => caption.StartsWith("SP ", StringComparison.Ordinal)
+                        && (caption.EndsWith(" in. w.c.", StringComparison.Ordinal) || caption.EndsWith(" Pa", StringComparison.Ordinal))),
+                $"Duct pressure labels should read 'SP <value> in. w.c.' from the last calculation. First: {pressureCaptions.FirstOrDefault()}");
+            pressureCheck.Checked = true;
+            Application.DoEvents();
+            using (var labelPaint = new Bitmap(Math.Max(1, shortcutCanvas.Width), Math.Max(1, shortcutCanvas.Height)))
+            using (var labelGraphics = Graphics.FromImage(labelPaint))
+                typeof(LayoutDesignerCanvas).GetMethod("OnPaint", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(shortcutCanvas, new object[] { new PaintEventArgs(labelGraphics, new Rectangle(Point.Empty, labelPaint.Size)) });
+            var paintedLabels = ((System.Collections.IEnumerable)typeof(LayoutDesignerCanvas)
+                    .GetField("_paintedLabels", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(shortcutCanvas)!)
+                .Cast<object>().ToArray();
+            Require(paintedLabels.Length > 0, $"Shown labels should be recorded so they can be dragged. canvas={shortcutCanvas.Size}, labels={shortcutCanvas.ShowLabels}, visible={shortcutCanvas.Visible}");
+            var firstLabel = paintedLabels[0];
+            var labelKey = (string)firstLabel.GetType().GetProperty("Key")!.GetValue(firstLabel)!;
+            var labelBounds = (Rectangle)firstLabel.GetType().GetProperty("Bounds")!.GetValue(firstLabel)!;
+            var labelStart = new Point(labelBounds.Left + labelBounds.Width / 2, labelBounds.Top + labelBounds.Height / 2);
+            void CanvasMouse(string method, MouseButtons button, Point point) =>
+                typeof(LayoutDesignerCanvas).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(shortcutCanvas, new object[] { new MouseEventArgs(button, 1, point.X, point.Y, 0) });
+            var placementsBefore = shortcutModel.LayoutLabelPlacements.Count;
+            CanvasMouse("OnMouseDown", MouseButtons.Left, labelStart);
+            CanvasMouse("OnMouseMove", MouseButtons.Left, new Point(labelStart.X + 40, labelStart.Y + 25));
+            CanvasMouse("OnMouseUp", MouseButtons.Left, new Point(labelStart.X + 40, labelStart.Y + 25));
+            Application.DoEvents();
+            var dragModel = form.DuctSystemScreen._ductSystem;
+            Require(dragModel.LayoutLabelPlacements.TryGetValue(labelKey, out var dragged)
+                    && (Math.Abs(dragged.OffsetX) > 1 || Math.Abs(dragged.OffsetY) > 1) && !dragged.HasLeader,
+                $"Dragging a label should save its new offset. key={labelKey}");
+            var withLeader = LayoutDesignerScreen.ToggleLeader(dragged!);
+            var withoutLeader = LayoutDesignerScreen.ToggleLeader(withLeader);
+            var fresh = LayoutDesignerScreen.ToggleLeader(new LayoutLabelPlacement());
+            Require(withLeader.HasLeader && !withoutLeader.HasLeader
+                    && withLeader.OffsetX == dragged!.OffsetX && withLeader.OffsetY == dragged.OffsetY
+                    && fresh.HasLeader && (fresh.OffsetX != 0 || fresh.OffsetY != 0),
+                "Add leader should keep a moved label where it is (and move a label in its default place out so the leader shows); Remove leader should drop it.");
+            ClickButton(Find<Button>(form, "LayoutUndoButton"));
+            Application.DoEvents();
+            Require(form.DuctSystemScreen._ductSystem.LayoutLabelPlacements.Count == placementsBefore
+                    && !form.DuctSystemScreen._ductSystem.LayoutLabelPlacements.ContainsKey(labelKey),
+                "Undo should put a dragged label back.");
+            pressureCheck.Checked = false;
+            Application.DoEvents();
+
+            var viewSelector = Find<ComboBox>(form, "LayoutViewModeSelector");
+            viewSelector.SelectedIndex = 2;
+            Application.DoEvents();
+            viewSelector.SelectedIndex = 0;
+            Application.DoEvents();
+            var isoAngles = shortcutCanvas.CurrentViewAngles;
+            Require(shortcutCanvas.OrbitView is null && Math.Abs(isoAngles.Azimuth - 45) < 0.01 && Math.Abs(isoAngles.Elevation - 30) < 0.01,
+                $"Isometric Positive should be the 45 degree / 30 degree view. Got {isoAngles}.");
+            var underlay = new LayoutPdfBackground
+            {
+                PageWidthPoints = 1224, PageHeightPoints = 792, PaperInches = 0.25, DrawingFeet = 1, CenterXFeet = 20, CenterYFeet = 10, CenterZFeet = 0
+            };
+            var isoCorners = shortcutCanvas.PdfBackgroundCorners(underlay);
+            Require(isoCorners.All(corner => float.IsFinite(corner.X) && float.IsFinite(corner.Y))
+                    && Math.Abs(isoCorners[0].Y - isoCorners[1].Y) > 1,
+                "In an isometric view the underlay should be drawn as a slanted sheet in the X-Y plane at its Z elevation.");
+            underlay.CenterZFeet = 10;
+            var raisedCorners = shortcutCanvas.PdfBackgroundCorners(underlay);
+            Require(raisedCorners[0].Y < isoCorners[0].Y - 1 && Math.Abs(raisedCorners[0].X - isoCorners[0].X) < 0.5,
+                "Raising the underlay's Center Z should move it straight up on screen in an isometric view.");
+            shortcutCanvas.ViewFromCubeCorner(-1, 1, -1);
+            Application.DoEvents();
+            Require(shortcutCanvas.OrbitView is { } cubeView && Math.Abs(cubeView.Elevation + 30) < 0.01
+                    && viewSelector.Items.Count == 4 && viewSelector.SelectedIndex == 3
+                    && Convert.ToString(viewSelector.SelectedItem) == "Free view"
+                    && shortcutCanvas.ViewCubeCorners().Count == 8,
+                $"Clicking a view-cube corner should rotate to that corner and show 'Free view'. view={shortcutCanvas.OrbitView}, items={viewSelector.Items.Count}");
+            viewSelector.SelectedIndex = 2;
+            Application.DoEvents();
+            Require(shortcutCanvas.OrbitView is null && viewSelector.Items.Count == 3 && shortcutCanvas.ViewMode == LayoutViewMode.TopDown,
+                "Choosing a view in the list should snap back from a free rotation and remove 'Free view'.");
+            Console.WriteLine("PASS  Pressure labels, label drag and leaders, view cube and underlay in all views");
+
+            // Review aid: capture the remaining pop-up windows when asked (not a check).
+            var moreDialogsDirectory = Environment.GetEnvironmentVariable("DUCTSIZER_MORE_DIALOGS_DIR");
+            if (!string.IsNullOrWhiteSpace(moreDialogsDirectory))
+            {
+                var captureModel = form.DuctSystemScreen._ductSystem;
+                foreach (var (name, create) in new (string, Func<Form>)[]
+                         {
+                             ("pdfprops", () => new PdfBackgroundPropertiesDialog(new LayoutPdfBackground { SourceFileName = "M-101 Mechanical Plan.pdf", PageNumber = 1, PageCount = 3, CenterZFeet = 0 })),
+                             ("sourcesink", () => new SourceSinkEditorDialog(Enumerable.Range(0, 9).Select(index => new SavedLayoutNode
+                             {
+                                 Sequence = 900 + index, Type = LayoutNodeType.Reservoir,
+                                 SpaceRole = index == 0 ? "Space Source" : "Space Sink",
+                                 AirflowM3PerS = UnitConversions.CfmToM3PerS(index == 0 ? 2400 : 300), PressurePa = index == 0 ? 0 : -30
+                             }).ToArray())),
+                             ("ductclass", () => new DuctClassDialog(SmacnaLeakage.Analyze(captureModel), captureModel.AnalysisExpectations, UnitSystem.Imperial)),
+                             ("analysissettings", () => new AnalysisSettingsDialog(captureModel.AnalysisExpectations, UnitSystem.Imperial)),
+                             ("rounding", () => new RoundingIncrementDialog(captureModel.DefaultSizingIncrementM, UnitSystem.Imperial)),
+                             ("faninfo2", () => new FanInformationDialog("Fan-001\r\n2,400 cfm at 1.25 in. w.c. total static\r\n0.8 bhp; select a 1 hp motor"))
+                         })
+                {
+                    using var captureDialog = create();
+                    captureDialog.Show(form);
+                    Application.DoEvents();
+                    Thread.Sleep(150);
+                    Application.DoEvents();
+                    CaptureForm(captureDialog, Path.Combine(moreDialogsDirectory, name + ".png"));
+                    captureDialog.Hide();
+                }
+            }
             var userBeforeNew = ribbonModel.UserName;
             ClickButton(Find<Button>(form, "RibbonNewProjectButton"));
             Application.DoEvents();

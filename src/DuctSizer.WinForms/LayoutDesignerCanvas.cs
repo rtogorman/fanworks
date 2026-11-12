@@ -23,8 +23,22 @@ internal sealed class LayoutDesignerCanvas : Panel
     private PointF _viewOffset;
     private Point? _snapPreviewGrid;
     private readonly List<Rectangle> _paintLabelBounds = new();
+    /// <summary>Labels drawn in the last paint, for dragging them and their leaders.</summary>
+    private readonly List<PaintedLabel> _paintedLabels = new();
+    private string? _dragLabelKey;
+    private bool _dragLeader;
+    private Point _dragLabelMouse;
+    private LayoutLabelPlacement? _dragLabelOriginal;
+    private LayoutLabelPlacement? _dragLabelCurrent;
+
+    private sealed record PaintedLabel(string Key, Rectangle Bounds, PointF? LeaderEnd);
     private IReadOnlyDictionary<int, LayoutCoordinate> _resolvedCoordinates =
         new Dictionary<int, LayoutCoordinate>();
+    private (double Azimuth, double Elevation)? _orbitView;
+    private bool _orbiting;
+    private Point _orbitMouse;
+    private (double Azimuth, double Elevation) _orbitStartAngles;
+    private int _hoverCubeCorner = -1;
     private Image? _pdfBackgroundImage;
     private string _pdfBackgroundImageData = string.Empty;
 
@@ -39,11 +53,41 @@ internal sealed class LayoutDesignerCanvas : Panel
     internal Func<SavedLayoutNode, bool> CriticalPathNodeSource { get; init; } = _ => false;
     internal Func<LayoutConnectionRef, bool> CriticalPathConnectionSource { get; init; } = _ => false;
     internal Func<LayoutPdfBackground?> PdfBackgroundSource { get; init; } = () => null;
+    /// <summary>Saved label positions and leaders (<see cref="DuctSystemDocument.LayoutLabelPlacements"/>).</summary>
+    internal Func<IReadOnlyDictionary<string, LayoutLabelPlacement>> LabelPlacementSource { get; init; } =
+        () => new Dictionary<string, LayoutLabelPlacement>();
+
+    /// <summary>A label was dragged, or its leader moved: the new placement (null = back to the default place).</summary>
+    internal event Action<string, LayoutLabelPlacement?>? LabelPlacementChanged;
+
+    /// <summary>A label was right-clicked: its key and the pointer position.</summary>
+    internal event Action<string, Point>? LabelMenuRequested;
     internal LayoutNodeType? SelectedTool { get; set; }
     internal bool RearrangeMode { get; set; }
     internal bool ShowToScale { get; set; }
     internal double FeetPerGridCell { get; set; } = 1.0;
     internal LayoutViewMode ViewMode { get; set; } = LayoutViewMode.Isometric;
+
+    /// <summary>
+    /// A free view (Ctrl + middle-drag, or a view-cube corner): azimuth and elevation in degrees. Null shows the
+    /// standard view (<see cref="ViewMode"/>). Azimuth 45 / elevation 30 is exactly Isometric Positive and -45 / 30
+    /// Isometric Negative; in a free view components can be selected, edited and connected, but are placed and moved
+    /// in a standard view (the grid snapping is planar).
+    /// </summary>
+    internal (double Azimuth, double Elevation)? OrbitView
+    {
+        get => _orbitView;
+        set
+        {
+            _orbitView = value is (double azimuth, double elevation)
+                ? (NormalizeAzimuth(azimuth), Math.Clamp(elevation, -89.0, 89.0))
+                : null;
+            Invalidate();
+        }
+    }
+
+    /// <summary>Raised when the user rotates the view (drag or view cube).</summary>
+    internal event Action? OrbitChanged;
     internal bool HighlightCriticalPath { get; set; }
     internal bool AvoidLabelOverlap { get; set; }
     internal bool ShowLabels { get; set; } = true;
@@ -101,13 +145,19 @@ internal sealed class LayoutDesignerCanvas : Panel
         {
             if (!TryReadTool(args.Data, out _, out _))
                 return;
+            if (_orbitView is not null)
+            {
+                // Components are placed on the grid of a standard view.
+                args.Effect = DragDropEffects.None;
+                return;
+            }
             args.Effect = DragDropEffects.Copy;
             SetSnapPreview(SnapPlacement(PointToClient(new Point(args.X, args.Y))));
         };
         DragLeave += (_, _) => SetSnapPreview(null);
         DragDrop += (_, args) =>
         {
-            if (!TryReadTool(args.Data, out var type, out var fittingGroup))
+            if (_orbitView is not null || !TryReadTool(args.Data, out var type, out var fittingGroup))
                 return;
             var point = PointToClient(new Point(args.X, args.Y));
             var grid = SnapPlacement(point);
@@ -179,8 +229,7 @@ internal sealed class LayoutDesignerCanvas : Panel
         var bounds = NodeBounds(nodes[0]);
         foreach (var node in nodes.Skip(1))
             bounds = Rectangle.Union(bounds, NodeBounds(node));
-        if (ViewMode == LayoutViewMode.TopDown
-            && PdfBackgroundSource() is { Visible: true } background
+        if (PdfBackgroundSource() is { Visible: true } background
             && !string.IsNullOrWhiteSpace(background.PagePngBase64)
             && background.PaperInches > 0 && background.DrawingFeet > 0)
             bounds = Rectangle.Union(bounds, PdfBackgroundBounds(background));
@@ -249,6 +298,7 @@ internal sealed class LayoutDesignerCanvas : Panel
 
         var nodes = NodeSource();
         _paintLabelBounds.Clear();
+        _paintedLabels.Clear();
         if (AvoidLabelOverlap)
             _paintLabelBounds.AddRange(nodes.Select(node => Rectangle.Inflate(NodeBounds(node), 4, 4)));
         foreach (var connection in Connections(nodes))
@@ -261,6 +311,7 @@ internal sealed class LayoutDesignerCanvas : Panel
             e.Graphics.DrawLine(preview, startPort.Anchor ?? PortPoint(startPort.Node, true, startPort.Index), _connectionMouse);
         }
         DrawAxisLegend(e.Graphics);
+        DrawViewCube(e.Graphics);
     }
 
     protected override void Dispose(bool disposing)
@@ -276,7 +327,7 @@ internal sealed class LayoutDesignerCanvas : Panel
 
     private void DrawPdfBackground(Graphics graphics)
     {
-        if (ViewMode != LayoutViewMode.TopDown || PdfBackgroundSource() is not { Visible: true } background
+        if (PdfBackgroundSource() is not { Visible: true } background
             || string.IsNullOrWhiteSpace(background.PagePngBase64)
             || background.PaperInches <= 0 || background.DrawingFeet <= 0
             || background.PageWidthPoints <= 0 || background.PageHeightPoints <= 0)
@@ -304,19 +355,52 @@ internal sealed class LayoutDesignerCanvas : Panel
         if (_pdfBackgroundImage is null)
             return;
 
-        var destination = PdfBackgroundBounds(background);
+        // The sheet lies flat at its Center Z elevation; in the isometric and free views it is drawn as the
+        // parallelogram its corners project to (an affine image transform), so it lines up with the ductwork.
+        var corners = PdfBackgroundCorners(background);
         var priorInterpolation = graphics.InterpolationMode;
         graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
         using var attributes = new ImageAttributes();
         var matrix = new ColorMatrix { Matrix33 = 0.82F };
         attributes.SetColorMatrix(matrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
-        graphics.DrawImage(_pdfBackgroundImage, destination, 0, 0,
-            _pdfBackgroundImage.Width, _pdfBackgroundImage.Height, GraphicsUnit.Pixel, attributes);
+        graphics.DrawImage(_pdfBackgroundImage, new[] { corners[0], corners[1], corners[2] },
+            new RectangleF(0, 0, _pdfBackgroundImage.Width, _pdfBackgroundImage.Height), GraphicsUnit.Pixel, attributes);
         graphics.InterpolationMode = priorInterpolation;
+    }
+
+    /// <summary>
+    /// Screen positions of the underlay's top-left, top-right, bottom-left and bottom-right corners: the sheet is
+    /// centred on (Center X, Center Y) at elevation Center Z, with +X to the right of the sheet and +Y down it.
+    /// </summary>
+    internal PointF[] PdfBackgroundCorners(LayoutPdfBackground background)
+    {
+        var drawingFeetPerPaperInch = background.DrawingFeet / Math.Max(0.001, background.PaperInches);
+        var halfWidth = background.PageWidthPoints / 72.0 * drawingFeetPerPaperInch / 2;
+        var halfHeight = background.PageHeightPoints / 72.0 * drawingFeetPerPaperInch / 2;
+        PointF Corner(double dx, double dy)
+        {
+            var point = CoordinatePoint(new LayoutCoordinate(
+                UnitConversions.FeetToM(background.CenterXFeet + dx),
+                UnitConversions.FeetToM(background.CenterYFeet + dy),
+                UnitConversions.FeetToM(background.CenterZFeet)));
+            return new PointF(point.X, point.Y);
+        }
+        return new[]
+        {
+            Corner(-halfWidth, -halfHeight), Corner(halfWidth, -halfHeight),
+            Corner(-halfWidth, halfHeight), Corner(halfWidth, halfHeight)
+        };
     }
 
     internal Rectangle PdfBackgroundBounds(LayoutPdfBackground background)
     {
+        if (ViewMode != LayoutViewMode.TopDown || _orbitView is not null)
+        {
+            var corners = PdfBackgroundCorners(background);
+            var left = corners.Min(c => c.X);
+            var top = corners.Min(c => c.Y);
+            return Rectangle.Round(RectangleF.FromLTRB(left, top, corners.Max(c => c.X), corners.Max(c => c.Y)));
+        }
         var feetPerCell = Math.Max(0.1, FeetPerGridCell);
         var drawingFeetPerPaperInch = background.DrawingFeet / Math.Max(0.001, background.PaperInches);
         var drawingWidthFeet = background.PageWidthPoints / 72.0 * drawingFeetPerPaperInch;
@@ -348,6 +432,45 @@ internal sealed class LayoutDesignerCanvas : Panel
         base.OnMouseDown(e);
         Focus();
         _mouseDown = e.Location;
+        // View cube corner: turn the model to look from that corner.
+        if (e.Button == MouseButtons.Left && HitTestCubeCorner(e.Location) is var cubeIndex && cubeIndex >= 0)
+        {
+            var corner = ViewCubeCorners()[cubeIndex];
+            ViewFromCubeCorner(corner.X, corner.Y, corner.Z);
+            return;
+        }
+        if (ViewCubeBounds.Contains(e.Location))
+            return;
+        // Ctrl + middle button: rotate the model freely.
+        if (e.Button == MouseButtons.Middle && (ModifierKeys & Keys.Control) == Keys.Control)
+        {
+            _orbiting = true;
+            _orbitMouse = e.Location;
+            _orbitStartAngles = CurrentViewAngles;
+            Capture = true;
+            Cursor = Cursors.SizeAll;
+            return;
+        }
+        // Labels first: drag a label, or the end of its leader; right-click offers the label menu.
+        if (SelectedTool is null && !RearrangeMode && HitTestLabel(e.Location, out var onLeaderHandle) is string labelKey)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                LabelMenuRequested?.Invoke(labelKey, e.Location);
+                return;
+            }
+            if (e.Button == MouseButtons.Left)
+            {
+                _dragLabelKey = labelKey;
+                _dragLeader = onLeaderHandle;
+                _dragLabelMouse = e.Location;
+                _dragLabelOriginal = LabelPlacementSource().TryGetValue(labelKey, out var saved) ? saved.Copy() : new LayoutLabelPlacement();
+                _dragLabelCurrent = _dragLabelOriginal.Copy();
+                Capture = true;
+                Cursor = Cursors.SizeAll;
+                return;
+            }
+        }
         if (!RearrangeMode && e.Button == MouseButtons.Left
             && HitTestPort(e.Location) is LayoutPortRef port)
         {
@@ -397,6 +520,26 @@ internal sealed class LayoutDesignerCanvas : Panel
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
+        if (_orbiting)
+        {
+            _orbiting = false;
+            Capture = false;
+            Cursor = Cursors.Hand;
+            return;
+        }
+        if (_dragLabelKey is string draggedKey)
+        {
+            var moved = Math.Abs(e.X - _dragLabelMouse.X) + Math.Abs(e.Y - _dragLabelMouse.Y) > 2;
+            var placement = _dragLabelCurrent;
+            _dragLabelKey = null;
+            _dragLabelCurrent = null;
+            Capture = false;
+            Cursor = Cursors.Hand;
+            if (moved && placement is not null)
+                LabelPlacementChanged?.Invoke(draggedKey, placement);
+            Invalidate();
+            return;
+        }
         if (_panning)
         {
             _panning = false;
@@ -418,7 +561,7 @@ internal sealed class LayoutDesignerCanvas : Panel
             }
             return;
         }
-        if (e.Button == MouseButtons.Left && _dragNode is not null
+        if (e.Button == MouseButtons.Left && _dragNode is not null && _orbitView is null
             && Math.Abs(e.X - _mouseDown.X) + Math.Abs(e.Y - _mouseDown.Y) > 6)
         {
             var grid = SnapPlacement(e.Location);
@@ -431,6 +574,42 @@ internal sealed class LayoutDesignerCanvas : Panel
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+        if (_orbiting)
+        {
+            // 0.4 degrees per pixel: across turns about Z, up/down tilts.
+            RotateViewTo(_orbitStartAngles.Azimuth - (e.X - _orbitMouse.X) * 0.4,
+                _orbitStartAngles.Elevation + (e.Y - _orbitMouse.Y) * 0.4);
+            return;
+        }
+        var cubeHover = HitTestCubeCorner(e.Location);
+        if (cubeHover != _hoverCubeCorner)
+        {
+            _hoverCubeCorner = cubeHover;
+            Invalidate(ViewCubeBounds);
+        }
+        if (cubeHover >= 0)
+        {
+            Cursor = Cursors.Hand;
+            return;
+        }
+        if (_dragLabelKey is not null && _dragLabelOriginal is not null && _dragLabelCurrent is not null)
+        {
+            // Offsets are kept at 100 % zoom so a label stays put relative to its item when zooming.
+            var dx = (e.X - _dragLabelMouse.X) / Math.Max(0.05, ZoomFactor);
+            var dy = (e.Y - _dragLabelMouse.Y) / Math.Max(0.05, ZoomFactor);
+            if (_dragLeader)
+            {
+                _dragLabelCurrent.LeaderX = _dragLabelOriginal.LeaderX + dx;
+                _dragLabelCurrent.LeaderY = _dragLabelOriginal.LeaderY + dy;
+            }
+            else
+            {
+                _dragLabelCurrent.OffsetX = _dragLabelOriginal.OffsetX + dx;
+                _dragLabelCurrent.OffsetY = _dragLabelOriginal.OffsetY + dy;
+            }
+            Invalidate();
+            return;
+        }
         if (_panning)
         {
             var pointer = PointToScreen(e.Location);
@@ -448,14 +627,18 @@ internal sealed class LayoutDesignerCanvas : Panel
             Invalidate();
             return;
         }
-        if (_dragNode is not null && e.Button == MouseButtons.Left
+        if (_orbitView is not null)
+            SetSnapPreview(null);
+        else if (_dragNode is not null && e.Button == MouseButtons.Left
             && Math.Abs(e.X - _mouseDown.X) + Math.Abs(e.Y - _mouseDown.Y) > 6)
             SetSnapPreview(SnapPlacement(e.Location));
         else if (SelectedTool is not null && _dragNode is null)
             SetSnapPreview(SnapPlacement(e.Location));
         else if (_dragNode is null)
             SetSnapPreview(null);
-        Cursor = HitTest(e.Location) is not null && RearrangeMode
+        Cursor = SelectedTool is null && !RearrangeMode && HitTestLabel(e.Location, out _) is not null
+            ? Cursors.SizeAll
+            : HitTest(e.Location) is not null && RearrangeMode
             ? Cursors.SizeAll
             : (!RearrangeMode && HitTestPort(e.Location) is not null) || HitTest(e.Location) is not null || HitTestConnection(e.Location) is not null
             ? Cursors.Hand
@@ -469,7 +652,7 @@ internal sealed class LayoutDesignerCanvas : Panel
             || HitTestConnection(e.Location) is not null)
             return;
         SetSelectedNode(null);
-        if (SelectedTool is null)
+        if (SelectedTool is null || _orbitView is not null || ViewCubeBounds.Contains(e.Location))
             return;
         var grid = SnapPlacement(e.Location);
         SetSnapPreview(null);
@@ -543,8 +726,10 @@ internal sealed class LayoutDesignerCanvas : Panel
         using var idFont = new Font("Segoe UI Semibold", Math.Max(5.5F, 7F * ZoomFactor));
         var measured = TextRenderer.MeasureText(id, idFont, Size.Empty,
             TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
-        var textBounds = ReserveLabelBounds(new Rectangle(bounds.Right + Math.Max(5, (int)Math.Round(7 * ZoomFactor)),
-            bounds.Top - Math.Max(2, (int)Math.Round(3 * ZoomFactor)), measured.Width + 8, measured.Height + 3));
+        var textBounds = PlaceLabel(graphics, LayoutLabelPlacement.NodeKey(node.Sequence),
+            new Rectangle(bounds.Right + Math.Max(5, (int)Math.Round(7 * ZoomFactor)),
+                bounds.Top - Math.Max(2, (int)Math.Round(3 * ZoomFactor)), measured.Width + 8, measured.Height + 3),
+            Center(node));
         using var labelBackground = new SolidBrush(Color.FromArgb(225, 255, 255, 255));
         graphics.FillRectangle(labelBackground, textBounds);
         TextRenderer.DrawText(graphics, id, idFont, textBounds, Color.FromArgb(20, 44, 65),
@@ -590,6 +775,26 @@ internal sealed class LayoutDesignerCanvas : Panel
     {
         using var minor = new Pen(Color.FromArgb(190, 222, 227), 0.75F);
         using var major = new Pen(Color.FromArgb(111, 183, 194), 1.10F);
+        if (_orbitView is not null)
+        {
+            // The floor grid (Z = 0) around the drawing, projected with the free view.
+            var nodes = NodeSource();
+            var cellFeet = ShowToScale ? Math.Max(0.1, FeetPerGridCell) : 5.0;
+            var cells = nodes.Select(WorldCoordinate)
+                .Select(c => (X: UnitConversions.MToFeet(c.XM) / cellFeet, Y: UnitConversions.MToFeet(c.YM) / cellFeet)).ToArray();
+            var minX = (int)Math.Floor(cells.Length == 0 ? -10 : cells.Min(c => c.X)) - 10;
+            var maxX = (int)Math.Ceiling(cells.Length == 0 ? 10 : cells.Max(c => c.X)) + 10;
+            var minY = (int)Math.Floor(cells.Length == 0 ? -10 : cells.Min(c => c.Y)) - 10;
+            var maxY = (int)Math.Ceiling(cells.Length == 0 ? 10 : cells.Max(c => c.Y)) + 10;
+            var stride = Math.Max(GridLineStride(GridSize / 2.2F), (int)Math.Ceiling(Math.Max(maxX - minX, maxY - minY) / 160.0));
+            for (var x = minX; x <= maxX; x++)
+                if (x % stride == 0)
+                    graphics.DrawLine(x % 5 == 0 ? major : minor, OrbitProject(x, minY, 0), OrbitProject(x, maxY, 0));
+            for (var y = minY; y <= maxY; y++)
+                if (y % stride == 0)
+                    graphics.DrawLine(y % 5 == 0 ? major : minor, OrbitProject(minX, y, 0), OrbitProject(maxX, y, 0));
+            return;
+        }
         if (ViewMode == LayoutViewMode.TopDown)
         {
             var spacing = GridSize / 2F;
@@ -659,6 +864,22 @@ internal sealed class LayoutDesignerCanvas : Panel
         using var xPen = new Pen(Color.FromArgb(195, 65, 65), 2F) { EndCap = LineCap.ArrowAnchor };
         using var yPen = new Pen(Color.FromArgb(42, 135, 91), 2F) { EndCap = LineCap.ArrowAnchor };
         using var zPen = new Pen(Color.FromArgb(45, 105, 170), 2F) { EndCap = LineCap.ArrowAnchor };
+        if (_orbitView is (double, double) angles)
+        {
+            var legendOrigin = new PointF(axisOrigin.X, axisOrigin.Y);
+            PointF End(double x, double y, double z) => OrbitProject(x, y, z / OrbitZScale, angles, legendOrigin, axisLength);
+            var ox = End(1, 0, 0);
+            var oy = End(0, 1, 0);
+            var oz = End(0, 0, 1);
+            graphics.DrawLine(xPen, legendOrigin, ox);
+            graphics.DrawLine(yPen, legendOrigin, oy);
+            graphics.DrawLine(zPen, legendOrigin, oz);
+            using var orbitAxisFont = new Font("Segoe UI Semibold", 8F);
+            graphics.DrawString("X", orbitAxisFont, Brushes.Firebrick, ox.X + 2, ox.Y - 5);
+            graphics.DrawString("Y", orbitAxisFont, Brushes.SeaGreen, oy.X + 2, oy.Y - 5);
+            graphics.DrawString("Z", orbitAxisFont, Brushes.SteelBlue, oz.X + 3, oz.Y - 12);
+            return;
+        }
         var xEnd = ViewMode == LayoutViewMode.TopDown
             ? new Point(axisOrigin.X + axisLength, axisOrigin.Y)
             : ViewMode == LayoutViewMode.IsometricNegative
@@ -795,13 +1016,85 @@ internal sealed class LayoutDesignerCanvas : Panel
         var labelWidth = ductMeasured.Width + 8;
         var labelHeight = ductMeasured.Height + 3;
         var center = AdjacentLabelPoint(path, labelHeight);
-        var labelBounds = ReserveLabelBounds(new Rectangle(center.X - labelWidth / 2,
-            center.Y - labelHeight / 2, labelWidth, labelHeight));
+        var labelBounds = PlaceLabel(graphics,
+            LayoutLabelPlacement.ConnectionKey(connectionRef.Downstream.Sequence, connectionRef.Secondary),
+            new Rectangle(center.X - labelWidth / 2, center.Y - labelHeight / 2, labelWidth, labelHeight),
+            PathMidpoint(path));
         using var labelBackground = new SolidBrush(Color.FromArgb(225, 255, 255, 255));
         graphics.FillRectangle(labelBackground, labelBounds);
         TextRenderer.DrawText(graphics, ductLabel, labelFont,
             labelBounds, Color.FromArgb(20, 44, 65), TextFormatFlags.HorizontalCenter | TextFormatFlags.SingleLine);
     }
+
+    /// <summary>
+    /// Where a label is drawn: its default place (kept clear of other labels when that option is on), or where the
+    /// engineer dragged it. Draws its leader, if it has one, from the label to the point it was dragged to.
+    /// </summary>
+    private Rectangle PlaceLabel(Graphics graphics, string key, Rectangle preferred, Point reference)
+    {
+        var placement = CurrentLabelPlacement(key);
+        Rectangle bounds;
+        if (placement is null || placement.OffsetX == 0 && placement.OffsetY == 0 && !placement.HasLeader)
+            bounds = ReserveLabelBounds(preferred);
+        else
+        {
+            bounds = preferred;
+            bounds.Offset((int)Math.Round(placement.OffsetX * ZoomFactor), (int)Math.Round(placement.OffsetY * ZoomFactor));
+            _paintLabelBounds.Add(Rectangle.Inflate(bounds, 3, 2));
+        }
+        PointF? leaderEnd = null;
+        if (placement is { HasLeader: true })
+        {
+            var end = new PointF(reference.X + (float)(placement.LeaderX * ZoomFactor), reference.Y + (float)(placement.LeaderY * ZoomFactor));
+            leaderEnd = end;
+            var start = new PointF(Math.Clamp(end.X, bounds.Left, bounds.Right), Math.Clamp(end.Y, bounds.Top, bounds.Bottom));
+            using var leader = new Pen(Color.FromArgb(70, 92, 112), Math.Max(1F, 1.2F * ZoomFactor))
+            {
+                CustomEndCap = new AdjustableArrowCap(3.2F, 4.2F, true)
+            };
+            if (Math.Abs(start.X - end.X) + Math.Abs(start.Y - end.Y) > 3)
+                graphics.DrawLine(leader, start, end);
+            // Handle to drag the leader's end onto the duct or fitting it points to.
+            var radius = Math.Max(3F, 3.5F * ZoomFactor);
+            using var handleFill = new SolidBrush(Color.White);
+            using var handlePen = new Pen(Color.FromArgb(45, 105, 170), 1.2F);
+            graphics.FillEllipse(handleFill, end.X - radius, end.Y - radius, radius * 2, radius * 2);
+            graphics.DrawEllipse(handlePen, end.X - radius, end.Y - radius, radius * 2, radius * 2);
+        }
+        _paintedLabels.Add(new PaintedLabel(key, bounds, leaderEnd));
+        return bounds;
+    }
+
+    private LayoutLabelPlacement? CurrentLabelPlacement(string key) =>
+        string.Equals(key, _dragLabelKey, StringComparison.Ordinal)
+            ? _dragLabelCurrent
+            : LabelPlacementSource().TryGetValue(key, out var saved) ? saved : null;
+
+    /// <summary>The label (or, when <paramref name="leaderHandle"/>, the leader end handle) under the pointer.</summary>
+    private string? HitTestLabel(Point point, out bool leaderHandle)
+    {
+        var handleRadius = Math.Max(6F, 6F * ZoomFactor);
+        for (var index = _paintedLabels.Count - 1; index >= 0; index--)
+        {
+            var label = _paintedLabels[index];
+            if (label.LeaderEnd is PointF end && Math.Abs(end.X - point.X) <= handleRadius && Math.Abs(end.Y - point.Y) <= handleRadius)
+            {
+                leaderHandle = true;
+                return label.Key;
+            }
+        }
+        for (var index = _paintedLabels.Count - 1; index >= 0; index--)
+            if (_paintedLabels[index].Bounds.Contains(point))
+            {
+                leaderHandle = false;
+                return _paintedLabels[index].Key;
+            }
+        leaderHandle = false;
+        return null;
+    }
+
+    /// <summary>The label key under the pointer, if any (used by the Designer for its label menu).</summary>
+    internal string? LabelAt(Point point) => HitTestLabel(point, out _);
 
     private Rectangle ReserveLabelBounds(Rectangle preferred)
     {
@@ -920,9 +1213,22 @@ internal sealed class LayoutDesignerCanvas : Panel
         var downstream = connectionRef.Downstream;
         var centerStart = Center(parent);
         var centerEnd = Center(downstream);
-        if (UsesResolvedCoordinate(parent) && UsesResolvedCoordinate(downstream)
-            && _resolvedCoordinates.TryGetValue(parent.Sequence, out var parentCoordinate)
-            && _resolvedCoordinates.TryGetValue(downstream.Sequence, out var downstreamCoordinate))
+        LayoutCoordinate parentCoordinate = default!, downstreamCoordinate = default!;
+        var useCoordinates = _orbitView is not null;
+        if (useCoordinates)
+        {
+            parentCoordinate = WorldCoordinate(parent);
+            downstreamCoordinate = WorldCoordinate(downstream);
+        }
+        else if (UsesResolvedCoordinate(parent) && UsesResolvedCoordinate(downstream)
+                 && _resolvedCoordinates.TryGetValue(parent.Sequence, out var resolvedParent)
+                 && _resolvedCoordinates.TryGetValue(downstream.Sequence, out var resolvedDownstream))
+        {
+            parentCoordinate = resolvedParent;
+            downstreamCoordinate = resolvedDownstream;
+            useCoordinates = true;
+        }
+        if (useCoordinates)
         {
             var centersToScale = new List<Point>
             {
@@ -1137,12 +1443,23 @@ internal sealed class LayoutDesignerCanvas : Panel
         new(-2F, 1F), new(-2F, -1F), new(0F, -1F)
     };
 
-    private PointF[] AxisDirections => ViewMode switch
+    private PointF[] AxisDirections => _orbitView is not null ? OrbitAxisDirections() : ViewMode switch
     {
         LayoutViewMode.TopDown => TopDownAxisDirections,
         LayoutViewMode.IsometricNegative => NegativeIsoAxisDirections,
         _ => IsoAxisDirections
     };
+
+    /// <summary>Screen directions of +X, +Y, -Z, -X, -Y, +Z in the free view (axes seen end-on are left out).</summary>
+    private PointF[] OrbitAxisDirections()
+    {
+        var origin = OrbitProject(0, 0, 0);
+        return new (double X, double Y, double Z)[] { (1, 0, 0), (0, 1, 0), (0, 0, -1), (-1, 0, 0), (0, -1, 0), (0, 0, 1) }
+            .Select(axis => OrbitProject(axis.X, axis.Y, axis.Z))
+            .Select(point => new PointF(point.X - origin.X, point.Y - origin.Y))
+            .Where(direction => Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y) > GridSize * 0.05)
+            .ToArray();
+    }
 
     private Point PortPointToward(SavedLayoutNode node, Point target)
     {
@@ -1242,6 +1559,11 @@ internal sealed class LayoutDesignerCanvas : Panel
         var x = UnitConversions.MToFeet(coordinate.XM) / cellFeet;
         var y = UnitConversions.MToFeet(coordinate.YM) / cellFeet;
         var z = UnitConversions.MToFeet(coordinate.ZM) / cellFeet;
+        if (_orbitView is not null)
+        {
+            var projected = OrbitProject(x, y, z);
+            return new Point((int)Math.Round(projected.X), (int)Math.Round(projected.Y));
+        }
         if (ViewMode == LayoutViewMode.TopDown)
             return new Point((int)Math.Round(OriginX + x * GridSize / 2.0),
                 (int)Math.Round(OriginY + y * GridSize / 2.0));
@@ -1255,9 +1577,202 @@ internal sealed class LayoutDesignerCanvas : Panel
     }
 
     internal Point VisualLocation(SavedLayoutNode node) =>
-        UsesResolvedCoordinate(node) && _resolvedCoordinates.TryGetValue(node.Sequence, out var coordinate)
-            ? CoordinatePoint(coordinate)
-            : GridPoint(DisplayGridPoint(node));
+        _orbitView is not null
+            ? CoordinatePoint(WorldCoordinate(node))
+            : UsesResolvedCoordinate(node) && _resolvedCoordinates.TryGetValue(node.Sequence, out var coordinate)
+                ? CoordinatePoint(coordinate)
+                : GridPoint(DisplayGridPoint(node));
+
+    /// <summary>
+    /// A component's position in the drawing (m): its resolved coordinate, or, for a component placed only on the
+    /// grid, the point under its grid position at Z = 0 (the inverse of the Isometric Positive grid mapping).
+    /// </summary>
+    private LayoutCoordinate WorldCoordinate(SavedLayoutNode node)
+    {
+        if (UsesResolvedCoordinate(node) && _resolvedCoordinates.TryGetValue(node.Sequence, out var coordinate))
+            return coordinate;
+        var cellFeet = ShowToScale ? Math.Max(0.1, FeetPerGridCell) : 5.0;
+        var x = (node.GridX + node.GridY) / 2.0 * cellFeet;
+        var y = (node.GridY - node.GridX) / 2.0 * cellFeet;
+        return new LayoutCoordinate(UnitConversions.FeetToM(x), UnitConversions.FeetToM(y), 0);
+    }
+
+    // ---- Free view (orbit) -------------------------------------------------------------------------------------
+
+    /// <summary>Vertical scale of Z in the free view, chosen so azimuth ±45° / elevation 30° equals the isometric views.</summary>
+    private const double OrbitZScale = 0.816496580927726;
+
+    private static double NormalizeAzimuth(double degrees)
+    {
+        var value = degrees % 360.0;
+        if (value <= -180)
+            value += 360;
+        if (value > 180)
+            value -= 360;
+        return value;
+    }
+
+    /// <summary>The angles equivalent to the current view (free or standard).</summary>
+    internal (double Azimuth, double Elevation) CurrentViewAngles => _orbitView ?? ViewMode switch
+    {
+        LayoutViewMode.TopDown => (0.0, 89.0),
+        LayoutViewMode.IsometricNegative => (-45.0, 30.0),
+        _ => (45.0, 30.0)
+    };
+
+    /// <summary>Projects a point given in grid cells (x, y, z) with the free view's angles.</summary>
+    private PointF OrbitProject(double x, double y, double z) => OrbitProject(x, y, z, _orbitView ?? CurrentViewAngles,
+        new PointF(OriginX, OriginY), GridSize / Math.Sqrt(2));
+
+    private static PointF OrbitProject(double x, double y, double z, (double Azimuth, double Elevation) angles,
+        PointF origin, double scale)
+    {
+        var theta = angles.Azimuth * Math.PI / 180;
+        var phi = angles.Elevation * Math.PI / 180;
+        var across = x * Math.Cos(theta) - y * Math.Sin(theta);
+        var depth = x * Math.Sin(theta) + y * Math.Cos(theta);
+        return new PointF(
+            (float)(origin.X + across * scale),
+            (float)(origin.Y + (depth * Math.Sin(phi) - z * Math.Cos(phi) * OrbitZScale) * scale));
+    }
+
+    /// <summary>
+    /// Changes the free view's angles while keeping the drawing's centre where it is on screen, so the model turns
+    /// about its own middle rather than the origin.
+    /// </summary>
+    internal void RotateViewTo(double azimuth, double elevation)
+    {
+        var nodes = NodeSource();
+        _resolvedCoordinates = CoordinateSource();
+        LayoutCoordinate? pivot = null;
+        if (nodes.Count > 0)
+        {
+            // Turn about the components in view (all of them when none is), so what you are looking at stays put.
+            var view = new Rectangle(0, 0, Width, Height);
+            var visible = nodes.Where(node => view.Contains(VisualLocation(node))).ToArray();
+            var world = (visible.Length > 0 ? visible : nodes.ToArray()).Select(WorldCoordinate).ToArray();
+            pivot = new LayoutCoordinate((world.Min(c => c.XM) + world.Max(c => c.XM)) / 2,
+                (world.Min(c => c.YM) + world.Max(c => c.YM)) / 2, (world.Min(c => c.ZM) + world.Max(c => c.ZM)) / 2);
+        }
+        if (_orbitView is null)
+            _orbitView = CurrentViewAngles;
+        var before = pivot is LayoutCoordinate p0 ? CoordinatePoint(p0) : Point.Empty;
+        _orbitView = (NormalizeAzimuth(azimuth), Math.Clamp(elevation, -89.0, 89.0));
+        if (pivot is LayoutCoordinate p1)
+        {
+            var after = CoordinatePoint(p1);
+            _viewOffset = new PointF(_viewOffset.X + before.X - after.X, _viewOffset.Y + before.Y - after.Y);
+        }
+        Invalidate();
+        OrbitChanged?.Invoke();
+    }
+
+    /// <summary>The view cube, just left of the XYZ legend.</summary>
+    internal Rectangle ViewCubeBounds
+    {
+        get
+        {
+            var legend = AxisLegendBounds;
+            return new Rectangle(legend.Left - legend.Width - 8, legend.Top, legend.Width, legend.Height);
+        }
+    }
+
+    /// <summary>Screen positions of the view cube's 8 corners (sx, sy, sz = ±1) in the current view.</summary>
+    internal IReadOnlyList<(int X, int Y, int Z, PointF Point, double Depth)> ViewCubeCorners()
+    {
+        var bounds = ViewCubeBounds;
+        var center = new PointF(bounds.Left + bounds.Width / 2F, bounds.Top + bounds.Height / 2F + 4);
+        var angles = CurrentViewAngles;
+        var theta = angles.Azimuth * Math.PI / 180;
+        var phi = angles.Elevation * Math.PI / 180;
+        var scale = bounds.Width * 0.24;
+        var corners = new List<(int, int, int, PointF, double)>();
+        foreach (var sz in new[] { 1, -1 })
+        foreach (var sx in new[] { 1, -1 })
+        foreach (var sy in new[] { 1, -1 })
+        {
+            // Toward the viewer: (sinθ cosφ, cosθ cosφ, sinφ).
+            var depth = sx * Math.Sin(theta) * Math.Cos(phi) + sy * Math.Cos(theta) * Math.Cos(phi) + sz * Math.Sin(phi);
+            corners.Add((sx, sy, sz, OrbitProject(sx, sy, sz / OrbitZScale, angles, center, scale), depth));
+        }
+        return corners;
+    }
+
+    /// <summary>The view-cube corner under the pointer (index into <see cref="ViewCubeCorners"/>), or -1.</summary>
+    private int HitTestCubeCorner(Point point)
+    {
+        if (!ViewCubeBounds.Contains(point))
+            return -1;
+        var corners = ViewCubeCorners();
+        var best = -1;
+        var bestDistance = 9.0;
+        for (var index = 0; index < corners.Count; index++)
+        {
+            var distance = Math.Sqrt(Math.Pow(corners[index].Point.X - point.X, 2) + Math.Pow(corners[index].Point.Y - point.Y, 2));
+            // Prefer the corner nearer the viewer where two overlap.
+            if (distance < bestDistance - (corners[index].Depth > 0 ? 0.5 : 0))
+            {
+                bestDistance = distance;
+                best = index;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>Turns the model so the clicked cube corner faces the viewer (an isometric view from that corner).</summary>
+    internal void ViewFromCubeCorner(int sx, int sy, int sz) =>
+        RotateViewTo(Math.Atan2(sx, sy) * 180 / Math.PI, sz * 30.0);
+
+    private void DrawViewCube(Graphics graphics)
+    {
+        var bounds = ViewCubeBounds;
+        using var fill = new SolidBrush(Color.FromArgb(235, 255, 255, 255));
+        using var border = new Pen(Color.FromArgb(165, 184, 195), 1F);
+        graphics.FillRectangle(fill, bounds);
+        graphics.DrawRectangle(border, bounds);
+        var corners = ViewCubeCorners();
+        // Faces: the three facing the viewer are shaded; edges drawn back to front.
+        var faces = new (int Axis, int Sign)[] { (0, 1), (0, -1), (1, 1), (1, -1), (2, 1), (2, -1) };
+        var angles = CurrentViewAngles;
+        var theta = angles.Azimuth * Math.PI / 180;
+        var phi = angles.Elevation * Math.PI / 180;
+        var toward = new[] { Math.Sin(theta) * Math.Cos(phi), Math.Cos(theta) * Math.Cos(phi), Math.Sin(phi) };
+        foreach (var (axis, sign) in faces)
+        {
+            if (toward[axis] * sign <= 0.02)
+                continue;
+            var faceCorners = corners.Where(c => (axis == 0 ? c.X : axis == 1 ? c.Y : c.Z) == sign).ToArray();
+            // Order the four corners around the face.
+            var cx = faceCorners.Average(c => c.Point.X);
+            var cy = faceCorners.Average(c => c.Point.Y);
+            var ordered = faceCorners.OrderBy(c => Math.Atan2(c.Point.Y - cy, c.Point.X - cx)).Select(c => c.Point).ToArray();
+            var shade = axis == 2 ? Color.FromArgb(214, 230, 242) : axis == 0 ? Color.FromArgb(232, 240, 247) : Color.FromArgb(222, 234, 244);
+            using var faceBrush = new SolidBrush(shade);
+            using var facePen = new Pen(Color.FromArgb(105, 140, 168), 1.1F);
+            graphics.FillPolygon(faceBrush, ordered);
+            graphics.DrawPolygon(facePen, ordered);
+            if (axis == 2 && sign == 1 && ordered.Length == 4)
+            {
+                using var font = new Font("Segoe UI Semibold", 6.5F);
+                var size = graphics.MeasureString("TOP", font);
+                graphics.DrawString("TOP", font, Brushes.SteelBlue, (float)cx - size.Width / 2, (float)cy - size.Height / 2);
+            }
+        }
+        for (var index = 0; index < corners.Count; index++)
+        {
+            var corner = corners[index];
+            if (corner.Depth < -0.05)
+                continue;
+            var hover = index == _hoverCubeCorner;
+            var radius = hover ? 5.5F : 3.6F;
+            using var dot = new SolidBrush(hover ? Color.FromArgb(31, 120, 180) : Color.FromArgb(70, 110, 140));
+            graphics.FillEllipse(dot, corner.Point.X - radius, corner.Point.Y - radius, radius * 2, radius * 2);
+        }
+        using var captionFont = new Font("Segoe UI", 6.5F);
+        TextRenderer.DrawText(graphics, _orbitView is null ? "Click a corner" : "Free view", captionFont,
+            new Rectangle(bounds.Left, bounds.Top + 2, bounds.Width, 12), Color.FromArgb(92, 107, 120),
+            TextFormatFlags.HorizontalCenter);
+    }
 
     private Point DisplayGridPoint(SavedLayoutNode node) => ViewMode == LayoutViewMode.IsometricNegative
         ? new Point(node.GridY, -node.GridX)

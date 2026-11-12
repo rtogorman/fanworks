@@ -292,35 +292,31 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(1260, 900);
         MinimumSize = new Size(860, 640);
-        BackColor = Color.FromArgb(242, 245, 248);
+        BackColor = FormKit.Background;
         Font = new Font("Segoe UI", 9F);
         Shown += (_, _) => UiPolish.ApplyDialogSurface(this);
 
-        var instruction = new Label
-        {
-            Dock = DockStyle.Top,
-            Height = 58,
-            Padding = new Padding(18, 8, 18, 6),
-            Text = "Select a fitting image. Its description appears above the image and its fitting number appears below.",
-            ForeColor = Color.FromArgb(28, 69, 108),
-            Font = new Font("Segoe UI Semibold", 10F),
-            TextAlign = ContentAlignment.MiddleLeft
-        };
+        var instruction = FormKit.Header("Fitting gallery",
+            "Select a fitting image. Its description appears above the image and its fitting number below.");
+        instruction.Dock = DockStyle.Top;
+        instruction.Height = 64;
+        instruction.Padding = new Padding(20, 12, 20, 0);
+
         var filterHost = new Panel
         {
             Dock = DockStyle.Top,
             Height = 48,
-            Padding = new Padding(18, 6, 18, 6),
+            Padding = new Padding(20, 6, 20, 6),
             BackColor = BackColor
         };
         var filterLabel = new Label
         {
             Text = "Fitting Group",
             Dock = DockStyle.Left,
-            Width = 130,
+            Width = 110,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI Semibold", 9F),
-            ForeColor = Color.FromArgb(34, 62, 88)
+            ForeColor = FormKit.LabelInk
         };
         _groupFilter.Name = "FittingGalleryGroupCombo";
         _groupFilter.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -338,23 +334,37 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
         _gallery.Dock = DockStyle.Fill;
         _gallery.AutoScroll = true;
         _gallery.WrapContents = true;
-        _gallery.Padding = new Padding(12);
-        _gallery.BackColor = Color.FromArgb(242, 245, 248);
+        _gallery.Padding = new Padding(14, 6, 14, 6);
+        _gallery.BackColor = FormKit.Background;
+        var buttonBar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 56,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Padding = new Padding(20, 10, 20, 10),
+            BackColor = FormKit.Background
+        };
         var cancel = new Button
         {
+            Name = "FittingGalleryCancelButton",
             Text = "Cancel",
-            Dock = DockStyle.Bottom,
-            Height = 42,
+            DialogResult = DialogResult.Cancel,
+            Size = new Size(96, 34),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.White,
-            ForeColor = Color.FromArgb(34, 62, 88)
+            ForeColor = FormKit.LabelInk,
+            Margin = Padding.Empty
         };
+        cancel.FlatAppearance.BorderColor = DialogStyle.InputBorder;
         cancel.Click += (_, _) => Close();
-        UiPolish.RoundButton(cancel, 7);
+        UiPolish.RoundButton(cancel, 8);
+        buttonBar.Controls.Add(cancel);
+        CancelButton = cancel;
 
         _groupFilter.SelectedIndex = 0;
         Controls.Add(_gallery);
-        Controls.Add(cancel);
+        Controls.Add(buttonBar);
         Controls.Add(filterHost);
         Controls.Add(instruction);
     }
@@ -370,30 +380,32 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
         var definitions = group == "All Fittings"
             ? _definitions
             : _definitions.Where(definition => FittingCatalog.SelectionGroup(definition) == group).ToArray();
+        // Every card in the view gets the same description band so the rows line up.
+        using var descriptionFont = new Font("Segoe UI", 10.2F, FontStyle.Bold);
+        var descriptionHeight = Math.Max(64, definitions.Select(definition => TextRenderer.MeasureText(
+            definition.Description, descriptionFont, new Size(346, int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height + 16).DefaultIfEmpty(64).Max());
         foreach (var definition in definitions)
             _gallery.Controls.Add(CreateGalleryTile(definition,
-                string.Equals(definition.Code, _selectedCode, StringComparison.OrdinalIgnoreCase)));
+                string.Equals(definition.Code, _selectedCode, StringComparison.OrdinalIgnoreCase), descriptionHeight));
         _gallery.ResumeLayout(true);
     }
 
-    private Control CreateGalleryTile(FittingDefinition definition, bool selected)
+    private Control CreateGalleryTile(FittingDefinition definition, bool selected, int descriptionHeight)
     {
         var descriptionFont = new Font("Segoe UI", 10.2F, FontStyle.Bold);
-        var measuredDescription = TextRenderer.MeasureText(
-            definition.Description,
-            descriptionFont,
-            new Size(346, int.MaxValue),
-            TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
-        var descriptionHeight = Math.Max(124, measuredDescription.Height + 16);
+        var restingBorder = selected ? DialogStyle.Accent : Color.FromArgb(214, 223, 231);
         var tile = new RoundedPanel
         {
             Name = $"FittingGalleryTile_{definition.Code}",
             Size = new Size(380, descriptionHeight + 356),
             Margin = new Padding(8),
             Padding = new Padding(15),
-            BackColor = selected ? Color.FromArgb(218, 236, 250) : Color.White,
+            BackColor = selected ? Color.FromArgb(232, 242, 251) : Color.White,
             CornerRadius = 12,
-            BorderColor = selected ? Color.FromArgb(74, 139, 190) : Color.FromArgb(200, 212, 222),
+            ClipToShape = false,
+            BorderThickness = selected ? 2 : 1,
+            BorderColor = restingBorder,
             Cursor = Cursors.Hand,
             AccessibleName = $"Select fitting {definition.Code}"
         };
@@ -431,7 +443,7 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
             Text = definition.Code,
             TextAlign = ContentAlignment.MiddleCenter,
             Font = new Font("Segoe UI Semibold", 10F),
-            ForeColor = Color.FromArgb(28, 69, 108),
+            ForeColor = DialogStyle.Accent,
             Cursor = Cursors.Hand,
             Margin = Padding.Empty
         };
@@ -459,6 +471,26 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
             SelectedDefinition = definition;
             DialogResult = DialogResult.OK;
             Close();
+        }
+        // Hover: the card border turns blue so the pointer target is obvious.
+        void Hover(object? _, EventArgs __)
+        {
+            if (tile.BorderColor == DialogStyle.Accent)
+                return;
+            tile.BorderColor = DialogStyle.Accent;
+            tile.Invalidate();
+        }
+        void Leave(object? _, EventArgs __)
+        {
+            if (tile.ClientRectangle.Contains(tile.PointToClient(Cursor.Position)))
+                return;
+            tile.BorderColor = restingBorder;
+            tile.Invalidate();
+        }
+        foreach (var part in new Control[] { tile, layout, picture, number, description })
+        {
+            part.MouseEnter += Hover;
+            part.MouseLeave += Leave;
         }
         tile.Click += SelectFitting;
         layout.Click += SelectFitting;

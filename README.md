@@ -197,6 +197,30 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.100.0
+
+- **Pressure labels**: a **Pressure** checkbox beside Labels / Flow / Sizes on the Project tab shows each duct's
+  static pressure at its inlet (for example "SP 0.35 in. w.c.") from the last calculation — the pressure, not the
+  drop across the duct.
+- **Movable labels and leaders**: drag any label away from its item. Right-click a label for **Add leader** /
+  **Remove leader** and **Reset label position**; drag the leader's end handle to point it at the duct or
+  fitting. Label positions are saved with the project (file format 17) and Ctrl+Z undoes a move.
+- **Free rotation**: hold **Ctrl** and drag with the middle mouse button to rotate the model in any direction. A
+  **view cube** beside the axis legend rotates to any of its 8 corners when clicked. The view list shows
+  "Free view"; choosing Top-Down or an isometric view snaps back. Components are placed and moved in the standard
+  views.
+- **PDF underlay in every view**: the sheet is drawn in top-down, isometric and free views at its **Center Z**
+  elevation (0 to start). The Move / Change Scale window has a Center Z (ft) field.
+- **Analysis**: the pressure-drop card lists every critical-path item, highest loss first and shaded from the
+  highest down, with its own scroll bar, the same height as the System Overview; the Critical column is gone.
+- **Customize Duct Class** (Analysis ribbon): the calculated pressure class and recommended seal class, each with
+  an Override box and a choice of the 7 SMACNA pressure classes or seal class A / B / C. Saving recalculates the
+  **Leakage factor F** and **Duct leakage** (renamed from "allowable ...").
+- **Auto Duct Size Rounding** (renamed from Round Sizes): 1 in., 2 in. or Custom (enter any increment).
+- **Redesigned pop-up windows**: rounded input boxes with a blue focus ring, white rounded cards, blue primary
+  buttons, a navy title bar with the FanWorks icon, and new layouts for Sizing Criteria, the fitting gallery,
+  the underlay Move / Change Scale window and the Source and Sink Editor (slim rounded scroll bar, tighter rows).
+
 ## What changed in 0.99.0
 
 - **Duct pressure class and leakage (SMACNA)** in the Analysis tab's System overview and on the report title page:

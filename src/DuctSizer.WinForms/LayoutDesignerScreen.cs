@@ -49,6 +49,8 @@ internal sealed partial class LayoutDesignerScreen
     private readonly CheckBox _layoutShowLabelsCheck = new();
     private readonly CheckBox _layoutShowFlowCheck = new();
     private readonly CheckBox _layoutShowSizesCheck = new();
+    private readonly CheckBox _layoutShowPressureCheck = new();
+    private ContextMenuStrip? _layoutLabelMenu;
 
     /// <summary>Grid scales offered in the toolbar (feet per grid cell). A project's own scale is added if it differs.</summary>
     internal static readonly double[] StandardGridScalesFeet = { 0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50 };
@@ -144,6 +146,7 @@ internal sealed partial class LayoutDesignerScreen
             CaptionSource = LayoutNodeCaption,
             ConnectionCaptionSource = LayoutConnectionCaption,
             ConnectionSizeCaptionSource = LayoutConnectionSizeCaption,
+            LabelPlacementSource = () => _host.DuctSystemScreen._ductSystem.LayoutLabelPlacements,
             ConnectionSizedSource = connection =>
                 DuctForConnection(connection.Downstream, connection.Secondary) is { RequiresResizing: false },
             ConnectionFlowReversedSource = LayoutConnectionFlowReversed,
@@ -159,6 +162,9 @@ internal sealed partial class LayoutDesignerScreen
         _layoutCanvas.PortConnectionRequested += ConnectLayoutPorts;
         _layoutCanvas.NodeDeleteRequested += RemoveLayoutNode;
         _layoutCanvas.ItemMenuRequested += ShowLayoutItemMenu;
+        _layoutCanvas.LabelPlacementChanged += SaveLabelPlacement;
+        _layoutCanvas.LabelMenuRequested += ShowLabelMenu;
+        _layoutCanvas.OrbitChanged += ShowFreeViewInSelector;
         _layoutCanvas.SelectionChanged += node =>
         {
             if (node is not null)
@@ -445,6 +451,8 @@ internal sealed partial class LayoutDesignerScreen
             "Show the airflow carried by each duct");
         ConfigureDisplayCheck(_layoutShowSizesCheck, "LayoutShowSizesCheck", "Sizes", false,
             "Show duct sizes beside their runs");
+        ConfigureDisplayCheck(_layoutShowPressureCheck, "LayoutShowPressureCheck", "Pressure", false,
+            "Show each duct's static pressure (at its inlet)");
         _layoutShowLabelsCheck.CheckedChanged += (_, _) =>
         {
             if (_layoutCanvas is not null && _layoutCanvas.ShowLabels != _layoutShowLabelsCheck.Checked)
@@ -452,9 +460,11 @@ internal sealed partial class LayoutDesignerScreen
         };
         _layoutShowFlowCheck.CheckedChanged += (_, _) => ApplyLayoutDuctCaptionOptions();
         _layoutShowSizesCheck.CheckedChanged += (_, _) => ApplyLayoutDuctCaptionOptions();
+        _layoutShowPressureCheck.CheckedChanged += (_, _) => ApplyLayoutDuctCaptionOptions();
         toolbar.Controls.Add(_layoutShowLabelsCheck);
         toolbar.Controls.Add(_layoutShowFlowCheck);
         toolbar.Controls.Add(_layoutShowSizesCheck);
+        toolbar.Controls.Add(_layoutShowPressureCheck);
         Separator();
 
         _layoutToolTips.SetToolTip(_layoutSourceSinkEditorButton, "Source/Sink Editor: airflow balance of every space");
@@ -3309,7 +3319,65 @@ internal sealed partial class LayoutDesignerScreen
             : _host._currentUnits == UnitSystem.Imperial
                 ? $"{UnitConversions.M3PerSToCfm(duct.AirflowM3PerS):N0} cfm"
                 : $"{UnitConversions.M3PerSToLps(duct.AirflowM3PerS):N0} L/s";
-        return string.Join("  ", new[] { size, flow }.Where(part => part.Length > 0));
+        // Pressure: the duct's static pressure at its inlet (not the drop across it), from the last calculation.
+        var pressure = _layoutShowPressureCheck.Checked
+            ? _host.DuctSystemScreen.DuctInletPressureCaption(duct.Sequence)
+            : string.Empty;
+        return string.Join("  ", new[] { size, flow, pressure }.Where(part => part.Length > 0));
+    }
+
+    /// <summary>Saves a dragged label (or its leader) as one undoable drawing edit.</summary>
+    private void SaveLabelPlacement(string key, LayoutLabelPlacement? placement)
+    {
+        var placements = _host.DuctSystemScreen._ductSystem.LayoutLabelPlacements;
+        var historyState = CaptureLayoutHistoryState();
+        if (placement is null)
+            placements.Remove(key);
+        else
+            placements[key] = placement.Copy();
+        CommitLayoutHistoryState(historyState);
+        _host.DuctSystemScreen.SaveDuctSystem();
+        _layoutCanvas?.Invalidate();
+    }
+
+    /// <summary>Right-click on a label: add or remove its leader, or put it back in its default place.</summary>
+    private void ShowLabelMenu(string key, Point location)
+    {
+        if (_layoutCanvas is null || AutomatedLayoutVerification)
+            return;
+        var placements = _host.DuctSystemScreen._ductSystem.LayoutLabelPlacements;
+        var current = placements.TryGetValue(key, out var saved) ? saved.Copy() : new LayoutLabelPlacement();
+        _layoutLabelMenu?.Dispose();
+        _layoutLabelMenu = new ContextMenuStrip { Name = "LayoutLabelMenu" };
+        _layoutLabelMenu.Items.Add(new ToolStripMenuItem(current.HasLeader ? "Remove leader" : "Add leader", null, (_, _) =>
+            SaveLabelPlacement(key, ToggleLeader(current))) { Name = "LayoutLabelMenuLeader" });
+        _layoutLabelMenu.Items.Add(new ToolStripMenuItem("Reset label position", null, (_, _) => SaveLabelPlacement(key, null))
+        {
+            Name = "LayoutLabelMenuReset",
+            Enabled = placements.ContainsKey(key)
+        });
+        _layoutLabelMenu.Show(_layoutCanvas, location);
+    }
+
+    /// <summary>
+    /// Adds a leader (pointing at the item's reference point to start with; drag its end to aim it) or removes it.
+    /// A label still in its default place is moved a little away first so the leader is visible.
+    /// </summary>
+    internal static LayoutLabelPlacement ToggleLeader(LayoutLabelPlacement current)
+    {
+        var next = current.Copy();
+        next.HasLeader = !current.HasLeader;
+        if (next.HasLeader)
+        {
+            next.LeaderX = 0;
+            next.LeaderY = 0;
+            if (next.OffsetX == 0 && next.OffsetY == 0)
+            {
+                next.OffsetX = 36;
+                next.OffsetY = -30;
+            }
+        }
+        return next;
     }
 
     internal static bool LayoutConnectionFlowReversed(LayoutConnectionRef connection) => connection.Secondary
@@ -3644,12 +3712,14 @@ internal sealed partial class LayoutDesignerScreen
         _updatingLayoutViewMode = true;
         try
         {
-            _layoutViewModeSelector.SelectedIndex = _host.DuctSystemScreen._ductSystem.LayoutViewMode switch
-            {
-                LayoutViewMode.IsometricNegative => 1,
-                LayoutViewMode.TopDown => 2,
-                _ => 0
-            };
+            _layoutViewModeSelector.SelectedIndex = _layoutCanvas.OrbitView is not null && _layoutViewModeSelector.Items.Count > 3
+                ? 3
+                : _host.DuctSystemScreen._ductSystem.LayoutViewMode switch
+                {
+                    LayoutViewMode.IsometricNegative => 1,
+                    LayoutViewMode.TopDown => 2,
+                    _ => 0
+                };
         }
         finally
         {
@@ -3660,8 +3730,19 @@ internal sealed partial class LayoutDesignerScreen
 
     private void ApplySelectedLayoutViewMode()
     {
-        if (_updatingLayoutViewMode || _layoutViewModeSelector.SelectedIndex < 0)
+        if (_updatingLayoutViewMode || _layoutViewModeSelector.SelectedIndex < 0 || _layoutViewModeSelector.SelectedIndex > 2)
             return;
+        // Leaving a free view: drop the "Free view" entry and snap back to the chosen standard view.
+        var leavingFreeView = _layoutCanvas?.OrbitView is not null;
+        if (leavingFreeView)
+        {
+            var anchor = _layoutCanvas!.SelectedNode ?? LayoutStartNode();
+            var anchorPosition = anchor is null ? (Point?)null : _layoutCanvas.VisualLocation(anchor);
+            _layoutCanvas.OrbitView = null;
+            RemoveFreeViewEntry();
+            if (anchor is not null && anchorPosition is Point position)
+                _layoutCanvas.KeepNodeAtScreenPosition(anchor, position);
+        }
         var selected = _layoutViewModeSelector.SelectedIndex switch
         {
             1 => LayoutViewMode.IsometricNegative,
@@ -3669,7 +3750,15 @@ internal sealed partial class LayoutDesignerScreen
             _ => LayoutViewMode.Isometric
         };
         if (_host.DuctSystemScreen._ductSystem.LayoutViewMode == selected)
+        {
+            if (leavingFreeView)
+            {
+                _layoutCanvas?.Invalidate();
+                _layoutStatusLabel.Text = "Back to the standard view.";
+                _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+            }
             return;
+        }
         var viewAnchor = _layoutCanvas?.SelectedNode ?? LayoutStartNode();
         var anchorScreenPosition = viewAnchor is null || _layoutCanvas is null
             ? (Point?)null : _layoutCanvas.VisualLocation(viewAnchor);
@@ -3688,6 +3777,45 @@ internal sealed partial class LayoutDesignerScreen
             _ => "Isometric Positive view active."
         };
         _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+    }
+
+    private const string FreeViewEntry = "Free view";
+
+    /// <summary>The model was rotated (Ctrl + middle-drag or the view cube): the view list shows "Free view".</summary>
+    private void ShowFreeViewInSelector()
+    {
+        _updatingLayoutViewMode = true;
+        try
+        {
+            if (_layoutViewModeSelector.Items.Count == 3)
+                _layoutViewModeSelector.Items.Add(FreeViewEntry);
+            _layoutViewModeSelector.SelectedIndex = 3;
+        }
+        finally
+        {
+            _updatingLayoutViewMode = false;
+        }
+        _layoutStatusLabel.Text = "Free view: Ctrl + middle-drag to rotate, or click a corner of the cube. Choose a view in the list to snap back; "
+                                  + "place and move components in a standard view.";
+        _layoutStatusLabel.ForeColor = Color.FromArgb(31, 120, 180);
+    }
+
+    private void RemoveFreeViewEntry()
+    {
+        if (_layoutViewModeSelector.Items.Count <= 3)
+            return;
+        _updatingLayoutViewMode = true;
+        try
+        {
+            var index = _layoutViewModeSelector.SelectedIndex;
+            _layoutViewModeSelector.Items.RemoveAt(3);
+            if (index >= 0 && index < 3)
+                _layoutViewModeSelector.SelectedIndex = index;
+        }
+        finally
+        {
+            _updatingLayoutViewMode = false;
+        }
     }
 
     private void SelectLayoutScaleChoice(double feetPerCell)
@@ -3738,7 +3866,8 @@ internal sealed partial class LayoutDesignerScreen
     {
         if (_layoutCanvas is null)
             return;
-        _layoutCanvas.ShowDuctSizes = _layoutShowSizesCheck.Checked || _layoutShowFlowCheck.Checked;
+        _layoutCanvas.ShowDuctSizes = _layoutShowSizesCheck.Checked || _layoutShowFlowCheck.Checked
+                                      || _layoutShowPressureCheck.Checked;
         _layoutDuctSizesButton.Text = _layoutShowSizesCheck.Checked ? "Hide Duct Sizes" : "Show Duct Sizes";
         _layoutCanvas.Invalidate();
     }

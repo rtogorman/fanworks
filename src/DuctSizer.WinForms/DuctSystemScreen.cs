@@ -301,7 +301,7 @@ internal sealed partial class DuctSystemScreen
         _host.Ribbon.SynchronizeWithPage();
     }
 
-    /// <summary>Sets the autosize increment (ribbon Round Sizes); same field as Project Settings.</summary>
+    /// <summary>Sets the autosize increment (ribbon Auto Duct Size Rounding); same field as Project Settings.</summary>
     internal void SetSizingIncrement(double incrementM)
     {
         if (!(incrementM > 0) || Math.Abs(_ductSystem.DefaultSizingIncrementM - incrementM) < 1e-12)
@@ -1720,6 +1720,17 @@ internal sealed partial class DuctSystemScreen
     {
         var halfDisplayIncrement = 0.5 * Math.Pow(10.0, -decimalPlaces);
         return Math.Abs(value) < halfDisplayIncrement ? 0.0 : value;
+    }
+
+    /// <summary>The Designer's Pressure label for a duct: static pressure at its inlet, e.g. "SP 0.85 in. w.c.".</summary>
+    internal string DuctInletPressureCaption(int ductSequence)
+    {
+        var inlet = SystemPressureForDuctPair(ductSequence).Inlet;
+        if (!double.IsFinite(inlet))
+            return string.Empty;
+        return _host._currentUnits == UnitSystem.Imperial
+            ? $"SP {UnitConversions.PaToInchesWater(inlet).ToString("0.###", CultureInfo.CurrentCulture)} in. w.c."
+            : $"SP {inlet.ToString("0", CultureInfo.CurrentCulture)} Pa";
     }
 
     private (double Inlet, double Outlet) SystemPressureForDuctPair(int ductSequence)

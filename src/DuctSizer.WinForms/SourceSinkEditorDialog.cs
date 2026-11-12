@@ -19,80 +19,80 @@ internal sealed class SourceSinkEditorDialog : DpiScaledForm
     internal SourceSinkEditorDialog(IReadOnlyList<SavedLayoutNode> boundaries)
     {
         _boundaries = boundaries.OrderBy(node => node.Sequence).ToArray();
-        Text = "Source and Sink Editor";
-        Name = "SourceSinkEditorDialog";
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        ShowInTaskbar = false;
-        ClientSize = new Size(690, Math.Min(580, 190 + _boundaries.Count * 38));
-        Font = new Font("Segoe UI", 9F);
-        BackColor = Color.FromArgb(245, 247, 250);
-        Shown += (_, _) => UiPolish.ApplyDialogSurface(this);
+        // Room for every row up to about eight; more rows scroll with the slim scroll bar.
+        FormKit.SetUp(this, "Source and Sink Editor", "SourceSinkEditorDialog",
+            new Size(640, Math.Clamp(268 + _boundaries.Count * 38, 330, 600)));
 
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 4,
-            Padding = new Padding(16),
-            BackColor = BackColor
-        };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(22, 16, 22, 14), BackColor = BackColor };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        root.Controls.Add(new Label
-        {
-            Text = "SOURCE AND SINK AIRFLOWS\r\nEdit the boundary flows so total source airflow equals total sink airflow.",
-            Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(28, 69, 108),
-            Font = new Font("Segoe UI Semibold", 9F),
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 0);
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        root.Controls.Add(FormKit.Header("Source and sink airflows",
+            "Edit the boundary flows so the total source airflow equals the total sink airflow."), 0, 0);
 
         _balanceStatus.Name = "SourceSinkBalanceStatusLabel";
         _balanceStatus.Dock = DockStyle.Fill;
         _balanceStatus.TextAlign = ContentAlignment.MiddleLeft;
-        _balanceStatus.Font = new Font("Segoe UI Semibold", 8.5F);
-        _balanceStatus.Padding = new Padding(8, 0, 8, 0);
+        _balanceStatus.Font = new Font("Segoe UI Semibold", 9F);
+        _balanceStatus.Padding = new Padding(12, 0, 12, 0);
+        _balanceStatus.Margin = new Padding(0, 4, 0, 4);
+        _balanceStatus.Resize += (_, _) =>
+        {
+            if (_balanceStatus.Width < 8 || _balanceStatus.Height < 8)
+                return;
+            using var path = UiPolish.CreateRoundedPath(new RectangleF(0, 0, _balanceStatus.Width, _balanceStatus.Height), 8);
+            _balanceStatus.Region = new Region(path);
+        };
         root.Controls.Add(_balanceStatus, 0, 1);
 
-        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Color.White };
+        // Column headings (fixed above the scrolling rows).
+        var headings = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, BackColor = BackColor, Margin = Padding.Empty, Padding = new Padding(16, 0, 28, 0) };
+        ConfigureColumns(headings);
+        AddHeading(headings, "Type", 0, false);
+        AddHeading(headings, "Item", 1, false);
+        AddHeading(headings, "Airflow (cfm)", 2, true);
+        AddHeading(headings, "Pressure (in. w.c.)", 3, true);
+        root.Controls.Add(headings, 0, 2);
+
+        var scroll = new SlimScrollArea { Dock = DockStyle.Fill, Margin = Padding.Empty };
         var table = new TableLayoutPanel
         {
+            Name = "SourceSinkRows",
+            ColumnCount = 4,
+            RowCount = _boundaries.Count,
+            BackColor = Color.White,
+            Padding = new Padding(16, 6, 16, 6),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 4,
-            RowCount = _boundaries.Count + 1,
-            Padding = new Padding(8),
-            BackColor = Color.White
+            Dock = DockStyle.Top
         };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        AddHeader("TYPE", 0);
-        AddHeader("ITEM", 1);
-        AddHeader("AIRFLOW (CFM)", 2);
-        AddHeader("PRESSURE (IN. W.C.)", 3);
-        var row = 1;
+        ConfigureColumns(table);
+        var row = 0;
         foreach (var boundary in _boundaries)
         {
             var source = string.Equals(boundary.SpaceRole, "Space Source", StringComparison.OrdinalIgnoreCase)
                          || string.Equals(boundary.SpaceRole, "Return Pickup", StringComparison.OrdinalIgnoreCase);
-            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-            table.Controls.Add(CellLabel(source ? "Source" : "Sink", true), 0, row);
-            table.Controls.Add(CellLabel(boundary.Id, false), 1, row);
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            var pill = FormKit.Pill(source ? "Source" : "Sink",
+                source ? Color.FromArgb(221, 236, 248) : Color.FromArgb(220, 243, 240),
+                source ? Color.FromArgb(24, 92, 150) : Color.FromArgb(18, 112, 104));
+            pill.Size = new Size(60, 22);
+            pill.Anchor = AnchorStyles.Left;
+            table.Controls.Add(pill, 0, row);
+            table.Controls.Add(new Label
+            {
+                Text = boundary.Id, AutoSize = true, Anchor = AnchorStyles.Left,
+                ForeColor = Color.FromArgb(34, 62, 88), Font = new Font("Segoe UI Semibold", 9F)
+            }, 1, row);
             var input = new TextBox
             {
                 Name = $"SourceSinkAirflow_{boundary.Sequence}",
                 Text = UnitConversions.M3PerSToCfm(boundary.AirflowM3PerS).ToString("0.##", CultureInfo.CurrentCulture),
-                Dock = DockStyle.Fill,
-                TextAlign = HorizontalAlignment.Right,
-                Margin = new Padding(4, 4, 8, 4)
+                Width = 104,
+                Anchor = AnchorStyles.Right,
+                TextAlign = HorizontalAlignment.Right
             };
             input.TextChanged += (_, _) => ValidateBalance();
             _airflowInputs[boundary.Sequence] = input;
@@ -101,64 +101,53 @@ internal sealed class SourceSinkEditorDialog : DpiScaledForm
             {
                 Name = $"SourceSinkPressure_{boundary.Sequence}",
                 Text = $"{NormalizePressure(UnitConversions.PaToInchesWater(boundary.PressurePa)):0.###} in. w.c.",
-                Dock = DockStyle.Fill,
+                AutoSize = true,
+                Anchor = AnchorStyles.Right,
                 ForeColor = Color.FromArgb(28, 69, 108),
-                Font = new Font("Segoe UI Semibold", 8.7F),
-                TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(4, 0, 8, 0)
+                Font = new Font("Segoe UI", 9F)
             }, 3, row++);
         }
-        scroll.Controls.Add(table);
-        table.Dock = DockStyle.Top;
-        root.Controls.Add(scroll, 0, 2);
+        scroll.Content.Controls.Add(table);
+        scroll.Content.SizeChanged += (_, _) => table.Width = scroll.Content.Width;
+        root.Controls.Add(FormKit.Card(scroll, new Padding(2, 6, 4, 6)), 0, 3);
 
-        var actions = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false
-        };
         _save.Name = "SourceSinkSaveButton";
+        var buttons = FormKit.Buttons(this, "Save Airflows", "SourceSinkSaveButton", SaveAirflows);
+        // Keep the field the rest of the editor refers to.
+        var created = (Button)buttons.Controls[0];
+        buttons.Controls.Remove(created);
+        created.Dispose();
         _save.Text = "Save Airflows";
-        _save.Width = 118;
-        _save.Height = 32;
-        _save.BackColor = Color.FromArgb(42, 135, 91);
+        _save.Height = 34;
+        _save.Width = 124;
+        _save.BackColor = DialogStyle.Accent;
         _save.ForeColor = Color.White;
         _save.FlatStyle = FlatStyle.Flat;
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 88, Height = 32, FlatStyle = FlatStyle.Flat };
-        UiPolish.RoundButton(_save, 7);
-        UiPolish.RoundButton(cancel, 7);
+        _save.Font = new Font("Segoe UI Semibold", 9F);
+        _save.Margin = new Padding(8, 4, 0, 0);
+        UiPolish.RoundButton(_save, 8);
         _save.Click += (_, _) => SaveAirflows();
-        actions.Controls.Add(_save);
-        actions.Controls.Add(cancel);
-        root.Controls.Add(actions, 0, 3);
-        Controls.Add(root);
+        buttons.Controls.Add(_save);
+        buttons.Controls.SetChildIndex(_save, 0);
         AcceptButton = _save;
-        CancelButton = cancel;
+        root.Controls.Add(buttons, 0, 4);
+        Controls.Add(root);
         ValidateBalance();
 
-        void AddHeader(string text, int column)
+        static void ConfigureColumns(TableLayoutPanel table)
         {
-            table.Controls.Add(new Label
-            {
-                Text = text,
-                Dock = DockStyle.Fill,
-                ForeColor = Color.FromArgb(72, 92, 110),
-                Font = new Font("Segoe UI Semibold", 8F),
-                TextAlign = column >= 2 ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft,
-                Padding = new Padding(4, 0, 8, 0)
-            }, column, 0);
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         }
 
-        static Label CellLabel(string text, bool bold) => new()
-        {
-            Text = text,
-            Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(34, 62, 88),
-            Font = new Font("Segoe UI" + (bold ? " Semibold" : string.Empty), 8.7F),
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(4, 0, 0, 0)
-        };
+        static void AddHeading(TableLayoutPanel table, string text, int column, bool right) =>
+            table.Controls.Add(new Label
+            {
+                Text = text, AutoSize = true, Anchor = right ? AnchorStyles.Right : AnchorStyles.Left,
+                ForeColor = Color.FromArgb(92, 107, 120), Font = new Font("Segoe UI Semibold", 8.5F)
+            }, column, 0);
     }
 
     private static double NormalizePressure(double pressure) => Math.Abs(pressure) < 0.0005 ? 0.0 : pressure;
@@ -169,7 +158,9 @@ internal sealed class SourceSinkEditorDialog : DpiScaledForm
         var tolerance = Math.Max(0.5, Math.Max(sourceTotal, sinkTotal) * 0.001);
         var balanced = valid && Math.Abs(sourceTotal - sinkTotal) <= tolerance;
         _save.Enabled = balanced;
-        _balanceStatus.ForeColor = balanced ? Color.FromArgb(30, 100, 55) : Color.Firebrick;
+        _save.BackColor = balanced ? DialogStyle.Accent : Color.FromArgb(160, 178, 194);
+        _balanceStatus.ForeColor = balanced ? Color.FromArgb(24, 100, 56) : Color.Firebrick;
+        _balanceStatus.BackColor = balanced ? Color.FromArgb(222, 243, 229) : Color.FromArgb(252, 228, 228);
         _balanceStatus.Text = !valid
             ? "Enter a positive numeric airflow for every source and sink."
             : balanced

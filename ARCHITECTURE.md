@@ -87,7 +87,7 @@ The window edits this model and redraws from it; nothing is inferred from drawin
 | Logs | `%LOCALAPPDATA%\FanWorks\logs` | daily log and crash reports, 30-day retention |
 
 `DuctSystemStore.Save` writes to a temporary file, keeps the previous file as `.bak`, then replaces it, so an
-interrupted save cannot destroy the last good file. Files carry `SchemaVersion` (currently 14) and
+interrupted save cannot destroy the last good file. Files carry `SchemaVersion` (currently 17) and
 `DuctSystemStore.Load` upgrades older versions step by step; a file from a newer FanWorks is refused with an update
 message. Changing the saved format means: increment the version, add an upgrade step, add a round-trip check.
 
@@ -164,4 +164,24 @@ fitting's estimated area; GRD/VAV records are terminals (no area). `SmacnaLeakag
 shape, and sums F × A / 100. `DuctSystemScreen.BuildLeakageSummary` words it once for the Analysis tab and the
 report (`DuctSystemPdfLeakageSummary`). Worksheet titles are `DuctSystemPdfCalculationSection.Title`; a title after
 the first starts a secondary calculation drawn after the assumptions with a divider.
+
+## Labels, free rotation and pop-up styling (v0.100)
+
+- **Label placements** (schema 17): `DuctSystemDocument.LayoutLabelPlacements` maps `N:<seq>` (component) and
+  `C:<seq>:1|2` (duct) to a `LayoutLabelPlacement` (screen offset at 100 % zoom, optional leader end relative to the
+  item's reference point). The canvas records each painted label (`_paintedLabels`) for hit-testing; a drag raises
+  `LabelPlacementChanged`, which the Designer saves as one undoable edit. Labels are drawing only: they never
+  affect connectivity or calculations.
+- **Pressure label**: `DuctSystemScreen.DuctInletPressureCaption` gives the duct's static pressure at its inlet
+  from the last calculation (empty when none).
+- **Free rotation**: `LayoutDesignerCanvas.OrbitView` (azimuth, elevation) replaces the fixed projection when set
+  (Ctrl + middle-drag or a view-cube corner). θ = 45°, φ = 30° reproduces Isometric Positive exactly, −45° / 30°
+  Isometric Negative. In a free view components cannot be placed or moved (the model is unchanged); choosing a
+  view in the list clears the orbit.
+- **Underlay in every view**: `PdfBackgroundCorners` projects the sheet's four corners at its Center Z, so the
+  image is drawn as a parallelogram in isometric and free views.
+- **Pop-up windows**: `DialogStyle.StyleInputs` gives text boxes, number boxes and drop-downs a rounded frame
+  painted by their parent (blue when focused), cards for group boxes and a blue primary button. `FormKit` builds
+  the redesigned windows (header, cards, field rows, button bar, `SlimScrollArea`). `WindowLook` sets the app icon
+  and a navy title bar (Windows 11 DWM attributes; ignored elsewhere).
 

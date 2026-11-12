@@ -162,7 +162,81 @@ public class DpiScaledForm : Form
             }
         }
         if (UsesDialogStyle)
+        {
+            // The FanWorks icon instead of the default window icon, and the shared field and input styling.
+            if (WindowLook.ApplicationIcon is Icon icon)
+            {
+                Icon = icon;
+                ShowIcon = true;
+            }
             DialogStyle.Attach(this);
+        }
         base.OnLoad(e);
     }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        WindowLook.ApplyTitleBar(this);
+    }
+}
+
+/// <summary>Window chrome shared by every FanWorks window: the application icon and the title-bar colours.</summary>
+internal static class WindowLook
+{
+    /// <summary>FanWorks navy, used for the title bar of every window (Windows 11; earlier Windows keep the system colour).</summary>
+    internal static readonly Color TitleBar = Color.FromArgb(24, 62, 92);
+
+    private static Icon? _icon;
+    private static bool _iconLoaded;
+
+    internal static Icon? ApplicationIcon
+    {
+        get
+        {
+            if (_iconLoaded)
+                return _icon;
+            _iconLoaded = true;
+            try
+            {
+                using var stream = typeof(WindowLook).Assembly.GetManifestResourceStream(
+                    "DuctSizer.WinForms.Assets.DuctSizerCentrifugalIcon.ico");
+                if (stream is not null)
+                    _icon = new Icon(stream);
+            }
+            catch (ArgumentException)
+            {
+                _icon = null;
+            }
+            return _icon;
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+
+    private const int BorderColorAttribute = 34;
+    private const int CaptionColorAttribute = 35;
+    private const int TextColorAttribute = 36;
+
+    /// <summary>Sets the title bar to FanWorks navy with white text (no effect where Windows does not support it).</summary>
+    internal static void ApplyTitleBar(Form form)
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) || !form.IsHandleCreated)
+            return;
+        try
+        {
+            var caption = ToColorRef(TitleBar);
+            var text = ToColorRef(Color.White);
+            DwmSetWindowAttribute(form.Handle, CaptionColorAttribute, ref caption, sizeof(int));
+            DwmSetWindowAttribute(form.Handle, TextColorAttribute, ref text, sizeof(int));
+            DwmSetWindowAttribute(form.Handle, BorderColorAttribute, ref caption, sizeof(int));
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            // Older Windows: the system title bar stays.
+        }
+    }
+
+    private static int ToColorRef(Color color) => color.R | color.G << 8 | color.B << 16;
 }

@@ -56,49 +56,44 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         MinimumSize = new Size(860, 620);
         ClientSize = new Size(980, 700);
         Font = new Font("Segoe UI", 9F);
-        BackColor = Color.FromArgb(242, 246, 249);
+        BackColor = FormKit.Background;
 
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 3,
-            Padding = new Padding(16),
+            Padding = new Padding(20, 14, 20, 12),
             BackColor = BackColor
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
-        var heading = new Label
-        {
-            Text = "Sizing Criteria\r\nDefaults used by Auto Size for ducts and supported components.",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Semibold", 13F),
-            ForeColor = Color.FromArgb(28, 69, 108),
-            TextAlign = ContentAlignment.MiddleLeft
-        };
+        var heading = FormKit.Header("Sizing Criteria", "Defaults used by Auto Size for ducts and supported components.");
         root.Controls.Add(heading, 0, 0);
         root.SetColumnSpan(heading, 2);
 
         _selector.Name = "AutomaticSizingComponentList";
         _selector.Dock = DockStyle.Fill;
         _selector.IntegralHeight = false;
-        _selector.Font = new Font("Segoe UI Semibold", 10F);
-        _selector.BorderStyle = BorderStyle.FixedSingle;
+        _selector.Font = new Font("Segoe UI", 9.5F);
+        FormKit.NavigationList(_selector);
         _selector.Items.AddRange(Items.Cast<object>().ToArray());
         _selector.SelectedIndex = 0;
         _selector.SelectedIndexChanged += (_, _) => ChangePage();
-        root.Controls.Add(_selector, 0, 1);
+        var navigationCard = FormKit.Card(_selector, new Padding(6, 8, 6, 8));
+        navigationCard.Margin = new Padding(0, 6, 12, 6);
+        root.Controls.Add(navigationCard, 0, 1);
 
         _editorHost.Name = "AutomaticSizingEditorHost";
         _editorHost.Dock = DockStyle.Fill;
         _editorHost.AutoScroll = true;
         _editorHost.BackColor = Color.White;
-        _editorHost.Padding = new Padding(18);
-        root.Controls.Add(_editorHost, 1, 1);
+        _editorHost.Padding = new Padding(8, 4, 8, 4);
+        root.Controls.Add(FormKit.Card(_editorHost, new Padding(14, 12, 6, 12)), 1, 1);
 
         var buttons = new FlowLayoutPanel
         {
@@ -113,7 +108,7 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
             Text = "Save Defaults",
             Width = 132,
             Height = 34,
-            BackColor = Color.FromArgb(42, 135, 91),
+            BackColor = DialogStyle.Accent,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };
@@ -555,14 +550,11 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        var header = new Label
-        {
-            Text = $"{title}\r\n{detail}",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Semibold", 11F),
-            ForeColor = Color.FromArgb(28, 69, 108),
-            TextAlign = ContentAlignment.MiddleLeft
-        };
+        var header = FormKit.Header(title, detail);
+        header.BackColor = Color.White;
+        foreach (Control part in header.Controls)
+            part.BackColor = Color.White;
+        header.Margin = new Padding(0, 0, 0, 8);
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
         table.Controls.Add(header, 0, 0);
         table.SetColumnSpan(header, 2);
