@@ -2473,9 +2473,14 @@ internal static class Program
             var centeredOffset = (PointF)viewOffsetProperty.GetValue(layoutCanvas)!;
             // Start the pan on empty drawing space near the centre (a component under the pointer would be dragged
             // instead, which made this check depend on the screen size).
+            // Also clear of the view cube and axis legend (a cube corner turns the view) and of any label.
+            var overlayCanvas = (LayoutDesignerCanvas)layoutCanvas;
             bool IsBlank(Point point) => hitTestNode.Invoke(layoutCanvas, new object[] { point }) is null
                                          && hitTestConnection.Invoke(layoutCanvas, new object[] { point }) is null
-                                         && hitTestPort.Invoke(layoutCanvas, new object?[] { point, null }) is null;
+                                         && hitTestPort.Invoke(layoutCanvas, new object?[] { point, null }) is null
+                                         && !Rectangle.Inflate(overlayCanvas.ViewCubeBounds, 12, 12).Contains(point)
+                                         && !Rectangle.Inflate(overlayCanvas.AxisLegendBounds, 12, 12).Contains(point)
+                                         && overlayCanvas.LabelAt(point) is null;
             var preferredPanPoint = new Point(layoutCanvas.ClientSize.Width / 2, layoutCanvas.ClientSize.Height / 2 + 100);
             var reversePanPoint = IsBlank(preferredPanPoint)
                 ? preferredPanPoint
