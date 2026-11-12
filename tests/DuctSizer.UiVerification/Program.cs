@@ -2467,8 +2467,13 @@ internal static class Program
                     .Where(IsBlank)
                     .OrderBy(point => Math.Abs(point.X - preferredPanPoint.X) + Math.Abs(point.Y - preferredPanPoint.Y))
                     .First();
+            var canvasOriginBefore = layoutCanvas.PointToScreen(Point.Empty);
             layoutCanvas.GetType().GetMethod("OnMouseDown", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(layoutCanvas, new object[] { new MouseEventArgs(MouseButtons.Left, 1, reversePanPoint.X, reversePanPoint.Y, 0) });
+            // The canvas follows the pointer in screen terms; if pressing it scrolled it into view, the pointer's screen
+            // movement differs from the 140 x 110 px moved on the canvas by that shift.
+            var canvasShift = new Size(layoutCanvas.PointToScreen(Point.Empty).X - canvasOriginBefore.X,
+                layoutCanvas.PointToScreen(Point.Empty).Y - canvasOriginBefore.Y);
             layoutCanvas.GetType().GetMethod("OnMouseMove", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(layoutCanvas, new object[] { new MouseEventArgs(MouseButtons.Left, 0, reversePanPoint.X + 140, reversePanPoint.Y + 110, 0) });
             Application.DoEvents();
@@ -2476,9 +2481,11 @@ internal static class Program
             var axisLegendAfter = (Rectangle)axisLegendBoundsProperty.GetValue(layoutCanvas)!;
             Require(axisLegendAfter == axisLegendBefore,
                 "Panning the Designer should not move the fixed XYZ orientation legend.");
-            Require(Math.Sqrt(Math.Pow(reverseOffset.X - centeredOffset.X, 2)
-                              + Math.Pow(reverseOffset.Y - centeredOffset.Y, 2)) > 100,
-                $"The centered Designer workspace should pan upward and leftward without a canvas boundary. Start={reversePanPoint}, before={centeredOffset}, after={reverseOffset}, canvas={layoutCanvas.ClientSize}.");
+            // Unclamped: the view moved exactly as far as the pointer did on screen.
+            Require(Math.Abs(reverseOffset.X - centeredOffset.X - (140 + canvasShift.Width)) < 1.5
+                    && Math.Abs(reverseOffset.Y - centeredOffset.Y - (110 + canvasShift.Height)) < 1.5
+                    && Math.Abs(reverseOffset.X - centeredOffset.X) + Math.Abs(reverseOffset.Y - centeredOffset.Y) > 0,
+                $"The centered Designer workspace should pan upward and leftward without a canvas boundary. Start={reversePanPoint}, before={centeredOffset}, after={reverseOffset}, canvas={layoutCanvas.ClientSize}, shift={canvasShift}.");
             layoutCanvas.GetType().GetMethod("OnMouseUp", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(layoutCanvas, new object[] { new MouseEventArgs(MouseButtons.Left, 1, reversePanPoint.X + 140, reversePanPoint.Y + 110, 0) });
             layoutCenter.PerformClick();
