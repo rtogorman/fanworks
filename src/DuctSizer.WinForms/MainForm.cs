@@ -124,9 +124,9 @@ public sealed partial class MainForm : DpiScaledForm
         CalculatorScreen._rectangularFixedDimensionCombo.Name = "RectangularSizingDimensionCombo";
         CalculatorScreen._rectangularFixedDimensionText.Name = "RectangularSizingDimensionText";
         CalculatorScreen._rectangularFixedDimensionUnitLabel.Name = "RectangularSizingDimensionUnitLabel";
-        CalculatorScreen._sizeSummaryValue.Font = new Font("Segoe UI Semibold", 8.8F);
-        CalculatorScreen._velocitySummaryValue.Font = new Font("Segoe UI Semibold", 8.8F);
-        CalculatorScreen._pressureSummaryValue.Font = new Font("Segoe UI Semibold", 8.3F);
+        CalculatorScreen._sizeSummaryValue.Font = new Font("Segoe UI Semibold", 10F);
+        CalculatorScreen._velocitySummaryValue.Font = new Font("Segoe UI Semibold", 10F);
+        CalculatorScreen._pressureSummaryValue.Font = new Font("Segoe UI Semibold", 10F);
 
         BuildChoices();
         BuildLayout();
@@ -203,7 +203,7 @@ public sealed partial class MainForm : DpiScaledForm
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         // A slim title band: the main tabs and ribbon already say where you are (v0.96).
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64F));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));
 
@@ -211,52 +211,35 @@ public sealed partial class MainForm : DpiScaledForm
         {
             Name = "CalculatorSectionHeader",
             Dock = DockStyle.Fill,
-            BackColor = UiPalette.Blue
+            BackColor = UiPalette.Navy,
+            Margin = new Padding(14, 10, 14, 0),
+            Icon = RibbonIcon.DuctCalculator
         };
         var title = new Label
         {
             Name = "CalculatorPageTitle",
             Text = "Duct Calculator",
             AutoSize = false,
-            Size = new Size(360, 30),
             ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 13F),
+            Font = new Font("Segoe UI Semibold", 12.5F),
             TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(20, 2),
             BackColor = Color.Transparent
         };
         var subtitle = new Label
         {
             Name = "CalculatorPageSubtitle",
-            Text = "HVAC duct sizing • ASHRAE fitting calculations • system pressure loss",
+            Text = "Size or check one duct  ·  friction loss, velocity and pressure rate",
             AutoSize = false,
-            Size = new Size(780, 18),
-            ForeColor = Color.FromArgb(215, 229, 242),
+            ForeColor = SectionTitlePanel.SubtitleInk,
             Font = new Font("Segoe UI", 8.5F),
             TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(22, 32),
+            AutoEllipsis = true,
             BackColor = Color.Transparent
-        };
-        var version = new Label
-        {
-            Text = $"v{typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "0.74.0"}",
-            AutoSize = false,
-            Size = new Size(66, 28),
-            TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = Color.White,
-            BackColor = Color.FromArgb(44, 98, 146),
-            Font = new Font("Segoe UI Semibold", 8F),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            Location = new Point(Width - 103, 13)
-        };
-        titlePanel.Resize += (_, _) =>
-        {
-            version.Left = Math.Max(20, titlePanel.ClientSize.Width - version.Width - 22);
-            subtitle.Width = Math.Max(180, version.Left - subtitle.Left - 12);
         };
         titlePanel.Controls.Add(title);
         titlePanel.Controls.Add(subtitle);
-        titlePanel.Controls.Add(version);
+        titlePanel.TitleLabel = title;
+        titlePanel.SubtitleLabel = subtitle;
 
         _contentLayout.Dock = DockStyle.Fill;
         _contentLayout.Padding = new Padding(14);
@@ -304,11 +287,17 @@ public sealed partial class MainForm : DpiScaledForm
 
         CalculatorScreen.AddInputSection(inputTable, "calculation", "CALCULATION");
         CalculatorScreen.AddInputRow(inputTable, "mode", "Calculation", CalculatorScreen._modeCombo);
-        CalculatorScreen.AddInputRow(inputTable, "airflow", "Airflow (cfm)", CalculatorScreen._airflowText);
-        CalculatorScreen.AddInputRow(inputTable, "temperature", "Air Temp (°F)", CalculatorScreen._temperatureText);
-        CalculatorScreen.AddInputRow(inputTable, "length", "Length (ft)", CalculatorScreen._lengthText);
-        CalculatorScreen.AddInputRow(inputTable, "friction", "Target Friction", CalculatorScreen._targetFrictionText);
-        CalculatorScreen.AddInputRow(inputTable, "velocity", "Maximum Velocity", CalculatorScreen._maximumVelocityText);
+        // Units sit beside the value, as in the redesigned windows, so long units (in. w.c./100 ft) are not cut off.
+        CalculatorScreen.AddInputRow(inputTable, "airflow", "Airflow",
+            CreateUnitInputHost(CalculatorScreen._airflowText, CalculatorScreen._airflowUnitLabel, 210));
+        CalculatorScreen.AddInputRow(inputTable, "temperature", "Air Temp",
+            CreateUnitInputHost(CalculatorScreen._temperatureText, CalculatorScreen._temperatureUnitLabel, 210));
+        CalculatorScreen.AddInputRow(inputTable, "length", "Length",
+            CreateUnitInputHost(CalculatorScreen._lengthText, CalculatorScreen._lengthUnitLabel, 210));
+        CalculatorScreen.AddInputRow(inputTable, "friction", "Target SP",
+            CreateUnitInputHost(CalculatorScreen._targetFrictionText, CalculatorScreen._frictionUnitLabel, 210));
+        CalculatorScreen.AddInputRow(inputTable, "velocity", "Max Velocity",
+            CreateUnitInputHost(CalculatorScreen._maximumVelocityText, CalculatorScreen._velocityUnitLabel, 210));
 
         CalculatorScreen.AddInputSection(inputTable, "geometry", "DUCT GEOMETRY");
         CalculatorScreen.AddInputRow(inputTable, "shape", "Duct Shape", CalculatorScreen._shapeCombo);
@@ -420,9 +409,9 @@ public sealed partial class MainForm : DpiScaledForm
         CalculatorScreen._summaryTable.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333F));
         CalculatorScreen._summaryTable.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333F));
         CalculatorScreen._summaryTable.RowStyles.Add(new RowStyle(SizeType.Percent, 33.334F));
-        CalculatorScreen._summaryTable.Controls.Add(CreateSummaryCard("DUCT SIZE", CalculatorScreen._sizeSummaryValue), 0, 0);
-        CalculatorScreen._summaryTable.Controls.Add(CreateSummaryCard("ACTUAL VELOCITY", CalculatorScreen._velocitySummaryValue), 0, 1);
-        CalculatorScreen._summaryTable.Controls.Add(CreateSummaryCard("PRESSURE RATE", CalculatorScreen._pressureSummaryValue), 0, 2);
+        CalculatorScreen._summaryTable.Controls.Add(CreateSummaryCard("Duct size", CalculatorScreen._sizeSummaryValue), 0, 0);
+        CalculatorScreen._summaryTable.Controls.Add(CreateSummaryCard("Actual velocity", CalculatorScreen._velocitySummaryValue), 0, 1);
+        CalculatorScreen._summaryTable.Controls.Add(CreateSummaryCard("Pressure rate", CalculatorScreen._pressureSummaryValue), 0, 2);
 
         inputScroll.Controls.Add(inputTable);
 
@@ -440,6 +429,8 @@ public sealed partial class MainForm : DpiScaledForm
             CreateOutputSectionLabel("DuctOutputsHeader"), CalculatorScreen._summaryTable, buttonPanel, 92, 64);
         CalculatorScreen._inputCard.Controls.Add(inputBody);
         CalculatorScreen._inputCard.Controls.Add(inputHeader);
+        // Rounded input frames, as in the redesigned windows (round W).
+        DialogStyle.AttachFieldInputs(CalculatorScreen._inputCard);
 
         CalculatorScreen._results.Dock = DockStyle.Fill;
         CalculatorScreen._results.View = View.Details;
@@ -784,14 +775,15 @@ public sealed partial class MainForm : DpiScaledForm
             AutoSize = true,
             Dock = DockStyle.Fill,
             Margin = new Padding(0, 0, 5, 0),
-            ForeColor = Color.FromArgb(34, 62, 88),
-            Font = new Font("Segoe UI Semibold", 7.3F),
+            // Sentence-case caption and navy value, as in the System Overview (round W).
+            ForeColor = FormKit.Muted,
+            Font = new Font("Segoe UI", 8.5F),
             TextAlign = ContentAlignment.MiddleLeft
         };
         valueLabel.Dock = DockStyle.Fill;
         valueLabel.Padding = Padding.Empty;
         valueLabel.Margin = Padding.Empty;
-        valueLabel.ForeColor = Color.FromArgb(0, 111, 145);
+        valueLabel.ForeColor = UiPalette.Ink;
         row.Controls.Add(captionLabel, 0, 0);
         row.Controls.Add(valueLabel, 1, 0);
         panel.Controls.Add(row);
@@ -811,14 +803,14 @@ public sealed partial class MainForm : DpiScaledForm
 
     internal static Label CreateInputUnitLabel() => new()
     {
-        Text = "(in.)",
+        Text = "in.",
         AutoSize = true,
-        Margin = new Padding(5, 4, 0, 0),
+        Margin = new Padding(4, 6, 0, 0),
         ForeColor = Color.FromArgb(72, 92, 110),
         TextAlign = ContentAlignment.MiddleLeft
     };
 
-    private static Control CreateUnitInputHost(TextBox input, Label unitLabel)
+    private static Control CreateUnitInputHost(TextBox input, Label unitLabel, int width = 152)
     {
         input.Width = 94;
         input.Margin = Padding.Empty;
@@ -826,7 +818,7 @@ public sealed partial class MainForm : DpiScaledForm
         {
             Tag = "UnitInput",
             AutoSize = false,
-            Size = new Size(152, 27),
+            Size = new Size(width, 26),
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Margin = Padding.Empty,
@@ -915,13 +907,14 @@ public sealed partial class MainForm : DpiScaledForm
     internal static void ConfigureCompactInputControl(Control control, int comboWidth, int textWidth)
     {
         var preferredWidth = control.Tag as string == "UnitInput"
-            ? 152
+            ? Math.Max(152, control.Width)
             : control is ComboBox ? comboWidth : textWidth;
         control.Dock = DockStyle.None;
         control.Anchor = AnchorStyles.Left;
         control.Width = preferredWidth;
         control.MaximumSize = new Size(preferredWidth, 0);
-        control.MinimumSize = new Size(Math.Min(86, preferredWidth), 0);
+        // A value-and-unit field keeps its height: without a minimum the table could collapse it to nothing.
+        control.MinimumSize = new Size(Math.Min(86, preferredWidth), control.Tag as string == "UnitInput" ? 26 : 0);
     }
 
     internal static void ConfigureCalculatorSplitter(SplitContainer splitter, string name)

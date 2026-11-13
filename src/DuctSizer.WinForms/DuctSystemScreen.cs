@@ -418,7 +418,7 @@ internal sealed partial class DuctSystemScreen
         _analysisPageScroll = page;
         _analysisPageContent = root;
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 570F));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 610F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 350F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));
@@ -1146,7 +1146,7 @@ internal sealed partial class DuctSystemScreen
         _criticalPathPressureLossPa = route.PressureLossPa;
         _criticalPathItemKeys = new HashSet<string>(route.ItemKeys, StringComparer.OrdinalIgnoreCase);
         _criticalPathIssues = route.Issues;
-        _criticalPathRoute = route.StartId == route.EndId ? route.StartId : $"{route.StartId} → {route.EndId}";
+        _criticalPathRoute = route.StartId == route.EndId ? route.StartId : $"{route.StartId} to {route.EndId}";
     }
 
     /// <summary>
@@ -2643,6 +2643,7 @@ internal sealed partial class DuctSystemScreen
         var fan = _ductSystem.LayoutNodes.SingleOrDefault(x => x.Type == LayoutNodeType.Fan);
         var fanHorsepower = fan is null ? 0.0 : TryBrakeHorsepower(fan.AirflowM3PerS,
             fan.FanTotalStaticPressurePa, fan.FanEfficiencyPercent);
+        var leakageSides = BuildLeakageSides();
         var metadata = new DuctSystemPdfMetadata(_ductSystem.UserName, _ductSystem.ProjectName,
             _ductSystem.ProjectNumber, projectDate, logo.Base64, logo.Width, logo.Height,
             DateTime.Now.ToString("MMMM d, yyyy h:mm tt", CultureInfo.CurrentCulture),
@@ -2660,10 +2661,11 @@ internal sealed partial class DuctSystemScreen
                           ? ": " + string.Join(" ", review.Take(6))
                           : string.Empty),
             BuildPressureProfile(),
-            BuildLeakageSummary(),
+            leakageSides.Positive,
             fan?.IsAirHandlingUnit == true,
             fan is null ? "Not available" : FormatSystemTotal(fan.FanInternalStaticPressurePa),
-            fan is null ? "Not available" : FormatSystemTotal(fan.FanTotalStaticPressurePa));
+            fan is null ? "Not available" : FormatSystemTotal(fan.FanTotalStaticPressurePa),
+            leakageSides.Negative);
         var layout = BuildPdfLayout();
         var reportItems = BuildPdfReportItems();
         var schematics = BuildPdfSchematics();
@@ -2954,11 +2956,12 @@ internal sealed partial class DuctSystemScreen
     private IReadOnlyList<DuctSystemPdfReportItem> BuildPdfReportItems()
     {
         var items = new List<(string Key, DuctSystemPdfReportItem Item)>();
-        var leakage = SmacnaLeakage.Analyze(_ductSystem);
+        // Each duct and fitting is classed with its side of the fan (negative suction or positive discharge).
+        var sides = SmacnaLeakage.AnalyzeSides(_ductSystem);
         foreach (var duct in _ductSystem.Ducts.OrderBy(x => x.Sequence))
-            items.Add((DuctKey(duct.Sequence), BuildDuctReportItem(duct, leakage)));
+            items.Add((DuctKey(duct.Sequence), BuildDuctReportItem(duct, sides.For(CriticalPathAnalyzer.DuctKey(duct.Sequence)))));
         foreach (var fitting in _ductSystem.Fittings.OrderBy(x => x.Sequence))
-            items.Add((FittingKey(fitting.Sequence), BuildFittingReportItem(fitting, leakage)));
+            items.Add((FittingKey(fitting.Sequence), BuildFittingReportItem(fitting, sides.For(CriticalPathAnalyzer.FittingKey(fitting.Sequence)))));
         foreach (var node in _ductSystem.LayoutNodes
                      .Where(x => x.Type is LayoutNodeType.Reservoir or LayoutNodeType.Fan or LayoutNodeType.Coil
                                      or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CalculationPoint
@@ -3019,7 +3022,7 @@ internal sealed partial class DuctSystemScreen
         }
         var surfaceArea = SurfaceAreaCalculator.ForDuct(duct);
         outputs.Add(PdfField("Surface area", FormatSurfaceAreaWithUnit(surfaceArea)));
-        calculations.AddRange(BuildSurfaceAreaSections(surfaceArea, leakage ?? SmacnaLeakage.Analyze(_ductSystem)));
+        calculations.AddRange(BuildSurfaceAreaSections(surfaceArea, leakage ?? SmacnaLeakage.AnalyzeSides(_ductSystem).For(CriticalPathAnalyzer.DuctKey(duct.Sequence))));
         var quickCheck = new[]
         {
             PdfField("Duct size", SafeDuctSize(duct)),
@@ -3121,7 +3124,7 @@ internal sealed partial class DuctSystemScreen
         if (SurfaceAreaCalculator.ForFitting(fitting) is { } fittingArea)
         {
             outputs.Add(PdfField("Surface area (estimate)", FormatSurfaceAreaWithUnit(fittingArea)));
-            calculations.AddRange(BuildSurfaceAreaSections(fittingArea, leakage ?? SmacnaLeakage.Analyze(_ductSystem)));
+            calculations.AddRange(BuildSurfaceAreaSections(fittingArea, leakage ?? SmacnaLeakage.AnalyzeSides(_ductSystem).For(CriticalPathAnalyzer.FittingKey(fitting.Sequence))));
         }
         var quickCheck = new[]
         {
@@ -3285,7 +3288,7 @@ internal sealed partial class DuctSystemScreen
         };
     }
 
-    private static IReadOnlyList<DuctSystemPdfCalculationSection> BuildDuctPdfCalculations(DuctCalculationResult result)
+    internal static IReadOnlyList<DuctSystemPdfCalculationSection> BuildDuctPdfCalculations(DuctCalculationResult result)
     {
         static DuctSystemPdfCalculationLine L(string formula, string value = "") => new(formula, value);
         static DuctSystemPdfCalculationLine Input(string label, string value) =>
@@ -3493,7 +3496,8 @@ internal sealed partial class DuctSystemScreen
         {
             var leakageClass = SmacnaLeakage.LeakageClass(seal, area.Shape);
             var factor = SmacnaLeakage.AllowableLeakageFactor(leakageClass, pressureClass);
-            sections.Add(new DuctSystemPdfCalculationSection("DUCT LEAKAGE OF THIS ITEM (SMACNA)", new[]
+            sections.Add(new DuctSystemPdfCalculationSection(system.Side == PressureSide.Negative
+                ? "DUCT LEAKAGE OF THIS ITEM (SMACNA, NEGATIVE SIDE)" : "DUCT LEAKAGE OF THIS ITEM (SMACNA)", new[]
             {
                 E("F = C_{L} P_{c}^{0.65}", $"{factor:0.###} cfm/100 ft2",
                     $"CL = {leakageClass} (Seal Class {seal}, {(round ? "round" : "rectangular")}); Pc = {pressureClass:0.#} in. w.c."),
@@ -3527,7 +3531,7 @@ internal sealed partial class DuctSystemScreen
         return sections;
     }
 
-    private static IReadOnlyList<DuctSystemPdfCalculationSection> BuildFittingPdfCalculations(FittingCalculationResult result)
+    internal static IReadOnlyList<DuctSystemPdfCalculationSection> BuildFittingPdfCalculations(FittingCalculationResult result)
     {
         if (IsPublishedGrdCode(result.Definition.Code))
             return BuildGrdPdfCalculations(result, GrdSelectionFromResult(result));

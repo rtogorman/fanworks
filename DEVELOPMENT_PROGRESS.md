@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-12 (round V, v0.103.0); earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
+Last updated: 2026-11-12 (round W, v0.104.0); round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
 
 ## Where things live
 
@@ -582,3 +582,16 @@ Checks: engine 84/84, interface 24/24 at 100 %, 150 % and 1080p (Wine).
 Open with Ryan: a fan's static pressure is no longer typed in (Auto-size sets it), the same as an AHU; the wordmark is a
 trace of the raster brand image (smoothed), not a font file.
 
+### Round W (requested 2026-11-12 23:10, after v0.103.0) — v0.104.0
+
+Done: SMACNA pressure class, seal class, leakage class, factor F and duct leakage for each side of the fan
+(`SmacnaLeakage.AnalyzeSides`, schema 20 suction overrides); System Overview two-column table; Customize Duct Class with
+a negative (suction) and a positive (discharge) section; report title-page panel for both sides and side-specific item
+sheets; routes "X to Y" everywhere (no arrows); Quick Calc: calculators render the report worksheet
+(`WorksheetRichText`, shared with the Project tab), rounded input frames, units beside values, sentence-case outputs,
+new title band (rounded navy, icon tile, no lines, no version badge).
+Hand check (engine test `DuctClassIsSetForEachSideOfTheFan`): suction 12 in × 40 ft at a 2 in. override, CL 12:
+F = 12 × 2^0.65 = 18.830; A = 125.66 ft²; 23.662 cfm. Discharge 14 in × 30 ft at 0.5 in.: 7.6473 × 109.956/100 = 8.4087 cfm.
+Checks: engine 85/85, interface 24/24 at 100 %, 150 % and 1080p (Wine).
+Note for Ryan: the calculators' worksheets are now the report's inch-pound worksheets (as in the Project tab); the
+earlier calculator-only "required equations" summary was replaced by the report's numbered steps.

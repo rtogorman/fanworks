@@ -118,42 +118,89 @@ internal sealed class ProjectIdentityHeaderPanel : TableLayoutPanel
     }
 }
 
+/// <summary>
+/// The title band of the Quick Calc calculators (round W): a rounded brand-navy band with the calculator's
+/// icon on a primary-blue tile, a white title and a light-blue subtitle. It replaced a band with a motif of
+/// horizontal lines and a version badge. The band lays out its own title and subtitle labels so they stay
+/// beside the icon at any width and display scale.
+/// </summary>
 internal sealed class SectionTitlePanel : Panel
 {
+    internal static readonly Color SubtitleInk = Color.FromArgb(178, 218, 255);
+
     internal SectionTitlePanel()
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
     }
 
+    /// <summary>The calculator's icon, drawn on the tile at the left of the band.</summary>
+    internal RibbonIcon? Icon { get; set; }
+
+    internal Label? TitleLabel { get; set; }
+
+    internal Label? SubtitleLabel { get; set; }
+
+    private Rectangle IconTile
+    {
+        get
+        {
+            var size = Math.Min(DpiScaling.Scale(34), Math.Max(0, ClientSize.Height - DpiScaling.Scale(12)));
+            return new Rectangle(DpiScaling.Scale(14), (ClientSize.Height - size) / 2, size, size);
+        }
+    }
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        var left = Icon is null ? DpiScaling.Scale(20) : IconTile.Right + DpiScaling.Scale(12);
+        var width = Math.Max(DpiScaling.Scale(120), ClientSize.Width - left - DpiScaling.Scale(20));
+        var titleHeight = TitleLabel is null ? 0 : TitleLabel.Font.Height + DpiScaling.Scale(2);
+        var subtitleHeight = SubtitleLabel is null ? 0 : SubtitleLabel.Font.Height + DpiScaling.Scale(1);
+        var top = Math.Max(0, (ClientSize.Height - titleHeight - subtitleHeight) / 2);
+        TitleLabel?.SetBounds(left, top, width, titleHeight);
+        SubtitleLabel?.SetBounds(left + DpiScaling.Scale(1), top + titleHeight, width, subtitleHeight);
+    }
+
     protected override void OnPaintBackground(PaintEventArgs eventArgs)
     {
         var graphics = eventArgs.Graphics;
+        graphics.Clear(Parent?.BackColor ?? UiPalette.Canvas);
+        if (ClientSize.Width < 4 || ClientSize.Height < 4)
+            return;
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var fill = new LinearGradientBrush(ClientRectangle,
-            Color.FromArgb(11, 31, 59), Color.FromArgb(19, 49, 90), LinearGradientMode.Horizontal);
-        graphics.FillRectangle(fill, ClientRectangle);
-        using var underlay = new SolidBrush(Color.FromArgb(30, 3, 28, 46));
-        graphics.FillRectangle(underlay, 0, Height - 7, Width, 7);
+        var band = new RectangleF(0, 0, ClientSize.Width - 1F, ClientSize.Height - 1F);
+        using var path = UiPolish.CreateRoundedPath(band, DpiScaling.Scale(10F));
+        using (var fill = new LinearGradientBrush(ClientRectangle, UiPalette.Navy, Color.FromArgb(22, 56, 102),
+                   LinearGradientMode.Horizontal))
+            graphics.FillPath(fill, path);
 
-        var motifRight = Width - 16F;
-        var maximumLength = Math.Max(100F, Width - 32F);
-        const int lineCount = 6;
-        for (var index = 0; index < lineCount; index++)
+        // A soft light-blue glow at the right end gives the band depth without drawing lines across it.
+        var state = graphics.Save();
+        graphics.SetClip(path);
+        var glow = new RectangleF(ClientSize.Width - ClientSize.Height * 4F, -ClientSize.Height * 1.5F,
+            ClientSize.Height * 5F, ClientSize.Height * 4F);
+        using (var glowPath = new GraphicsPath())
         {
-            var progress = index / (lineCount - 1F);
-            var length = maximumLength * (1F - progress * .28F);
-            var alpha = (int)Math.Round(62 - progress * 40);
-            var y = 11F + index * Math.Max(9F, (Height - 27F) / (lineCount - 1F));
-            using var line = new Pen(Color.FromArgb(alpha, 126, 199, 255), index == 0 ? 1.8F : 1.1F)
+            glowPath.AddEllipse(glow);
+            using var glowBrush = new PathGradientBrush(glowPath)
             {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round
+                CenterColor = Color.FromArgb(46, UiPalette.Cyan),
+                SurroundColors = new[] { Color.FromArgb(0, UiPalette.Cyan) }
             };
-            graphics.DrawLine(line, motifRight, y, motifRight - length, y);
+            graphics.FillEllipse(glowBrush, glow);
         }
-        using var edge = new Pen(Color.FromArgb(128, 11, 31, 59), 1F);
-        graphics.DrawLine(edge, 0, Height - 1, Width, Height - 1);
+        graphics.Restore(state);
+
+        if (Icon is { } icon)
+        {
+            var tile = IconTile;
+            using var tilePath = UiPolish.CreateRoundedPath(tile, DpiScaling.Scale(8F));
+            using (var tileFill = new SolidBrush(UiPalette.Teal))
+                graphics.FillPath(tileFill, tilePath);
+            var inset = DpiScaling.Scale(6);
+            RibbonIcons.Draw(graphics, icon, Rectangle.Inflate(tile, -inset, -inset), Color.White, UiPalette.Cyan);
+        }
     }
 }
 

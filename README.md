@@ -197,6 +197,23 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.104.0
+
+- **Duct class for each side of the fan**: the Analysis System Overview has a **Duct construction and leakage
+  (SMACNA)** table with a **Negative (suction)** and a **Positive (discharge)** column: pressure class, seal class,
+  leakage class, leakage factor F and duct leakage for the ductwork upstream and downstream of the fan or AHU. Each
+  side's design pressure is its own (the suction loss; the discharge loss or the fan's ESP less the suction loss). With
+  no ductwork upstream of the fan the negative column says so and the results are as before.
+- **Customize Duct Class** has two sections: override the pressure class and seal class of the **negative side
+  (suction, upstream of the fan)**, then of the **positive side (discharge, downstream)**. Projects are saved in file
+  format 20. The report title page shows both sides, and each item sheet uses its own side's class.
+- **Routes without arrows**: paths and connections read "L-013 to L-012" on the Analysis tab, in the report and in the
+  Project tab.
+- **Quick Calc**: the Duct and Fitting Calculators show the same worksheet as the item's report sheet (inputs,
+  numbered steps, table look-ups, variables and assumptions). Inputs use the rounded fields of the redesigned windows,
+  with units beside the value; outputs use the same caption style as the System Overview. The title band is a clean
+  brand-navy band with the calculator's icon (no horizontal lines, no version number).
+
 ## What changed in 0.103.0
 
 - **Wordmark**: the "fan works" lettering in the top bar and on every report sheet is now drawn from the brand's own

@@ -81,6 +81,16 @@ public sealed class AnalysisExpectations
     /// <summary>Engineer's seal class replacing the one recommended for the pressure class. Null uses the recommendation. Schema 17.</summary>
     public SmacnaSealClass? SealClassOverride { get; set; }
 
+    /// <summary>
+    /// Override of the SMACNA pressure class for the negative (suction) side, upstream of the fan, in. w.c. (a
+    /// magnitude). Null uses the calculated class. <see cref="PressureClassOverrideInWc"/> is the positive side's.
+    /// Schema 20.
+    /// </summary>
+    public double? SuctionPressureClassOverrideInWc { get; set; }
+
+    /// <summary>Override of the seal class for the negative (suction) side. Null uses the recommendation. Schema 20.</summary>
+    public SmacnaSealClass? SuctionSealClassOverride { get; set; }
+
     /// <summary>True when any range has a bound entered.</summary>
     public bool AnySet => DuctPressureRatePaPerM.IsSet || DuctVelocityMPerS.IsSet
                           || FittingVelocityMPerS.IsSet || FittingLossPa.IsSet
@@ -104,6 +114,9 @@ public sealed class AnalysisExpectations
         if (PressureClassOverrideInWc is double overrideClass
             && !SmacnaLeakage.PressureClassesInWc.Any(value => Math.Abs(value - overrideClass) < 1e-9))
             PressureClassOverrideInWc = null;
+        if (SuctionPressureClassOverrideInWc is double suctionClass
+            && !SmacnaLeakage.PressureClassesInWc.Any(value => Math.Abs(value - suctionClass) < 1e-9))
+            SuctionPressureClassOverrideInWc = null;
         DuctPressureRatePaPerM ??= new ExpectedRange();
         DuctVelocityMPerS ??= new ExpectedRange();
         FittingVelocityMPerS ??= new ExpectedRange();
@@ -121,7 +134,9 @@ public sealed class AnalysisExpectations
         VavInletPressurePa = VavInletPressurePa.Copy(),
         VavPressureDropPa = VavPressureDropPa.Copy(),
         PressureClassOverrideInWc = PressureClassOverrideInWc,
-        SealClassOverride = SealClassOverride
+        SealClassOverride = SealClassOverride,
+        SuctionPressureClassOverrideInWc = SuctionPressureClassOverrideInWc,
+        SuctionSealClassOverride = SuctionSealClassOverride
     };
 }
 

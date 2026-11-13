@@ -120,6 +120,78 @@ internal static class AirHandlingUnitTests
         }
     }
 
+    public static void DuctClassIsSetForEachSideOfTheFan()
+    {
+        // Return space -> 12 in x 40 ft (suction) -> AHU -> 14 in x 30 ft (discharge) -> supply space.
+        var document = new DuctSystemDocument();
+        var source = SystemTests.AddNode(document, LayoutNodeType.Reservoir, parent: null, duct: null);
+        source.SpaceRole = "Space Source";
+        source.AirflowM3PerS = UnitConversions.CfmToM3PerS(1500);
+        var returnDuct = SystemTests.AddDuct(document, 12, 1500, 40);
+        var ahu = SystemTests.AddNode(document, LayoutNodeType.Fan, source, returnDuct);
+        ahu.IsAirHandlingUnit = true;
+        ahu.AirflowM3PerS = UnitConversions.CfmToM3PerS(1500);
+        var supplyDuct = SystemTests.AddDuct(document, 14, 1500, 30);
+        var sink = SystemTests.AddNode(document, LayoutNodeType.Reservoir, ahu, supplyDuct);
+        sink.SpaceRole = "Space Sink";
+        sink.AirflowM3PerS = supplyDuct.AirflowM3PerS;
+        SystemSolver.Solve(document);
+
+        var sides = SmacnaLeakage.AnalyzeSides(document);
+        Require(sides.Negative is { Side: PressureSide.Negative } negative
+                && negative.Areas.Single().ItemKey == CriticalPathAnalyzer.DuctKey(returnDuct.Sequence)
+                && sides.Positive.Areas.Single().ItemKey == CriticalPathAnalyzer.DuctKey(supplyDuct.Sequence)
+                && sides.For(CriticalPathAnalyzer.DuctKey(returnDuct.Sequence)) == negative,
+            "The return duct is on the negative (suction) side, the supply duct on the positive (discharge) side.");
+        Near(sides.Negative!.DesignPressureInWc!.Value, UnitConversions.PaToInchesWater(returnDuct.Calculate().TotalPressureLossUpperPa), 1e-9,
+            "negative design pressure = suction loss");
+        Require(sides.Negative.PressureClassInWc == 0.5 && sides.Positive.PressureClassInWc == 0.5,
+            "Both sides are in the 1/2 in. w.c. class at these losses.");
+
+        // Override the suction side only: 2 in. w.c. Seal Class C (recommended at 2 in.), round CL 12.
+        // Hand check: F = 12 x 2^0.65 = 18.830 cfm/100 ft2; A = pi x 1 ft x 40 ft = 125.66 ft2; leakage = 23.662 cfm.
+        // Positive side unchanged: F = 12 x 0.5^0.65 = 7.6473; A = pi x 14/12 ft x 30 ft = 109.956 ft2; 8.4087 cfm.
+        document.AnalysisExpectations.SuctionPressureClassOverrideInWc = 2;
+        sides = SmacnaLeakage.AnalyzeSides(document);
+        Require(sides.Negative!.PressureClassOverridden && sides.Negative.PressureClassInWc == 2
+                && sides.Negative.SealClass == SmacnaSealClass.C && !sides.Positive.PressureClassOverridden
+                && sides.Positive.PressureClassInWc == 0.5,
+            "The suction override changes only the negative side.");
+        Near(sides.Negative.TotalLeakageCfm, 12 * Math.Pow(2, 0.65) * Math.PI * 40 / 100, 1e-6, "negative-side leakage");
+        Near(sides.Negative.TotalLeakageCfm, 23.662, 5e-3, "negative-side leakage hand value");
+        Near(sides.Positive.TotalLeakageCfm, 8.4087, 5e-3, "positive-side leakage hand value");
+        Near(sides.TotalLeakageCfm, sides.Negative.TotalLeakageCfm + sides.Positive.TotalLeakageCfm, 1e-12, "total of both sides");
+        document.AnalysisExpectations.SuctionSealClassOverride = SmacnaSealClass.A;
+        var saved = Path.Combine(Path.GetTempPath(), $"fanworks-sides-{Guid.NewGuid():N}.json");
+        try
+        {
+            DuctSystemStore.Save(saved, document);
+            var reloaded = DuctSystemStore.Load(saved).AnalysisExpectations;
+            Require(reloaded.SuctionPressureClassOverrideInWc == 2 && reloaded.SuctionSealClassOverride == SmacnaSealClass.A
+                    && reloaded.PressureClassOverrideInWc is null && DuctSystemDocument.CurrentSchemaVersion == 20,
+                "Suction-side overrides are saved (file format 20).");
+        }
+        finally
+        {
+            File.Delete(saved);
+        }
+
+        // A system with no ductwork upstream of the fan has one (positive) side, the same as the whole-system analysis.
+        var discharge = new DuctSystemDocument();
+        var fan = SystemTests.AddNode(discharge, LayoutNodeType.Fan, parent: null, duct: null);
+        fan.AirflowM3PerS = UnitConversions.CfmToM3PerS(1500);
+        var duct = SystemTests.AddDuct(discharge, 14, 1500, 30);
+        var end = SystemTests.AddNode(discharge, LayoutNodeType.Reservoir, fan, duct);
+        end.SpaceRole = "Space Sink";
+        end.AirflowM3PerS = duct.AirflowM3PerS;
+        SystemSolver.Solve(discharge);
+        var single = SmacnaLeakage.AnalyzeSides(discharge);
+        var whole = SmacnaLeakage.Analyze(discharge);
+        Require(single.Negative is null && single.Positive.PressureClassInWc == whole.PressureClassInWc
+                && Math.Abs(single.TotalLeakageCfm - whole.TotalLeakageCfm) < 1e-12,
+            "With nothing upstream of the fan, the positive side is the whole system.");
+    }
+
     public static void ExternalStaticSplitsAtTheFan()
     {
         // Return space -> 12 in x 40 ft -> AHU -> 14 in x 30 ft -> supply space. The critical path's external static

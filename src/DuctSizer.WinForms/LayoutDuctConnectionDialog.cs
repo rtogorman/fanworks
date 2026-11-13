@@ -35,7 +35,7 @@ internal sealed class LayoutDuctConnectionDialog : DpiScaledForm, IInlineEditabl
         var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4, Padding = new Padding(18), BackColor = BackColor };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        AddRow(table, 0, "Connection", new Label { Text = $"{upstreamId}  →  {downstreamId}", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(16, 45, 84), Font = new Font("Segoe UI Semibold", 9F) });
+        AddRow(table, 0, "Connection", new Label { Text = $"{upstreamId} to {downstreamId}", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(16, 45, 84), Font = new Font("Segoe UI Semibold", 9F) });
         AddRow(table, 1, "Air System Type", _airSystem);
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 12));
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };

@@ -82,6 +82,7 @@ var tests = new (string Name, Action Run)[]
     ("Air handling unit: duct system sees only the external static pressure", AirHandlingUnitTests.DuctSystemSeesOnlyTheExternalStaticPressure),
     ("Air handling unit: saved in format 18; format-17 fans open unchanged", AirHandlingUnitTests.AirHandlingUnitRoundTripsAndOlderFilesOpenAsFans),
     ("External static pressure splits at the fan: suction (negative) + discharge (positive)", AirHandlingUnitTests.ExternalStaticSplitsAtTheFan),
+    ("Duct class, seal class and leakage for each side of the fan (negative suction, positive discharge)", AirHandlingUnitTests.DuctClassIsSetForEachSideOfTheFan),
     ("Table look-ups: interpolation recorded with its table points", TableLookupTests.InterpolationIsRecordedWithItsTablePoints),
     ("Elbow factors named (Kθ, C'o) and combined as C = Kθ × C'o", TableLookupTests.ElbowFactorsAreNamedAndCombined),
     ("Table look-ups: conservative value between columns", TableLookupTests.BetweenColumnsTheConservativeValueIsUsed),

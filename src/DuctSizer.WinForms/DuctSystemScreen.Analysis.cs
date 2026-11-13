@@ -30,11 +30,15 @@ internal sealed partial class DuctSystemScreen
     private readonly Label _analysisPressureClassValue = new() { Name = "AnalysisPressureClassValue" };
     private readonly Label _analysisPressureClassNote = new() { Name = "AnalysisPressureClassNote" };
     private readonly Label _analysisSealClassValue = new() { Name = "AnalysisSealClassValue" };
-    private readonly Label _analysisSealClassNote = new() { Name = "AnalysisSealClassNote" };
+    private readonly Label _analysisLeakageClassValue = new() { Name = "AnalysisLeakageClassValue" };
     private readonly Label _analysisFactorValue = new() { Name = "AnalysisLeakageFactorValue" };
-    private readonly Label _analysisFactorNote = new() { Name = "AnalysisLeakageFactorNote" };
     private readonly Label _analysisLeakageValue = new() { Name = "AnalysisLeakageValue" };
-    private readonly Label _analysisLeakageNote = new() { Name = "AnalysisLeakageNote" };
+    // The negative (suction) side's column: ductwork upstream of the fan, classed separately (round W).
+    private readonly Label _analysisNegativeClassValue = new() { Name = "AnalysisNegativePressureClassValue" };
+    private readonly Label _analysisNegativeSealValue = new() { Name = "AnalysisNegativeSealClassValue" };
+    private readonly Label _analysisNegativeLeakageClassValue = new() { Name = "AnalysisNegativeLeakageClassValue" };
+    private readonly Label _analysisNegativeFactorValue = new() { Name = "AnalysisNegativeLeakageFactorValue" };
+    private readonly Label _analysisNegativeLeakageValue = new() { Name = "AnalysisNegativeLeakageValue" };
     private readonly Label _analysisLeakageDetail = new() { Name = "AnalysisLeakageDetail" };
     private readonly SystemSummaryDonut _analysisDonut = new();
     private readonly DataGridView _analysisTopLossGrid = new();
@@ -94,8 +98,8 @@ internal sealed partial class DuctSystemScreen
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 154)); // static pressure: heading + 2 rows of 3
-        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
-        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 184)); // SMACNA classes, both sides of the fan
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         overviewLayout.Controls.Add(SectionTitle("System overview"), 0, 0);
@@ -132,10 +136,75 @@ internal sealed partial class DuctSystemScreen
         overviewLayout.Controls.Add(staticGrid, 0, 2);
         overviewLayout.SetColumnSpan(staticGrid, 2);
         // SMACNA duct construction and leakage (pressure class, seal class, allowable leakage).
-        overviewLayout.Controls.Add(Tile("Duct pressure class", _analysisPressureClassValue, _analysisPressureClassNote), 0, 3);
-        overviewLayout.Controls.Add(Tile("Seal class and leakage class", _analysisSealClassValue, _analysisSealClassNote), 1, 3);
-        overviewLayout.Controls.Add(Tile("Leakage factor F", _analysisFactorValue, _analysisFactorNote), 0, 4);
-        overviewLayout.Controls.Add(Tile("Duct leakage", _analysisLeakageValue, _analysisLeakageNote), 1, 4);
+        // SMACNA duct construction, one column per side of the fan: the negative (suction) side upstream of it and the
+        // positive (discharge) side downstream are classed separately, each for its own pressure.
+        var classGrid = new TableLayoutPanel
+        {
+            Name = "AnalysisDuctClassGrid", Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 8,
+            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = Color.White
+        };
+        classGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+        classGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+        classGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+        classGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        classGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        for (var row = 0; row < 5; row++)
+            classGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        classGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        classGrid.Controls.Add(new Label
+        {
+            Text = "Duct construction and leakage (SMACNA)", Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft,
+            Font = new Font("Segoe UI Semibold", 8.75F), ForeColor = Color.FromArgb(14, 111, 230), AutoEllipsis = true
+        }, 0, 0);
+        classGrid.SetColumnSpan(classGrid.GetControlFromPosition(0, 0)!, 3);
+        Label Header(string text) => new()
+        {
+            Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true,
+            Font = new Font("Segoe UI Semibold", 8.5F), ForeColor = Color.White, BackColor = Color.FromArgb(11, 31, 59),
+            Margin = new Padding(0, 2, 1, 1), Padding = new Padding(6, 0, 0, 0)
+        };
+        classGrid.Controls.Add(Header(string.Empty), 0, 1);
+        classGrid.Controls.Add(Header("Negative (suction)"), 1, 1);
+        classGrid.Controls.Add(Header("Positive (discharge)"), 2, 1);
+        var classRows = new (string Caption, Label Negative, Label Positive)[]
+        {
+            ("Pressure class", _analysisNegativeClassValue, _analysisPressureClassValue),
+            ("Seal class", _analysisNegativeSealValue, _analysisSealClassValue),
+            ("Leakage class", _analysisNegativeLeakageClassValue, _analysisLeakageClassValue),
+            ("Leakage factor F", _analysisNegativeFactorValue, _analysisFactorValue),
+            ("Duct leakage", _analysisNegativeLeakageValue, _analysisLeakageValue)
+        };
+        for (var row = 0; row < classRows.Length; row++)
+        {
+            var shade = row % 2 == 0 ? Color.FromArgb(244, 248, 251) : Color.White;
+            classGrid.Controls.Add(new Label
+            {
+                Text = classRows[row].Caption, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font("Segoe UI", 8.5F), ForeColor = Color.FromArgb(74, 91, 106), BackColor = shade,
+                Margin = new Padding(0, 0, 1, 0), Padding = new Padding(6, 0, 0, 0)
+            }, 0, row + 2);
+            foreach (var (value, column) in new[] { (classRows[row].Negative, 1), (classRows[row].Positive, 2) })
+            {
+                value.Dock = DockStyle.Fill;
+                value.TextAlign = ContentAlignment.MiddleLeft;
+                value.AutoEllipsis = true;
+                value.Font = new Font("Segoe UI Semibold", 9.5F);
+                value.ForeColor = Color.FromArgb(11, 31, 59);
+                value.BackColor = shade;
+                value.Margin = new Padding(0, 0, 1, 0);
+                value.Padding = new Padding(6, 0, 0, 0);
+                classGrid.Controls.Add(value, column, row + 2);
+            }
+        }
+        _analysisPressureClassNote.Dock = DockStyle.Fill;
+        _analysisPressureClassNote.TextAlign = ContentAlignment.MiddleLeft;
+        _analysisPressureClassNote.AutoEllipsis = true;
+        _analysisPressureClassNote.Font = new Font("Segoe UI", 8F);
+        _analysisPressureClassNote.ForeColor = Color.FromArgb(74, 91, 106);
+        classGrid.Controls.Add(_analysisPressureClassNote, 0, 7);
+        classGrid.SetColumnSpan(_analysisPressureClassNote, 3);
+        overviewLayout.Controls.Add(classGrid, 0, 3);
+        overviewLayout.SetColumnSpan(classGrid, 2);
         _analysisLeakageDetail.Dock = DockStyle.Fill;
         _analysisLeakageDetail.Margin = new Padding(0, 4, 8, 0);
         _analysisLeakageDetail.Font = new Font("Segoe UI", 8.25F);
@@ -430,26 +499,55 @@ internal sealed partial class DuctSystemScreen
 
     private void RefreshLeakageSummary()
     {
-        var leakage = BuildLeakageSummary();
-        _analysisPressureClassValue.Text = leakage.PressureClass;
-        _analysisPressureClassNote.Text = leakage.PressureBasis.StartsWith("Pressure class set", StringComparison.Ordinal)
-            ? "Override (Customize Duct Class)"
-            : "Per SMACNA HVAC Duct Construction Standards";
-        _analysisSealClassValue.Text = leakage.SealClass;
-        _analysisSealClassNote.Text = leakage.LeakageClass + " (SMACNA Air Duct Leakage Test Manual)";
-        _analysisFactorValue.Text = leakage.Factor;
-        _analysisFactorNote.Text = (leakage.LeakageClass.Contains(',') ? "Round / rectangular. " : string.Empty)
-                                   + "F = CL × P^0.65, P = pressure class (in. w.c.)";
-        _analysisLeakageValue.Text = leakage.Leakage;
-        _analysisLeakageNote.Text = leakage.LeakageDetail;
-        _analysisLeakageValue.ForeColor = leakage.Available ? Color.FromArgb(11, 31, 59) : Color.Firebrick;
+        var (negative, positive) = BuildLeakageSides();
+        var ink = Color.FromArgb(11, 31, 59);
+        void Fill(DuctSystemPdfLeakageSummary? side, Label pressureClass, Label seal, Label leakageClass, Label factor, Label leakage)
+        {
+            if (side is null)
+            {
+                // No ductwork upstream of the fan: nothing is under negative pressure.
+                pressureClass.Text = "No ductwork upstream of the fan";
+                foreach (var label in new[] { seal, leakageClass, factor, leakage })
+                    label.Text = "—";
+                foreach (var label in new[] { pressureClass, seal, leakageClass, factor, leakage })
+                    label.ForeColor = Color.FromArgb(120, 134, 148);
+                return;
+            }
+            pressureClass.Text = side.PressureClass + (side.PressureBasis.StartsWith("Pressure class set", StringComparison.Ordinal) ? " (override)" : string.Empty);
+            seal.Text = side.SealClass + (side.SealDetail.Contains("set in Customize Duct Class", StringComparison.Ordinal) ? " (override)" : string.Empty);
+            leakageClass.Text = side.LeakageClass;
+            factor.Text = side.Factor;
+            leakage.Text = side.Leakage;
+            foreach (var label in new[] { pressureClass, seal, leakageClass, factor })
+                label.ForeColor = ink;
+            leakage.ForeColor = side.Available ? ink : Color.Firebrick;
+        }
+        Fill(negative, _analysisNegativeClassValue, _analysisNegativeSealValue, _analysisNegativeLeakageClassValue,
+            _analysisNegativeFactorValue, _analysisNegativeLeakageValue);
+        Fill(positive, _analysisPressureClassValue, _analysisSealClassValue, _analysisLeakageClassValue,
+            _analysisFactorValue, _analysisLeakageValue);
+        _analysisPressureClassNote.Text = "Per SMACNA HVAC Duct Construction Standards and Air Duct Leakage Test Manual; "
+                                          + "F = CL × P^0.65. Override either side with Customize Duct Class.";
         var detail = new List<string>();
-        if (leakage.PressureBasis.Length > 0)
-            detail.Add(leakage.PressureBasis + ". " + leakage.SealDetail + ".");
-        detail.AddRange(leakage.CalculationLines);
-        if (!string.IsNullOrEmpty(leakage.Note))
-            detail.Add("Not available: " + leakage.Note);
-        detail.Add(leakage.Criteria);
+        foreach (var (name, side) in new[] { ("Negative (suction)", negative), ("Positive (discharge)", positive) })
+        {
+            if (side is null)
+                continue;
+            var prefix = negative is null ? string.Empty : name + ": ";
+            if (side.PressureBasis.Length > 0)
+                detail.Add(prefix + side.PressureBasis + ". " + side.SealDetail + ".");
+            detail.AddRange(side.CalculationLines.Select(line => prefix + line));
+            if (!string.IsNullOrEmpty(side.LeakageDetail))
+                detail.Add(prefix + "duct leakage is " + side.LeakageDetail + ".");
+            if (!string.IsNullOrEmpty(side.Note))
+                detail.Add(prefix + "not available: " + side.Note);
+        }
+        if (negative is { Available: true } && positive.Available)
+        {
+            var sides = SmacnaLeakage.AnalyzeSides(_ductSystem);
+            detail.Add($"Total duct leakage, both sides: {sides.TotalLeakageCfm.ToString("0.#", CultureInfo.CurrentCulture)} cfm.");
+        }
+        detail.Add(positive.Criteria);
         _analysisLeakageDetail.Text = string.Join(Environment.NewLine, detail);
     }
 
@@ -516,12 +614,14 @@ internal sealed partial class DuctSystemScreen
         var withoutOverrides = expectations.Copy();
         withoutOverrides.PressureClassOverrideInWc = null;
         withoutOverrides.SealClassOverride = null;
+        withoutOverrides.SuctionPressureClassOverrideInWc = null;
+        withoutOverrides.SuctionSealClassOverride = null;
         // The dialog shows what FanWorks calculates on its own, so analyse without the saved overrides.
         _ductSystem.AnalysisExpectations = withoutOverrides;
-        SystemLeakageResult calculated;
+        SystemLeakageSides calculated;
         try
         {
-            calculated = SmacnaLeakage.Analyze(_ductSystem);
+            calculated = SmacnaLeakage.AnalyzeSides(_ductSystem);
         }
         finally
         {
@@ -532,6 +632,8 @@ internal sealed partial class DuctSystemScreen
             return;
         expectations.PressureClassOverrideInWc = dialog.PressureClassOverride;
         expectations.SealClassOverride = dialog.SealClassOverride;
+        expectations.SuctionPressureClassOverrideInWc = dialog.SuctionPressureClassOverride;
+        expectations.SuctionSealClassOverride = dialog.SuctionSealClassOverride;
         SaveDuctSystem();
         RefreshAnalysisSummary();
     }
@@ -598,9 +700,19 @@ internal sealed partial class DuctSystemScreen
     /// tab and the report title page. The leakage formula is defined in inch-pound units (cfm per 100 ft², in. w.c.),
     /// so the worked lines are in those units; headline values follow the project units.
     /// </summary>
+    /// <summary>
+    /// The SMACNA summary for each side of the fan: negative (suction; null when no ductwork is upstream of the fan)
+    /// and positive (discharge; the whole system when nothing is upstream).
+    /// </summary>
+    internal (DuctSystemPdfLeakageSummary? Negative, DuctSystemPdfLeakageSummary Positive) BuildLeakageSides()
+    {
+        var sides = SmacnaLeakage.AnalyzeSides(_ductSystem);
+        return (sides.Negative is null ? null : BuildLeakageSummary(sides.Negative), BuildLeakageSummary(sides.Positive));
+    }
+
     internal DuctSystemPdfLeakageSummary BuildLeakageSummary(SystemLeakageResult? computed = null)
     {
-        var result = computed ?? SmacnaLeakage.Analyze(_ductSystem);
+        var result = computed ?? SmacnaLeakage.AnalyzeSides(_ductSystem).Positive;
         var imperial = _host._currentUnits == UnitSystem.Imperial;
         const string criteria = "Per SMACNA HVAC Duct Construction Standards - Metal and Flexible (pressure and seal class) and "
                                 + "SMACNA HVAC Air Duct Leakage Test Manual (leakage class CL); leakage factor F = CL x P^0.65.";

@@ -454,7 +454,7 @@ internal sealed class SelectionInspector : Panel
             var downstream = _connection!.Value.Downstream;
             var parentId = _connection.Value.Secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
             _title.Text = "Unsized duct";
-            _subtitle.Text = $"Connection {parentId} → {downstream.Id}";
+            _subtitle.Text = $"Connection {parentId} to {downstream.Id}";
         }
         else
         {
@@ -924,67 +924,7 @@ internal sealed class SelectionInspector : Panel
             }
             return;
         }
-        var title = new Font("Segoe UI Semibold", 11F);
-        var first = true;
-        foreach (var section in sections)
-        {
-            if (section.IsTitle)
-            {
-                // A worksheet title; a later one (the surface-area calculation) follows a divider line.
-                if (!first)
-                    Write(new string('─', 34) + "\r\n", body, Color.FromArgb(120, 140, 158));
-                Write(section.Heading.ToUpperInvariant() + "\r\n\r\n", title, RibbonPalette.Ink);
-                first = false;
-                continue;
-            }
-            first = false;
-            Write(section.Heading.ToUpperInvariant() + "\r\n", heading, Color.FromArgb(18, 52, 96));
-            foreach (var line in section.Lines)
-            {
-                if (line.Kind == DuctSystemPdfLineKind.Variable)
-                {
-                    // A variable definition: the symbol, then what it is and where its value comes from.
-                    _calculations.SelectionStart = _calculations.TextLength;
-                    EngineeringMathRichText.AppendStyledEquation(_calculations,
-                        (line.Formula + "  ", EngineeringMathRichText.MathTone.Formula));
-                    Write($"    {DisplayUnits(line.HighlightValue)}\r\n", body, RibbonPalette.Caption);
-                    continue;
-                }
-                if (line.Kind is DuctSystemPdfLineKind.TableHeader or DuctSystemPdfLineKind.TableRow or DuctSystemPdfLineKind.TableRowSelected)
-                {
-                    var cells = string.Join("   ", line.Cells.Where(cell => cell.Length > 0));
-                    Write(DisplayUnits(cells) + "\r\n", line.Kind == DuctSystemPdfLineKind.TableRow ? body : value,
-                        line.Kind == DuctSystemPdfLineKind.TableRowSelected ? Color.FromArgb(14, 111, 230) : RibbonPalette.Ink);
-                    continue;
-                }
-                // One line per result: "A = πD²/4 = 1.2743 ft²" (the equation, an equals sign and the value on the
-                // same line), with the substituted inputs under it; text lines read "Airflow Q = 1200 cfm".
-                var formula = line.Formula.TrimEnd();
-                var endsWithEquals = formula.EndsWith('=');
-                var valueTone = line.HighlightAsInput ? EngineeringMathRichText.MathTone.Input : EngineeringMathRichText.MathTone.Solved;
-                if (line.IsEquation)
-                {
-                    // Equations are written in the worksheet math markup; render them as the calculators do.
-                    _calculations.SelectionStart = _calculations.TextLength;
-                    var parts = new List<(string Markup, EngineeringMathRichText.MathTone Tone)>
-                        { (formula, EngineeringMathRichText.MathTone.Formula) };
-                    if (!string.IsNullOrWhiteSpace(line.HighlightValue))
-                        parts.Add(((endsWithEquals ? " " : " = ") + DisplayUnits(line.HighlightValue), valueTone));
-                    EngineeringMathRichText.AppendStyledEquation(_calculations, parts.ToArray());
-                    if (!string.IsNullOrWhiteSpace(line.InputSubstitution))
-                        Write($"    with {DisplayUnits(line.InputSubstitution)}\r\n", body, Color.FromArgb(62, 78, 94));
-                    continue;
-                }
-                Write(DisplayUnits(formula), body, RibbonPalette.Ink);
-                if (!string.IsNullOrWhiteSpace(line.HighlightValue))
-                    Write((endsWithEquals ? " " : " = ") + DisplayUnits(line.HighlightValue), value,
-                        line.HighlightAsInput ? Color.FromArgb(42, 110, 60) : Color.FromArgb(18, 52, 96));
-                if (!string.IsNullOrWhiteSpace(line.InputSubstitution))
-                    Write($"\r\n    with {DisplayUnits(line.InputSubstitution)}", body, Color.FromArgb(62, 78, 94));
-                Write("\r\n", body, RibbonPalette.Ink);
-            }
-            Write("\r\n", body, RibbonPalette.Ink);
-        }
+        WorksheetRichText.Render(_calculations, sections, append: true);
         _calculations.SelectionStart = 0;
         _calculations.ScrollToCaret();
     }

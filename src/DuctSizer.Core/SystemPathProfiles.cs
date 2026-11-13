@@ -20,8 +20,8 @@ public sealed record SystemPathProfile(string StartId, string EndId, IReadOnlyLi
     /// <summary>"Path 1", "Path 2" …</summary>
     public string Name => $"Path {Number}";
 
-    /// <summary>The components the path runs between, e.g. "FAN-001 → L-010".</summary>
-    public string Route => string.Equals(StartId, EndId, StringComparison.OrdinalIgnoreCase) ? StartId : $"{StartId} → {EndId}";
+    /// <summary>The components the path runs between, e.g. "FAN-001 to L-010".</summary>
+    public string Route => string.Equals(StartId, EndId, StringComparison.OrdinalIgnoreCase) ? StartId : $"{StartId} to {EndId}";
 
     /// <summary>Total pressure loss along the route, Pa.</summary>
     public double TotalLossPa => Steps.Count == 0 ? 0.0 : Steps[^1].CumulativeLossPa;

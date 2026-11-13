@@ -78,7 +78,7 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 19;
+    public const int CurrentSchemaVersion = 20;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -925,6 +925,11 @@ public static class DuctSystemStore
         // carry an internal static pressure (0 when absent, as before).
         if (document.SchemaVersion == 18)
             document.SchemaVersion = 19;
+        // Version 20: suction-side (negative) pressure class and seal class overrides (none when absent); the existing
+        // overrides now apply to the discharge (positive) side, which is the whole system when nothing is upstream of
+        // the fan.
+        if (document.SchemaVersion == 19)
+            document.SchemaVersion = 20;
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."

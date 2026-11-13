@@ -256,10 +256,13 @@ public sealed record DuctSystemPdfMetadata(
     DuctSystemPdfLeakageSummary? Leakage = null,
     bool FanIsAirHandlingUnit = false,
     string FanInternalStaticPressure = "",
-    string FanTotalStaticPressure = "")
+    string FanTotalStaticPressure = "",
+    DuctSystemPdfLeakageSummary? SuctionLeakage = null)
 {
     // For an air handling unit FanStaticPressure is its external static pressure (ESP); FanTotalStaticPressure is
     // ESP plus FanInternalStaticPressure and is the pressure the motor power is based on.
+    // With ductwork upstream of the fan, Leakage is the positive (discharge) side and SuctionLeakage the negative
+    // (suction) side, each with its own pressure class, seal class and leakage.
 }
 
 /// <summary>
@@ -307,7 +310,7 @@ public sealed record DuctSystemPdfPressureProfile(
 
 /// <summary>One route: Values[i] is the running loss after component i + 1 along the route.</summary>
 /// <param name="Label">The path's name ("Path 1" is the critical path).</param>
-/// <param name="Route">The components it runs between ("FAN-001 → L-010").</param>
+/// <param name="Route">The components it runs between ("FAN-001 to L-010").</param>
 /// <param name="FanIndex">0-based position of the fan or air handling unit on the path, or -1 when it has none:
 /// components before it are on the suction (negative static pressure) side, after it on the discharge side.</param>
 public sealed record DuctSystemPdfProfileSeries(string Label, IReadOnlyList<double> Values, bool IsCritical,
@@ -620,7 +623,11 @@ public static class DuctSystemPdf
             TextColor(builder, x + 176 - EstimatedPdfWidth(pages, 7.4, true), y, 7.4, pages, accent, bold: true);
         }
 
-        DrawLeakagePanel(builder, metadata?.Leakage, leftX, leakageBottom, leftWidth, leakageTop - leakageBottom, accent, ink, muted);
+        if (metadata?.SuctionLeakage is { } suctionLeakage && metadata.Leakage is { } dischargeLeakage)
+            DrawLeakageSidesPanel(builder, suctionLeakage, dischargeLeakage, leftX, leakageBottom, leftWidth,
+                leakageTop - leakageBottom, accent, ink, muted);
+        else
+            DrawLeakagePanel(builder, metadata?.Leakage, leftX, leakageBottom, leftWidth, leakageTop - leakageBottom, accent, ink, muted);
 
         // System summary: a donut of duct segments, fittings and components, each labelled with a leader arrow.
         TextColor(builder, leftX + 14, summaryTop - 14, 8, "SYSTEM SUMMARY", ink, bold: true);
@@ -684,6 +691,67 @@ public static class DuctSystemPdf
                 TextColor(builder, left + 14, y, 6, wrapped, bold ? ink : muted, bold);
                 y -= 7.6;
             }
+        for (var index = 0; index < criteria.Length; index++)
+            TextColor(builder, left + 14, bottom + 6 + (criteria.Length - 1 - index) * 7, 5.6, criteria[index], accent);
+    }
+
+    /// <summary>
+    /// The SMACNA panel for a system with ductwork on both sides of the fan: one row per side (negative suction,
+    /// positive discharge) with its pressure class, seal class, leakage class, leakage factor and duct leakage, then
+    /// each side's basis and worked lines, the total, and the criteria.
+    /// </summary>
+    private static void DrawLeakageSidesPanel(StringBuilder builder, DuctSystemPdfLeakageSummary negative,
+        DuctSystemPdfLeakageSummary positive, double left, double bottom, double width, double height, string accent,
+        string ink, string muted)
+    {
+        var top = bottom + height;
+        TextColor(builder, left + 14, top - 14, 8, "DUCT PRESSURE CLASS AND LEAKAGE (SMACNA), EACH SIDE OF THE FAN", ink, bold: true);
+        // Column offsets sized so the widest values (a factor such as 18.83 cfm/100 ft², a leakage such as
+        // 123.4 cfm) fit the half-width title-page panel.
+        var usable = width - 28;
+        var columns = new[] { ("SIDE", 0.0), ("PRESSURE CLASS", usable * 0.21), ("SEAL CLASS", usable * 0.36),
+            ("LEAKAGE CLASS", usable * 0.50), ("FACTOR F", usable * 0.65), ("DUCT LEAKAGE", usable * 0.83) };
+        foreach (var (title, offset) in columns)
+            TextColor(builder, left + 14 + offset, top - 27, 5.6, title, accent, bold: true);
+        var rowY = top - 39;
+        foreach (var (name, side) in new[] { ("Negative (suction)", negative), ("Positive (discharge)", positive) })
+        {
+            var cells = new[] { name, side.PressureClass, side.SealClass, side.LeakageClass, side.Factor, side.Leakage };
+            for (var index = 0; index < cells.Length; index++)
+            {
+                var x = left + 14 + columns[index].Item2;
+                var cellWidth = (index + 1 < columns.Length ? columns[index + 1].Item2 : width - 28) - columns[index].Item2 - 6;
+                FittedText(builder, x, rowY, cellWidth, index == 0 ? 7 : 7.5, 5.6, cells[index], bold: index > 0,
+                    color: index == 5 && !side.Available ? "0.70 0.13 0.13" : ink);
+            }
+            rowY -= 12;
+        }
+        // Each side's worked line first (both always shown), then how each design pressure was set, as room allows.
+        var lines = new List<(string Text, bool Bold)>();
+        foreach (var (name, side) in new[] { ("Negative", negative), ("Positive", positive) })
+        {
+            lines.AddRange(side.CalculationLines.Select(line => ($"{name}: {line}", true)));
+            if (!string.IsNullOrWhiteSpace(side.Note))
+                lines.Add(($"{name}: not available: {side.Note}", true));
+        }
+        foreach (var (name, side) in new[] { ("Negative", negative), ("Positive", positive) })
+            if (side.PressureBasis.Length > 0)
+                lines.Add(($"{name}: {side.PressureBasis}. {side.SealDetail}.", false));
+        var y = rowY - 3;
+        var criteria = WrapPdfText(negative.Criteria, 118).ToArray();
+        var lastLineY = bottom + 6 + (criteria.Length - 1) * 7;
+        foreach (var (text, bold) in lines)
+        {
+            // A note is shown whole or not at all, never cut off mid-sentence.
+            var wrapped = WrapPdfText(text, 112).ToArray();
+            if (y - (wrapped.Length - 1) * 7.6 < lastLineY + 8)
+                break;
+            foreach (var part in wrapped)
+            {
+                TextColor(builder, left + 14, y, 6, part, bold ? ink : muted, bold);
+                y -= 7.6;
+            }
+        }
         for (var index = 0; index < criteria.Length; index++)
             TextColor(builder, left + 14, bottom + 6 + (criteria.Length - 1 - index) * 7, 5.6, criteria[index], accent);
     }

@@ -47,6 +47,11 @@ internal sealed partial class DuctCalculatorScreen
     internal readonly TextBox _sizeIncrementText = MainForm.CreateInput("0");
 
     internal readonly Label _diameterUnitLabel =MainForm. CreateInputUnitLabel();
+    internal readonly Label _airflowUnitLabel = MainForm.CreateInputUnitLabel();
+    internal readonly Label _temperatureUnitLabel = MainForm.CreateInputUnitLabel();
+    internal readonly Label _lengthUnitLabel = MainForm.CreateInputUnitLabel();
+    internal readonly Label _frictionUnitLabel = MainForm.CreateInputUnitLabel();
+    internal readonly Label _velocityUnitLabel = MainForm.CreateInputUnitLabel();
 
     internal readonly Label _widthUnitLabel =MainForm. CreateInputUnitLabel();
 
@@ -113,18 +118,23 @@ internal sealed partial class DuctCalculatorScreen
     internal void UpdateUnitsLabels()
     {
         var imperial = _host._currentUnits == UnitSystem.Imperial;
-        _inputLabels["airflow"].Text = imperial ? "Airflow (cfm)" : "Airflow (L/s)";
-        _inputLabels["temperature"].Text = imperial ? "Air Temp (°F)" : "Air Temp (°C)";
-        _inputLabels["length"].Text = imperial ? "Length (ft)" : "Length (m)";
+        _inputLabels["airflow"].Text = "Airflow";
+        _inputLabels["temperature"].Text = "Air Temp";
+        _inputLabels["length"].Text = "Length";
+        _airflowUnitLabel.Text = imperial ? "cfm" : "L/s";
+        _temperatureUnitLabel.Text = imperial ? "°F" : "°C";
+        _lengthUnitLabel.Text = imperial ? "ft" : "m";
+        _frictionUnitLabel.Text = imperial ? "in. w.c./100 ft" : "Pa/m";
+        _velocityUnitLabel.Text = imperial ? "fpm" : "m/s";
         _inputLabels["diameter"].Text = "Diameter";
         _inputLabels["width"].Text = "Width";
         _inputLabels["height"].Text = "Height";
-        _diameterUnitLabel.Text = imperial ? "(in.)" : "(mm)";
-        _widthUnitLabel.Text = imperial ? "(in.)" : "(mm)";
-        _heightUnitLabel.Text = imperial ? "(in.)" : "(mm)";
-        _rectangularFixedDimensionUnitLabel.Text = imperial ? "(in)" : "(mm)";
-        _inputLabels["friction"].Text = imperial ? "Target SP (in. w.c./100 ft)" : "Target SP (Pa/m)";
-        _inputLabels["velocity"].Text = imperial ? "Max Velocity (fpm)" : "Max Velocity (m/s)";
+        _diameterUnitLabel.Text = imperial ? "in." : "mm";
+        _widthUnitLabel.Text = imperial ? "in." : "mm";
+        _heightUnitLabel.Text = imperial ? "in." : "mm";
+        _rectangularFixedDimensionUnitLabel.Text = imperial ? "in." : "mm";
+        _inputLabels["friction"].Text = "Target SP";
+        _inputLabels["velocity"].Text = "Max Velocity";
     }
 
     internal void UpdateControlState()
@@ -336,280 +346,37 @@ internal sealed partial class DuctCalculatorScreen
         }
     }
 
+    /// <summary>
+    /// The worksheet of this duct: the same sections, equations, substitutions and variable list as the duct's sheet
+    /// in the PDF report and the Project tab's Calculations page (round W), so a quick check reads like the report.
+    /// When project rounding changed the solved size, step 1 also states the continuous (unrounded) size.
+    /// </summary>
     private void UpdateDuctCalculationDetails(DuctCalculationResult result, DuctGeometry? continuousGeometry)
     {
-        var box = _ductCalculationDetails;
-        box.Clear();
-
-        void Heading(string text)
+        var sections = new List<DuctSystemPdfCalculationSection>
         {
-            if (box.TextLength > 0)
-                EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
-            box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            box.SelectionColor = Color.FromArgb(16, 45, 84);
-            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
-            box.SelectionFont = box.Font;
-            box.SelectionColor = box.ForeColor;
-        }
-
-        void Line(params (string Text, bool Input)[] parts)
-        {
-            foreach (var part in parts)
-            {
-                box.SelectionColor = part.Input ? Color.FromArgb(190, 44, 44) : box.ForeColor;
-                box.SelectionFont = part.Input ? new Font(box.Font, FontStyle.Bold) : box.Font;
-                EngineeringMathRichText.AppendAtEnd(box, part.Text);
-            }
-            EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
-            box.SelectionColor = box.ForeColor;
-            box.SelectionFont = box.Font;
-        }
-
-        void MathLine(params (string Markup, bool Input)[] parts) =>
-            EngineeringMathRichText.AppendEquation(box, parts);
-
-        void StyledMathLine(params (string Markup, EngineeringMathRichText.MathTone Tone)[] parts) =>
-            EngineeringMathRichText.AppendStyledEquation(box, parts);
-
-        void DefinitionRow(string left, string right)
-        {
-            box.SelectionTabs = new[] { Math.Max(250, box.ClientSize.Width / 2) };
-            box.SelectionColor = box.ForeColor;
-            box.SelectionFont = box.Font;
-            EngineeringMathRichText.AppendAtEnd(box, $"{left}\t{right}{Environment.NewLine}");
-        }
-
-        void Step(string title, string explanation)
-        {
-            EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
-            box.SelectionColor = Color.FromArgb(16, 45, 84);
-            box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            EngineeringMathRichText.AppendAtEnd(box, title + Environment.NewLine);
-            box.SelectionColor = box.ForeColor;
-            box.SelectionFont = box.Font;
-            EngineeringMathRichText.AppendAtEnd(box, explanation + Environment.NewLine);
-        }
-
-        void NarrativeLine(params (string Text, EngineeringMathRichText.MathTone Tone)[] parts)
-        {
-            foreach (var part in parts)
-            {
-                box.SelectionColor = part.Tone switch
-                {
-                    EngineeringMathRichText.MathTone.Input => Color.FromArgb(190, 44, 44),
-                    EngineeringMathRichText.MathTone.Solved => Color.FromArgb(10, 88, 187),
-                    _ => box.ForeColor
-                };
-                box.SelectionFont = part.Tone == EngineeringMathRichText.MathTone.Formula
-                    ? box.Font
-                    : new Font(box.Font, FontStyle.Bold);
-                EngineeringMathRichText.AppendAtEnd(box, part.Text);
-            }
-            EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
-            box.SelectionColor = box.ForeColor;
-            box.SelectionFont = box.Font;
-        }
-
-        var geometry = result.Input.Geometry;
-        var flowCfm = UnitConversions.M3PerSToCfm(result.Input.AirflowM3PerS);
-        var temperatureF = UnitConversions.CelsiusToFahrenheit(result.Input.TemperatureC);
-        var lengthFt = UnitConversions.MToFeet(result.Input.LengthM);
-        var areaFt2 = UnitConversions.SquareMetersToSquareFeet(geometry.ActualAreaM2);
-        var densityLbmFt3 = result.Air.DensityKgPerM3 * 0.0624279606;
-        var viscosityLbmFtS = result.Air.DynamicViscosityPaS * 0.671968975;
-        var actualVelocityFpm = UnitConversions.MpsToFpm(result.ActualVelocityMPerS);
-        var calculationVelocityFpm = UnitConversions.MpsToFpm(result.CalculationVelocityMPerS);
-        var calculationDiameterIn = UnitConversions.MToInches(result.CalculationDiameterM);
-        var velocityPressureInWc = UnitConversions.PaToInchesWater(
-            result.Air.DensityKgPerM3 * result.CalculationVelocityMPerS * result.CalculationVelocityMPerS / 2.0);
-        var calculationDiameterFt = UnitConversions.MToFeet(result.CalculationDiameterM);
-        var actualDiameterFt = geometry.Shape == DuctShape.Round
-            ? UnitConversions.MToFeet(geometry.DiameterM)
-            : calculationDiameterFt;
-        var imperialPressureRate = result.Friction.Regime == FlowRegime.Transitional
-            ? $"{UnitConversions.PaPerMToInchesWaterPer100Feet(result.PressureLossLowerPaPerM):0.####}–{UnitConversions.PaPerMToInchesWaterPer100Feet(result.PressureLossUpperPaPerM):0.####} in. w.c./100 ft"
-            : $"{UnitConversions.PaPerMToInchesWaterPer100Feet(result.PressureLossPaPerM):0.####} in. w.c./100 ft";
-        var imperialTotalPressure = result.Friction.Regime == FlowRegime.Transitional
-            ? $"{UnitConversions.PaToInchesWater(result.TotalPressureLossLowerPa):0.####}–{UnitConversions.PaToInchesWater(result.TotalPressureLossUpperPa):0.####} in. w.c."
-            : $"{UnitConversions.PaToInchesWater(result.TotalPressureLossPa):0.####} in. w.c.";
-        var relativeRoughness = result.Input.Material.RoughnessMeters / result.CalculationDiameterM;
-
-        Heading("REQUIRED EQUATIONS");
-        MathLine(("\\rho = \\rho_{moist}(T, RH, p_{atm})", false));
-        MathLine(("\\mu = \\mu_{Sutherland}(T)", false));
-        if (geometry.Shape == DuctShape.Round)
-        {
-            MathLine(("A = \\frac{\\pi D^{2}}{4}", false));
-        }
-        else
-        {
-            MathLine(("A = W \\times H", false));
-            var equivalentEquation = result.Input.EquivalentDiameterMethod == EquivalentDiameterMethod.Huebscher
-                ? "D_{e} = \\frac{1.30(WH)^{0.625}}{(W+H)^{0.25}}"
-                : "D_{h} = \\frac{2WH}{W+H}";
-            MathLine((equivalentEquation, false));
-        }
-        MathLine(("V_{actual} = \\frac{Q}{A_{actual}}", false));
-        MathLine(("V_{calc} = \\frac{Q}{A_{calc}}", false));
-        MathLine(("\\epsilon_{r} = \\frac{\\epsilon}{D_{calc}}", false));
-        MathLine(("Re = \\frac{\\rho V_{calc}D_{calc}}{\\mu}", false));
-        if (result.Friction.Regime == FlowRegime.Laminar)
-        {
-            MathLine((geometry.Shape == DuctShape.Round
-                ? "f = \\frac{64}{Re}"
-                : "f = \\frac{96 \\cdot F(aspect ratio)}{Re}", false));
-        }
-        else
-        {
-            MathLine(("\\frac{1}{\\sqrt{f}} = -2 log_{10}(X)", false));
-            MathLine(("X = \\frac{\\epsilon}{3.7D} + \\frac{2.51}{Re\\sqrt{f}}", false));
-        }
-        MathLine(("VP = (\\frac{V_{calc}}{4005})^{2}(\\frac{\\rho}{0.075})", false));
-        MathLine(("\\frac{\\Delta P}{100 ft} = f(\\frac{100 ft}{D_{calc}})VP", false));
-        MathLine(("\\Delta P = (\\frac{\\Delta P}{100 ft})(\\frac{L}{100 ft})", false));
-
-        Heading("PARAMETERS AND SUB-EQUATIONS");
-        DefinitionRow("Q  Airflow", "A  Duct area");
-        DefinitionRow("V  Air velocity", "Dcalc  Calculation diameter");
-        DefinitionRow("ρ  Moist-air density", "μ  Dynamic viscosity");
-        DefinitionRow("ε  Absolute roughness", "εr  Relative roughness");
-        DefinitionRow("Re  Reynolds number", "f  Darcy friction factor");
-        DefinitionRow("VP  Velocity pressure", "ΔP  Static-pressure loss");
-        Line(("Calculation basis: ", false), (result.CalculationBasisDescription, false));
-        MathLine(("A_{calc} = A(D_{calc})", false));
-        MathLine(("V_{ft/s} = \\frac{V_{fpm}}{60}", false));
-        Line((result.Friction.Regime == FlowRegime.Laminar
-            ? "Laminar friction uses a direct correlation; iteration is not required."
-            : "Turbulent friction uses the implicit Colebrook equation with safeguarded bisection.", false));
-
-        Heading("INPUT VALUES");
-        Line(("Airflow Q = ", false), ($"{flowCfm:0.##} cfm", true));
-        Line(("Air temperature T = ", false), ($"{temperatureF:0.##} °F", true));
-        Line(("Relative humidity RH = ", false), ($"{result.Input.RelativeHumidity:P0}", true));
-        Line(("Atmospheric pressure p_atm = ", false),
-            ($"{result.Input.AtmosphericPressurePa * 0.000145037738:0.###} psia", true));
-        Line(("Duct length L = ", false), ($"{lengthFt:0.###} ft", true));
-        Line(("Duct geometry = ", false), (ImperialGeometry(geometry), true));
-        Line(("Material roughness ε = ", false), ($"{result.Input.Material.RoughnessFeet:0.######} ft", true));
-        if (result.Friction.Regime != FlowRegime.Laminar)
-            Line(("Initial friction-factor bracket = ", false),
-                ($"[{result.Friction.InitialLowerBound:0.########}, {result.Friction.InitialUpperBound:0.########}]", true));
-
-        Heading("SOLVED PARAMETERS — EQUATION SUBSTITUTIONS");
-        Line(("Entered values are red; solved results are blue.", false), ("  INPUT", true), ("  ", false));
-        box.SelectionColor = Color.FromArgb(10, 88, 187);
-        box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-        EngineeringMathRichText.AppendAtEnd(box, "SOLVED" + Environment.NewLine);
-        box.SelectionColor = box.ForeColor;
-        box.SelectionFont = box.Font;
-        Step("1. FINAL DUCT GEOMETRY",
-            "The sizing method first establishes the duct dimensions. Project rounding is applied before the final area and all downstream velocity calculations are evaluated.");
-        if (continuousGeometry is not null && !MainForm.GeometryMatches(geometry, continuousGeometry))
-        {
-            StyledMathLine(("Continuous solved duct size = ", EngineeringMathRichText.MathTone.Formula),
-                (ImperialGeometry(continuousGeometry), EngineeringMathRichText.MathTone.Solved));
-            NarrativeLine(("The continuous value is the unrounded design result. The project increment and rounding rule convert it to the constructible final size below.", EngineeringMathRichText.MathTone.Formula));
-        }
-        StyledMathLine(("Final duct size = ", EngineeringMathRichText.MathTone.Formula),
-            (ImperialGeometry(geometry), EngineeringMathRichText.MathTone.Solved));
-        if (geometry.Shape == DuctShape.Round)
-        {
-            StyledMathLine(("A = \\frac{\\pi D^{2}}{4} = ", EngineeringMathRichText.MathTone.Formula),
-                ($"\\frac{{\\pi({actualDiameterFt:0.####} ft)^{{2}}}}{{4}}", EngineeringMathRichText.MathTone.Input),
-                (" = ", EngineeringMathRichText.MathTone.Formula),
-                ($"{areaFt2:0.####} ft²", EngineeringMathRichText.MathTone.Solved));
-        }
-        else
-        {
-            var widthFt = UnitConversions.MToFeet(geometry.WidthM);
-            var heightFt = UnitConversions.MToFeet(geometry.HeightM);
-            StyledMathLine(("A = W \\times H = ", EngineeringMathRichText.MathTone.Formula),
-                ($"{widthFt:0.####} ft \\times {heightFt:0.####} ft", EngineeringMathRichText.MathTone.Input),
-                (" = ", EngineeringMathRichText.MathTone.Formula),
-                ($"{areaFt2:0.####} ft²", EngineeringMathRichText.MathTone.Solved));
-        }
-        StyledMathLine(("D_{calc} = D_{basis}(", EngineeringMathRichText.MathTone.Formula),
-            (ImperialGeometry(geometry), EngineeringMathRichText.MathTone.Input),
-            (") = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{calculationDiameterIn:0.###} in", EngineeringMathRichText.MathTone.Solved));
-
-        Step("2. AIR PROPERTIES",
-            "Temperature, relative humidity, and atmospheric pressure determine moist-air density. Dynamic viscosity is then evaluated from temperature with the Sutherland relation.");
-        StyledMathLine(("\\rho = \\rho_{moist}(", EngineeringMathRichText.MathTone.Formula),
-            ($"{temperatureF:0.##} °F, {result.Input.RelativeHumidity:P0}, {result.Input.AtmosphericPressurePa * 0.000145037738:0.###} psia", EngineeringMathRichText.MathTone.Input),
-            (") = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{densityLbmFt3:0.#####} lbm/ft³", EngineeringMathRichText.MathTone.Solved));
-        StyledMathLine(("\\mu = \\mu_{Sutherland}(", EngineeringMathRichText.MathTone.Formula),
-            ($"{temperatureF:0.##} °F", EngineeringMathRichText.MathTone.Input),
-            (") = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{viscosityLbmFtS:0.########} lbm/(ft·s)", EngineeringMathRichText.MathTone.Solved));
-        Step("3. VELOCITY AND FLOW REGIME",
-            "Airflow divided by area gives velocity. The calculation-basis diameter, roughness, density, and viscosity then establish Reynolds number and the applicable flow regime.");
-        StyledMathLine(("V_{actual} = \\frac{Q}{A_{actual}} = ", EngineeringMathRichText.MathTone.Formula),
-            ($"\\frac{{{flowCfm:0.##} cfm}}{{{areaFt2:0.####} ft²}}", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{actualVelocityFpm:0.#} fpm", EngineeringMathRichText.MathTone.Solved));
-        StyledMathLine(("V_{calc} = \\frac{Q}{A_{calc}} = ", EngineeringMathRichText.MathTone.Formula),
-            ($"\\frac{{{flowCfm:0.##} cfm}}{{A({calculationDiameterIn:0.###} in)}}", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{calculationVelocityFpm:0.#} fpm", EngineeringMathRichText.MathTone.Solved));
-        StyledMathLine(("\\epsilon_{r} = \\frac{\\epsilon}{D_{calc}} = ", EngineeringMathRichText.MathTone.Formula),
-            ($"\\frac{{{result.Input.Material.RoughnessFeet:0.######} ft}}{{{calculationDiameterFt:0.####} ft}}", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{relativeRoughness:0.########}", EngineeringMathRichText.MathTone.Solved));
-        StyledMathLine(("Re = \\frac{\\rho V_{calc}D_{calc}}{\\mu} = ", EngineeringMathRichText.MathTone.Formula),
-            ($"\\frac{{{densityLbmFt3:0.#####} \\times {calculationVelocityFpm / 60.0:0.####} \\times {calculationDiameterFt:0.####}}}{{{viscosityLbmFtS:0.########}}}", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{result.ReynoldsNumber:0}", EngineeringMathRichText.MathTone.Solved));
-        var regimeExplanation = result.Friction.Regime switch
-        {
-            FlowRegime.Laminar => $"Re = {result.ReynoldsNumber:0} is below {FrictionModel.LaminarUpperReynolds:0}, so the flow is laminar and a direct laminar correlation is used.",
-            FlowRegime.Transitional => $"Re = {result.ReynoldsNumber:0} lies between {FrictionModel.LaminarUpperReynolds:0} and {FrictionModel.TurbulentLowerReynolds:0}. The worksheet therefore reports unblended laminar and Colebrook bounds.",
-            _ => $"Re = {result.ReynoldsNumber:0} exceeds {FrictionModel.TurbulentLowerReynolds:0}, so the flow is turbulent and the implicit Colebrook equation applies."
+            DuctSystemPdfCalculationSection.Title("DUCT SIZING CALCULATION")
         };
-        NarrativeLine((regimeExplanation, EngineeringMathRichText.MathTone.Formula));
-
-        Step("4. DARCY FRICTION FACTOR",
-            result.Friction.Regime == FlowRegime.Laminar
-                ? "Laminar flow uses the direct Darcy-factor correlation, so no iterative solve is required."
-                : "The implicit Colebrook relation is solved with safeguarded bisection after a valid friction-factor bracket is established.");
-        StyledMathLine((result.Friction.Regime == FlowRegime.Laminar ? "f = \\frac{64}{Re}; Re = " : "Colebrook(\\epsilon_{r}, Re); ", EngineeringMathRichText.MathTone.Formula),
-            (result.Friction.Regime == FlowRegime.Laminar ? $"{result.ReynoldsNumber:0}" : $"εr = {relativeRoughness:0.########}, Re = {result.ReynoldsNumber:0}", EngineeringMathRichText.MathTone.Input),
-            (" → f = ", EngineeringMathRichText.MathTone.Formula),
-            (FormatFrictionFactor(result.Friction), EngineeringMathRichText.MathTone.Solved));
-        if (result.Friction.Regime != FlowRegime.Laminar)
+        foreach (var section in DuctSystemScreen.BuildDuctPdfCalculations(result))
         {
-            NarrativeLine(("Starting bracket: ", EngineeringMathRichText.MathTone.Formula),
-                ($"f = {result.Friction.InitialLowerBound:0.########} to {result.Friction.InitialUpperBound:0.########}", EngineeringMathRichText.MathTone.Input),
-                (". Safeguarded bisection required ", EngineeringMathRichText.MathTone.Formula),
-                ($"{result.Friction.Iterations} iterations", EngineeringMathRichText.MathTone.Solved),
-                (" and finished with residual ", EngineeringMathRichText.MathTone.Formula),
-                ($"{result.Friction.FinalResidual:0.000E+00}", EngineeringMathRichText.MathTone.Solved),
-                (". Convergence is accepted when |R| ≤ 1.0E−13 or the friction-factor bracket reaches its relative-width tolerance.", EngineeringMathRichText.MathTone.Formula));
+            if (continuousGeometry is not null && !MainForm.GeometryMatches(result.Input.Geometry, continuousGeometry)
+                && section.Heading.StartsWith("1.", StringComparison.Ordinal))
+            {
+                var lines = section.Lines.ToList();
+                lines.Insert(Math.Min(1, lines.Count), new DuctSystemPdfCalculationLine(
+                    "Continuous solved size, before project rounding", WorksheetGeometry(continuousGeometry)));
+                sections.Add(section with { Lines = lines });
+                continue;
+            }
+            sections.Add(section);
         }
-        Step("5. VELOCITY PRESSURE AND DUCT LOSS",
-            "The solved velocity and density produce velocity pressure. Darcy friction converts velocity pressure into loss per 100 ft, and duct length produces the final straight-duct pressure loss.");
-        StyledMathLine(("VP = (\\frac{V_{calc}}{4005})^{2}(\\frac{\\rho}{0.075}) = ", EngineeringMathRichText.MathTone.Formula),
-            ($"(\\frac{{{calculationVelocityFpm:0.#}}}{{4005}})^{{2}}(\\frac{{{densityLbmFt3:0.#####}}}{{0.075}})", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{velocityPressureInWc:0.####} in. w.c.", EngineeringMathRichText.MathTone.Solved));
-        StyledMathLine(("\\frac{\\Delta P}{100 ft} = f(\\frac{100 ft}{D_{calc}})VP = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{FormatFrictionFactor(result.Friction)}(\\frac{{100 ft}}{{{calculationDiameterFt:0.####} ft}})({velocityPressureInWc:0.####})", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            (imperialPressureRate, EngineeringMathRichText.MathTone.Solved));
-        StyledMathLine(("\\Delta P = (\\frac{\\Delta P}{100 ft})(\\frac{L}{100 ft}) = ", EngineeringMathRichText.MathTone.Formula),
-            ($"({imperialPressureRate.Replace(" in. w.c./100 ft", string.Empty)})(\\frac{{{lengthFt:0.###} ft}}{{100 ft}})", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            (imperialTotalPressure, EngineeringMathRichText.MathTone.Solved));
-        Heading("ASSUMPTIONS");
-        Line(("Steady, fully developed flow; fixed 50% RH; sea-level pressure. Transitional flow is reported as unblended laminar and Colebrook bounds.", false));
-        box.SelectionStart = 0;
-        box.ScrollToCaret();
+        WorksheetRichText.Render(_ductCalculationDetails, sections);
 
-        static string ImperialGeometry(DuctGeometry value) => value.Shape == DuctShape.Round
+        static string WorksheetGeometry(DuctGeometry value) => value.Shape == DuctShape.Round
             ? $"{UnitConversions.MToInches(value.DiameterM):0.###} in round"
-            : $"{UnitConversions.MToInches(value.WidthM):0.###} × {UnitConversions.MToInches(value.HeightM):0.###} in";
+            : $"{UnitConversions.MToInches(value.WidthM):0.###} x {UnitConversions.MToInches(value.HeightM):0.###} in";
     }
+
 
     internal string FormatGeometry(DuctGeometry geometry)
     {
@@ -824,7 +591,7 @@ internal sealed partial class DuctCalculatorScreen
             Margin = new Padding(0, 6, 4, 4)
         };
         MainForm.ConfigureCompactInputControl(control, 250, 135);
-        control.Margin = new Padding(0, 3, 0, 3);
+        control.Margin = control.Tag as string == "UnitInput" ? new Padding(0, 1, 0, 1) : new Padding(0, 3, 0, 3);
         table.Controls.Add(label, 0, row);
         if (table.ColumnCount >= 6)
         {
@@ -862,7 +629,7 @@ internal sealed partial class DuctCalculatorScreen
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleRight,
                 ForeColor = Color.FromArgb(45, 58, 70),
-                Font = new Font("Segoe UI", 8.3F),
+                Font = new Font("Segoe UI", 9F),
                 Margin = new Padding(column == 0 ? 0 : 8, 6, 3, 4)
             };
             MainForm.ConfigureCompactInputControl(item.Control, 165, 120);

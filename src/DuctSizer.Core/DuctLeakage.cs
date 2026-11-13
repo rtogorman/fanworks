@@ -156,11 +156,45 @@ public sealed record SystemLeakageResult(
     double? CalculatedPressureClassInWc = null,
     SmacnaSealClass? RecommendedSealClass = null,
     bool PressureClassOverridden = false,
-    bool SealClassOverridden = false)
+    bool SealClassOverridden = false,
+    PressureSide Side = PressureSide.Positive)
 {
     public bool IsAvailable => Problem is null && PressureClassInWc is not null;
     public double TotalAreaFt2 => Areas.Where(x => x.Problem is null).Sum(x => x.AreaFt2);
     public double TotalLeakageCfm => ByShape.Sum(x => x.LeakageCfm);
+}
+
+/// <summary>The side of the fan a duct is on: negative static pressure upstream (suction), positive downstream (discharge).</summary>
+public enum PressureSide
+{
+    /// <summary>Upstream of the fan or air handling unit: static pressure below atmospheric (suction).</summary>
+    Negative,
+    /// <summary>Downstream of the fan or air handling unit: static pressure above atmospheric (discharge).</summary>
+    Positive
+}
+
+/// <summary>
+/// SMACNA pressure class, seal class and leakage for each side of the fan. Ductwork upstream of the fan (suction,
+/// negative static pressure) and downstream (discharge, positive) are classed separately, each for its own design
+/// pressure, with its own overrides.
+/// </summary>
+/// <param name="Negative">The suction side; null when no ductwork is upstream of the fan.</param>
+/// <param name="Positive">The discharge side (the whole system when there is no fan or no suction ductwork).</param>
+public sealed record SystemLeakageSides(SystemLeakageResult? Negative, SystemLeakageResult Positive)
+{
+    /// <summary>The result that applies to the duct or fitting with this key (its side of the fan).</summary>
+    public SystemLeakageResult For(string itemKey) =>
+        Negative is not null && Negative.Areas.Any(area => string.Equals(area.ItemKey, itemKey, StringComparison.Ordinal))
+            ? Negative : Positive;
+
+    /// <summary>True when every side present is available.</summary>
+    public bool IsAvailable => Positive.IsAvailable && (Negative?.IsAvailable ?? true);
+
+    /// <summary>Total allowable leakage of both sides, cfm.</summary>
+    public double TotalLeakageCfm => (Negative?.TotalLeakageCfm ?? 0) + Positive.TotalLeakageCfm;
+
+    /// <summary>Total duct and fitting surface area of both sides, ft².</summary>
+    public double TotalAreaFt2 => (Negative?.TotalAreaFt2 ?? 0) + Positive.TotalAreaFt2;
 }
 
 /// <summary>
@@ -255,17 +289,87 @@ public static class SmacnaLeakage
         }
         else
             pressureProblem = "The critical path is not complete, so the system pressure is not known.";
+        return Classify(areas, design, basis, pressureProblem, overrides.PressureClassOverrideInWc,
+            overrides.SealClassOverride, PressureSide.Positive);
+    }
+
+    /// <summary>
+    /// Pressure class, seal class and leakage for each side of the fan. Ducts and fittings before the fan on any path
+    /// are on the negative (suction) side; all others on the positive (discharge) side.
+    /// <list type="bullet">
+    /// <item>Negative design pressure: the largest suction loss on any complete path (the static pressure at the fan
+    /// inlet, below atmospheric).</item>
+    /// <item>Positive design pressure: the larger of the largest discharge loss on any complete path and the fan's
+    /// external static pressure less the suction loss (the static pressure at the fan outlet).</item>
+    /// </list>
+    /// With no ductwork upstream of the fan the positive side is the whole system, exactly as <see cref="Analyze"/>.
+    /// Positive-side overrides are <see cref="AnalysisExpectations.PressureClassOverrideInWc"/> and
+    /// <see cref="AnalysisExpectations.SealClassOverride"/>; negative-side overrides are
+    /// <see cref="AnalysisExpectations.SuctionPressureClassOverrideInWc"/> and
+    /// <see cref="AnalysisExpectations.SuctionSealClassOverride"/>.
+    /// </summary>
+    public static SystemLeakageSides AnalyzeSides(DuctSystemDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        var areas = document.Ducts.Select(SurfaceAreaCalculator.ForDuct)
+            .Concat(document.Fittings.Select(SurfaceAreaCalculator.ForFitting).Where(x => x is not null).Select(x => x!))
+            .ToArray();
+        var profiles = SystemPathProfiles.Build(document);
+        var suctionKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in profiles.Paths)
+            for (var index = 0; index < path.FanStepIndex; index++)
+                suctionKeys.Add(path.Steps[index].ItemKey);
+        var suctionAreas = areas.Where(area => suctionKeys.Contains(area.ItemKey)).ToArray();
+        if (suctionAreas.Length == 0)
+            return new SystemLeakageSides(null, Analyze(document));
+
+        var overrides = document.AnalysisExpectations ?? new AnalysisExpectations();
+        var dischargeAreas = areas.Where(area => !suctionKeys.Contains(area.ItemKey)).ToArray();
+        double? suctionDesign = null, dischargeDesign = null;
+        var dischargeBasis = string.Empty;
+        string? problem = null;
+        var complete = profiles.Paths.Where(path => path.IsComplete && path.FanStepIndex >= 0).ToArray();
+        if (CriticalPathAnalyzer.Analyze(document).IsComplete && complete.Length > 0)
+        {
+            var suction = UnitConversions.PaToInchesWater(complete.Max(path => path.SuctionLossPa ?? 0));
+            var discharge = UnitConversions.PaToInchesWater(complete.Max(path => path.DischargeLossPa ?? 0));
+            var fans = document.LayoutNodes.Where(node => node.Type == LayoutNodeType.Fan).ToArray();
+            var fanOutlet = fans.Length == 1 && double.IsFinite(fans[0].FanStaticPressurePa) && fans[0].FanStaticPressurePa > 0
+                ? UnitConversions.PaToInchesWater(fans[0].FanStaticPressurePa) - suction
+                : 0.0;
+            suctionDesign = suction;
+            dischargeDesign = Math.Max(discharge, fanOutlet);
+            dischargeBasis = fanOutlet > discharge
+                ? (fans[0].IsAirHandlingUnit ? "air handling unit" : "fan") + " outlet static pressure (external static pressure less the suction loss)"
+                : "discharge-side pressure loss";
+        }
+        else
+            problem = "The critical path is not complete, so the system pressure is not known.";
+        var negative = Classify(suctionAreas, suctionDesign, "suction-side pressure loss up to the fan inlet",
+            problem, overrides.SuctionPressureClassOverrideInWc, overrides.SuctionSealClassOverride, PressureSide.Negative);
+        var positive = dischargeAreas.Length == 0
+            ? new SystemLeakageResult(dischargeDesign, dischargeBasis, null, null, dischargeAreas, Array.Empty<LeakageByShape>(),
+                "There is no ductwork downstream of the fan.", Side: PressureSide.Positive)
+            : Classify(dischargeAreas, dischargeDesign, dischargeBasis, problem, overrides.PressureClassOverrideInWc,
+                overrides.SealClassOverride, PressureSide.Positive);
+        return new SystemLeakageSides(negative, positive);
+    }
+
+    /// <summary>The class from a design pressure (or an override), its seal class and the leakage of the areas.</summary>
+    private static SystemLeakageResult Classify(IReadOnlyList<ItemSurfaceArea> areas, double? design, string basis,
+        string? pressureProblem, double? classOverride, SmacnaSealClass? sealOverride, PressureSide side)
+    {
         var calculatedClass = design is double known ? PressureClassFor(known) : null;
         if (design is not null && calculatedClass is null)
             pressureProblem = "The system pressure is above the highest SMACNA pressure class (10 in. w.c.).";
-        var pressureOverridden = overrides.PressureClassOverrideInWc is not null;
-        var pressureClass = overrides.PressureClassOverrideInWc ?? calculatedClass;
+        var pressureOverridden = classOverride is not null;
+        var pressureClass = classOverride ?? calculatedClass;
         if (pressureClass is null)
             return new SystemLeakageResult(design, basis, null, null, areas, Array.Empty<LeakageByShape>(),
-                pressureProblem ?? "The system pressure is not known.");
+                pressureProblem ?? "The system pressure is not known.", Side: side);
         var recommended = SealClassFor(pressureClass.Value);
-        var sealOverridden = overrides.SealClassOverride is not null;
-        var seal = overrides.SealClassOverride ?? recommended;
+        var sealOverridden = sealOverride is not null;
+        var seal = sealOverride ?? recommended;
         var failed = areas.FirstOrDefault(x => x.Problem is not null);
         var byShape = areas.Where(x => x.Problem is null)
             .GroupBy(x => x.Shape)
@@ -280,6 +384,6 @@ public static class SmacnaLeakage
             .ToArray();
         return new SystemLeakageResult(design, basis, pressureClass, seal, areas, byShape,
             failed is null ? null : $"{failed.ItemId}: {failed.Problem}",
-            calculatedClass, recommended, pressureOverridden, sealOverridden);
+            calculatedClass, recommended, pressureOverridden, sealOverridden, side);
     }
 }

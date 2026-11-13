@@ -431,7 +431,7 @@ internal sealed partial class LayoutDesignerScreen
                 var connection = new LayoutConnectionRef(node, secondary);
                 var duct = DuctForConnection(node, secondary);
                 var size = duct is null ? "unsized" : LayoutConnectionSizeText(duct);
-                segments.Add(new ExplorerEntry($"{duct?.Id ?? "Unsized"}  {parentId} → {node.Id}  ({size})", null, connection, null));
+                segments.Add(new ExplorerEntry($"{duct?.Id ?? "Unsized"}  {parentId} to {node.Id}  ({size})", null, connection, null));
             }
         }
         var drawnDucts = nodes.SelectMany(node => new[] { node.ConnectionDuctSequence, node.SecondaryConnectionDuctSequence, node.LinkedDuctSequence })

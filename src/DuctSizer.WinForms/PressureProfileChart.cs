@@ -305,8 +305,8 @@ internal sealed class PressureProfileChart : Control
         graphics.DrawLine(fanLine, fanX, _plot.Top, fanX, _plot.Bottom);
         var gap = DpiScaling.Scale(6);
         var y = _plot.Top + DpiScaling.Scale(3);
-        const string positive = "Positive static (discharge) →";
-        const string negative = "← Negative static (suction)";
+        const string positive = "Positive static (discharge)";
+        const string negative = "Negative static (suction)";
         var positiveSize = TextRenderer.MeasureText(positive, Font);
         var negativeSize = TextRenderer.MeasureText(negative, Font);
         if (fanX + gap + positiveSize.Width <= _plot.Right)

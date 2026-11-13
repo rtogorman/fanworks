@@ -246,3 +246,22 @@ the first starts a secondary calculation drawn after the assumptions with a divi
   tab shows them as negative and positive ESP, and the path graph shades the two sides (`ShowPressureSides`).
 - **VAV ranges** (schema 19): `AnalysisExpectations.VavInletPressurePa` and `VavPressureDropPa`; `AnalysisRangeCheck`
   checks VAV boxes (codes `VavPerformanceCatalog.WithReheatCode` / `WithoutReheatCode`) against them.
+
+## Pressure class each side of the fan, Quick Calc worksheets (v0.104)
+
+- **Duct class by side** (schema 20): `SmacnaLeakage.AnalyzeSides` returns `SystemLeakageSides` (negative / positive
+  `SystemLeakageResult`, each with its `PressureSide`). Items whose path step comes before the fan
+  (`SystemPathProfile.FanStepIndex`) are suction ductwork; their design pressure is the largest suction loss of a
+  complete path, the discharge side's is the larger of the discharge loss and the fan's ESP less the suction loss. With
+  nothing upstream of the fan, `Negative` is null and `Positive` equals `Analyze`. Overrides:
+  `AnalysisExpectations.SuctionPressureClassOverrideInWc` / `SuctionSealClassOverride` (negative side) and the existing
+  `PressureClassOverrideInWc` / `SealClassOverride` (positive side). `DuctClassDialog` edits both sides; the report
+  title page draws `DrawLeakageSidesPanel` when `DuctSystemPdfMetadata.SuctionLeakage` is set, and each item sheet uses
+  its own side's class (`SystemLeakageSides.For(itemKey)`).
+- **Routes** are written "L-013 to L-010" (`SystemPathProfile.Route`), never with an arrow.
+- **Quick Calc worksheets**: the Duct and Fitting Calculators render the item's report worksheet
+  (`DuctSystemScreen.BuildDuctPdfCalculations` / `BuildFittingPdfCalculations`) with `WorksheetRichText.Render`, the
+  same renderer as the Project tab's Calculations page, so the calculators, the inspector and the PDF read alike.
+- **Calculator styling**: `SectionTitlePanel` is a rounded brand-navy band with the calculator's icon on a blue tile
+  (no line motif, no version badge); `DialogStyle.AttachFieldInputs` gives the calculator inputs the rounded frames of
+  the redesigned windows; units sit beside the value (`CreateUnitInputHost`); outputs use sentence-case captions.

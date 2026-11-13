@@ -50,6 +50,9 @@ internal sealed partial class FittingCalculatorScreen
     private GrdPerformanceSelection? _lastGrdPerformanceSelection;
     private VavPerformanceSelection? _lastVavPerformanceSelection;
     private readonly RichTextBox _fittingCalculationDetails = new();
+
+    /// <summary>Field-label ink shared with the Duct Calculator (round W).</summary>
+    private static readonly Color CalculatorLabelInk = Color.FromArgb(45, 58, 70);
     internal readonly Label _fittingStatusLabel = new();
     internal readonly Button _addFittingButton = new();
     internal readonly Label _fittingEditingLabel = new();
@@ -167,7 +170,7 @@ internal sealed partial class FittingCalculatorScreen
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         // A slim title band: the main tabs and ribbon already say where you are (v0.96).
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
 
@@ -175,29 +178,35 @@ internal sealed partial class FittingCalculatorScreen
         {
             Name = "FittingSectionHeader",
             Dock = DockStyle.Fill,
-            BackColor = UiPalette.Blue
+            BackColor = UiPalette.Navy,
+            Margin = new Padding(14, 10, 14, 0),
+            Icon = RibbonIcon.FittingCalculator
         };
-        header.Controls.Add(new Label
+        var headerTitle = new Label
         {
+            Name = "FittingPageTitle",
             Text = "Fitting Calculator",
-            Dock = DockStyle.Top,
-            Height = 30,
-            Padding = new Padding(20, 2, 0, 0),
+            AutoSize = false,
             ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 13F),
+            Font = new Font("Segoe UI Semibold", 12.5F),
             TextAlign = ContentAlignment.MiddleLeft,
             BackColor = Color.Transparent
-        });
-        header.Controls.Add(new Label
+        };
+        var headerSubtitle = new Label
         {
-            Text = "ASHRAE fittings • manufacturer GRD performance • airflow • pressure loss",
-            Dock = DockStyle.Bottom,
-            Height = 22,
-            Padding = new Padding(22, 0, 0, 6),
-            ForeColor = Color.FromArgb(215, 229, 242),
+            Name = "FittingPageSubtitle",
+            Text = "One fitting or air terminal  ·  ASHRAE loss coefficient, velocity pressure and pressure loss",
+            AutoSize = false,
+            ForeColor = SectionTitlePanel.SubtitleInk,
             Font = new Font("Segoe UI", 8.5F),
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
             BackColor = Color.Transparent
-        });
+        };
+        header.Controls.Add(headerTitle);
+        header.Controls.Add(headerSubtitle);
+        header.TitleLabel = headerTitle;
+        header.SubtitleLabel = headerSubtitle;
 
         var content = new TableLayoutPanel
         {
@@ -224,7 +233,7 @@ internal sealed partial class FittingCalculatorScreen
             Margin = new Padding(0, 0, 7, 0)
         };
         _fittingInputCard = inputCard;
-        var inputHeader = MainForm.CreateCardHeader("FITTING INPUTS", string.Empty);
+        var inputHeader = MainForm.CreateCardHeader("FITTING INPUTS", "Choose a fitting, then enter its airflow, size and geometry.");
         _fittingInputScroll.Name = "FittingInputScroll";
         _fittingInputScroll.Dock = DockStyle.Fill;
         _fittingInputScroll.AutoScroll = true;
@@ -394,10 +403,10 @@ internal sealed partial class FittingCalculatorScreen
         summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         summary.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
         summary.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-        summary.Controls.Add(CreateFittingSummaryCard("COEFFICIENT C", _fittingCoefficientValue, out _fittingCoefficientCaption), 0, 0);
-        summary.Controls.Add(CreateFittingSummaryCard("DUCT VELOCITY", _fittingVelocityValue, out _fittingVelocityCaption), 1, 0);
-        summary.Controls.Add(CreateFittingSummaryCard("VELOCITY PRESSURE", _fittingVelocityPressureValue, out _fittingVelocityPressureCaption), 0, 1);
-        summary.Controls.Add(CreateFittingSummaryCard("PRESSURE LOSS", _fittingPressureLossValue, out _fittingPressureLossCaption), 1, 1);
+        summary.Controls.Add(CreateFittingSummaryCard("Coefficient C", _fittingCoefficientValue, out _fittingCoefficientCaption), 0, 0);
+        summary.Controls.Add(CreateFittingSummaryCard("Duct velocity", _fittingVelocityValue, out _fittingVelocityCaption), 1, 0);
+        summary.Controls.Add(CreateFittingSummaryCard("Velocity pressure", _fittingVelocityPressureValue, out _fittingVelocityPressureCaption), 0, 1);
+        summary.Controls.Add(CreateFittingSummaryCard("Pressure loss", _fittingPressureLossValue, out _fittingPressureLossCaption), 1, 1);
         foreach (var valueLabel in new[]
                  {
                      _fittingCoefficientValue, _fittingVelocityValue,
@@ -405,7 +414,7 @@ internal sealed partial class FittingCalculatorScreen
                  })
         {
             valueLabel.Padding = new Padding(0, 2, 0, 0);
-            valueLabel.Font = new Font("Segoe UI Semibold", 9.3F);
+            valueLabel.Font = new Font("Segoe UI Semibold", 10F);
         }
 
         var outputHeading = new Panel
@@ -446,6 +455,8 @@ internal sealed partial class FittingCalculatorScreen
         inputCard.Controls.Add(inputBody);
         inputCard.Controls.Add(actionRow);
         inputCard.Controls.Add(inputHeader);
+        // Rounded input frames, as in the redesigned windows (round W).
+        DialogStyle.AttachFieldInputs(inputCard);
 
         _fittingCalculationDetails.Dock = DockStyle.Fill;
         _fittingCalculationDetails.Multiline = true;
@@ -603,10 +614,10 @@ internal sealed partial class FittingCalculatorScreen
         if (_fittingCoefficientCaption is null || _fittingVelocityCaption is null
             || _fittingVelocityPressureCaption is null || _fittingPressureLossCaption is null)
             return;
-        _fittingCoefficientCaption.Text = performanceGrd ? "SELECTED AIRFLOW:" : "COEFFICIENT C:";
-        _fittingVelocityCaption.Text = performanceGrd ? (grille ? "STATIC PRESSURE:" : "TOTAL PRESSURE:") : "DUCT VELOCITY:";
-        _fittingVelocityPressureCaption.Text = performanceGrd ? "SOUND:" : "VELOCITY PRESSURE:";
-        _fittingPressureLossCaption.Text = performanceGrd ? (grille ? "CORE VELOCITY:" : "THROW:") : "PRESSURE LOSS:";
+        _fittingCoefficientCaption.Text = performanceGrd ? "Selected airflow:" : "Coefficient C:";
+        _fittingVelocityCaption.Text = performanceGrd ? (grille ? "Static pressure:" : "Total pressure:") : "Duct velocity:";
+        _fittingVelocityPressureCaption.Text = performanceGrd ? "Sound:" : "Velocity pressure:";
+        _fittingPressureLossCaption.Text = performanceGrd ? (grille ? "Core velocity:" : "Throw:") : "Pressure loss:";
     }
 
     private void SetVavSummaryCaptions()
@@ -614,10 +625,10 @@ internal sealed partial class FittingCalculatorScreen
         if (_fittingCoefficientCaption is null || _fittingVelocityCaption is null
             || _fittingVelocityPressureCaption is null || _fittingPressureLossCaption is null)
             return;
-        _fittingCoefficientCaption.Text = "VAV SIZE:";
-        _fittingVelocityCaption.Text = "AIRFLOW:";
-        _fittingVelocityPressureCaption.Text = "CONFIGURATION:";
-        _fittingPressureLossCaption.Text = "AIRSIDE ΔP:";
+        _fittingCoefficientCaption.Text = "VAV size:";
+        _fittingVelocityCaption.Text = "Airflow:";
+        _fittingVelocityPressureCaption.Text = "Configuration:";
+        _fittingPressureLossCaption.Text = "Airside ΔP:";
     }
 
     private void ApplyFittingCalculatorSplitterRatio()
@@ -712,13 +723,13 @@ internal sealed partial class FittingCalculatorScreen
         {
             Name = "FittingGroupLabel",
             Text = "Fitting Group",
-            Font = new Font("Segoe UI Semibold", 8.2F)
+            Font = new Font("Segoe UI", 9F)
         };
         var typeLabel = new Label
         {
             Name = "FittingTypeLabel",
             Text = "Fitting Number",
-            Font = new Font("Segoe UI Semibold", 8.2F)
+            Font = new Font("Segoe UI", 9F)
         };
         _fittingAirflowLabel.Text = "Airflow (cfm)";
         _fittingTemperatureLabel.Text = "Air Temperature (°F)";
@@ -746,8 +757,8 @@ internal sealed partial class FittingCalculatorScreen
         {
             label.Dock = DockStyle.Fill;
             label.TextAlign = ContentAlignment.MiddleRight;
-            label.ForeColor = Color.FromArgb(34, 62, 88);
-            label.Font = new Font("Segoe UI", 8.2F);
+            label.ForeColor = CalculatorLabelInk;
+            label.Font = new Font("Segoe UI", 9F);
             label.AutoEllipsis = false;
             label.UseMnemonic = false;
             label.Margin = new Padding(0, 3, 4, 3);
@@ -778,8 +789,8 @@ internal sealed partial class FittingCalculatorScreen
         {
             label.Dock = DockStyle.Fill;
             label.TextAlign = ContentAlignment.MiddleRight;
-            label.ForeColor = Color.FromArgb(34, 62, 88);
-            label.Font = new Font("Segoe UI", 7.8F);
+            label.ForeColor = CalculatorLabelInk;
+            label.Font = new Font("Segoe UI", 8.5F);
             label.AutoEllipsis = false;
             label.UseMnemonic = false;
             label.Margin = new Padding(column == 0 ? 0 : 3, 1, 3, 1);
@@ -1003,6 +1014,7 @@ internal sealed partial class FittingCalculatorScreen
         label.TextAlign = ContentAlignment.MiddleRight;
         label.AutoEllipsis = false;
         label.UseMnemonic = false;
+        label.ForeColor = CalculatorLabelInk;
         ConfigureCompactFittingControl(control, 220, 150);
         var verticalMargin = Math.Max(3, (rowHeight - 32) / 2);
         control.Margin = new Padding(0, verticalMargin, 0, verticalMargin);
@@ -1027,7 +1039,8 @@ internal sealed partial class FittingCalculatorScreen
             label.TextAlign = ContentAlignment.MiddleRight;
             label.AutoEllipsis = false;
             label.UseMnemonic = false;
-            label.Font = new Font("Segoe UI", 8.2F);
+            label.ForeColor = CalculatorLabelInk;
+            label.Font = new Font("Segoe UI", 9F);
             label.Margin = new Padding(column == 0 ? 0 : 8, 4, 3, 4);
             ConfigureCompactFittingControl(control, 165, 120);
             control.Margin = new Padding(0, 5, 0, 5);
@@ -1360,66 +1373,8 @@ internal sealed partial class FittingCalculatorScreen
         _addFittingButton.Enabled = true;
     }
 
-    private void UpdateVavPerformanceCalculationDetails(VavPerformanceSelection selection)
-    {
-        var box = _fittingCalculationDetails;
-        box.Clear();
-        void Heading(string text)
-        {
-            if (box.TextLength > 0) EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
-            box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            box.SelectionColor = Color.FromArgb(16, 45, 84);
-            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
-            box.SelectionFont = box.Font;
-            box.SelectionColor = box.ForeColor;
-        }
-        void Line(string text, Color? color = null, FontStyle style = FontStyle.Regular)
-        {
-            box.SelectionColor = color ?? box.ForeColor;
-            box.SelectionFont = new Font(box.Font, style);
-            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
-            box.SelectionColor = box.ForeColor;
-            box.SelectionFont = box.Font;
-        }
+    private void UpdateVavPerformanceCalculationDetails(VavPerformanceSelection selection) => RenderFittingWorksheet();
 
-        Heading("MANUFACTURER PERFORMANCE SELECTION");
-        Line(selection.Product, Color.FromArgb(16, 45, 84), FontStyle.Bold);
-        Line(selection.Configuration);
-        Line(selection.SourceReference, Color.FromArgb(16, 45, 84), FontStyle.Italic);
-        Line($"Requested airflow: {selection.RequestedAirflowCfm:0.##} cfm", Color.FromArgb(190, 44, 44), FontStyle.Bold);
-
-        Heading("RECREATED PUBLISHED AIRSIDE PRESSURE TABLE");
-        box.SelectionFont = new Font("Consolas", 9F, FontStyle.Bold);
-        EngineeringMathRichText.AppendAtEnd(box, "Airflow (cfm)   ΔPs / Min ΔPs (in. w.c.)\r\n");
-        box.SelectionFont = new Font("Consolas", 9F);
-        foreach (var point in selection.PublishedTable)
-        {
-            var bound = point == selection.LowerPoint || point == selection.UpperPoint;
-            box.SelectionColor = bound ? Color.FromArgb(10, 88, 187) : box.ForeColor;
-            box.SelectionFont = new Font("Consolas", 9F, bound ? FontStyle.Bold : FontStyle.Regular);
-            EngineeringMathRichText.AppendAtEnd(box, $"{(bound ? ">" : " ")} {point.AirflowCfm,8:0}       {point.PressureDropInWg,8:0.###}\r\n");
-        }
-        box.SelectionFont = box.Font;
-        box.SelectionColor = box.ForeColor;
-
-        Heading("INTERPOLATION AND RESULT");
-        if (selection.WasInterpolated)
-        {
-            Line($"Lower point: {selection.LowerPoint.AirflowCfm:0} cfm at {selection.LowerPoint.PressureDropInWg:0.###} in. w.c.");
-            Line($"Upper point: {selection.UpperPoint.AirflowCfm:0} cfm at {selection.UpperPoint.PressureDropInWg:0.###} in. w.c.");
-            Line("ΔP = ΔP₁ + [(Q − Q₁)/(Q₂ − Q₁)](ΔP₂ − ΔP₁)");
-        }
-        else
-            Line("The requested airflow exactly matches a published table point.");
-        Line($"Selected airside pressure drop: {selection.PressureDropInWg:0.###} in. w.c.",
-            Color.FromArgb(10, 88, 187), FontStyle.Bold);
-        Heading("BASIS AND ASSUMPTIONS");
-        Line(selection.Product.Contains("with Reheat", StringComparison.OrdinalIgnoreCase)
-            ? "Airside ΔPs is the hot-water coil air pressure drop for the selected Titus DESV size and coil-row count. No extrapolation is permitted outside the published airflow range."
-            : "Min ΔPs is the terminal inlet-to-outlet static pressure drop with the primary damper full open. No extrapolation is permitted outside the published airflow range.");
-        box.SelectionStart = 0;
-        box.ScrollToCaret();
-    }
 
     private void UpdatePriceScdNeckChoices()
     {
@@ -1503,88 +1458,8 @@ internal sealed partial class FittingCalculatorScreen
         _addFittingButton.Enabled = true;
     }
 
-    private void UpdateGrdPerformanceCalculationDetails(GrdPerformanceSelection selection)
-    {
-        var box = _fittingCalculationDetails;
-        box.Clear();
-        void Heading(string text)
-        {
-            if (box.TextLength > 0) EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
-            box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            box.SelectionColor = Color.FromArgb(16, 45, 84);
-            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
-            box.SelectionFont = box.Font;
-            box.SelectionColor = box.ForeColor;
-        }
-        void Line(string text, Color? color = null, FontStyle style = FontStyle.Regular)
-        {
-            box.SelectionColor = color ?? box.ForeColor;
-            box.SelectionFont = new Font(box.Font, style);
-            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
-            box.SelectionColor = box.ForeColor;
-            box.SelectionFont = box.Font;
-        }
+    private void UpdateGrdPerformanceCalculationDetails(GrdPerformanceSelection selection) => RenderFittingWorksheet();
 
-        Heading("MANUFACTURER PERFORMANCE SELECTION");
-        Line(selection.Product, Color.FromArgb(16, 45, 84), FontStyle.Bold);
-        Line(selection.Configuration);
-        if (!string.IsNullOrWhiteSpace(selection.SourceReference))
-            Line(selection.SourceReference, Color.FromArgb(16, 45, 84), FontStyle.Italic);
-        Line($"Requested airflow: {selection.RequestedAirflowCfm:0.##} cfm", Color.FromArgb(190, 44, 44), FontStyle.Bold);
-        Line(selection.InletDiameterIn is null
-            ? "Selection rule: round upward to the first published airflow at or above the request."
-            : "Selection rule: select the smallest published inlet whose table covers the requested airflow, then round upward to the first listed cfm value at or above the request.");
-
-        Heading(selection.Product.StartsWith("Titus", StringComparison.OrdinalIgnoreCase)
-            ? "TITUS PERFORMANCE CHART / LOOKUP TABLE"
-            : "RECREATED PUBLISHED TABLE");
-        var grille = !string.IsNullOrWhiteSpace(selection.NominalDuctSizeIn);
-        box.SelectionFont = new Font("Consolas", 8.3F, FontStyle.Bold);
-        EngineeringMathRichText.AppendAtEnd(box, grille
-            ? "Core V   CFM      VP       Neg SP   NC\r\n"
-            : "CFM     TP       SP       NC      Throw (ft)\r\n");
-        box.SelectionFont = new Font("Consolas", 8.3F);
-        foreach (var point in selection.PublishedTable)
-        {
-            var marker = ReferenceEquals(point, selection.Selected) || point == selection.Selected ? ">" : " ";
-            box.SelectionColor = point == selection.Selected ? Color.FromArgb(10, 88, 187) : box.ForeColor;
-            box.SelectionFont = new Font("Consolas", 8.3F, point == selection.Selected ? FontStyle.Bold : FontStyle.Regular);
-            EngineeringMathRichText.AppendAtEnd(box, grille
-                ? $"{marker}{point.CoreVelocityFpm,5:0}   {point.AirflowCfm,6:0}   {point.VelocityPressureInWg,6:0.###}   {point.TotalPressureInWg,6:0.###}   {point.SoundNc,4}\r\n"
-                : $"{marker}{point.AirflowCfm,5:0}   {point.TotalPressureInWg,6:0.###}   {(point.StaticPressureInWg ?? 0),6:0.###}   {point.SoundNc,4}    {point.ThrowFt}\r\n");
-        }
-        box.SelectionFont = box.Font;
-        box.SelectionColor = box.ForeColor;
-
-        Heading("SELECTED OUTPUTS");
-        Line($"Published airflow: {selection.Selected.AirflowCfm:0} cfm", Color.FromArgb(10, 88, 187), FontStyle.Bold);
-        if (selection.InletDiameterIn is int inletDiameter)
-            Line($"Automatically selected inlet diameter: {inletDiameter} in", Color.FromArgb(10, 88, 187), FontStyle.Bold);
-        if (grille)
-        {
-            Line($"Nominal duct size: {selection.NominalDuctSizeIn} in", Color.FromArgb(10, 88, 187), FontStyle.Bold);
-            Line($"Core velocity: {selection.Selected.CoreVelocityFpm:0} fpm");
-            Line($"Velocity pressure: {selection.Selected.VelocityPressureInWg:0.###} in. w.c.");
-            Line($"Negative static pressure / pressure drop: {selection.Selected.TotalPressureInWg:0.###} in. w.c.", Color.FromArgb(10, 88, 187), FontStyle.Bold);
-        }
-        else
-            Line($"Total pressure drop: {selection.Selected.TotalPressureInWg:0.###} in. w.c.", Color.FromArgb(10, 88, 187), FontStyle.Bold);
-        if (selection.Selected.StaticPressureInWg is double staticPressure)
-            Line($"Published static pressure: {staticPressure:0.###} in. w.c.");
-        Line($"Sound: NC {selection.Selected.SoundNc}", Color.FromArgb(10, 88, 187), FontStyle.Bold);
-        if (!grille)
-            Line($"Throw to 150/100/50 fpm terminal velocities: {selection.Selected.ThrowFt} ft", Color.FromArgb(10, 88, 187), FontStyle.Bold);
-
-        Heading("BASIS AND ASSUMPTIONS");
-        if (grille)
-            Line("Titus 350R / 350F / 350R-SS grille performance data; ASHRAE Standard 70-2006 test basis. Published static pressures are negative; FanWorks reports their positive magnitude as system pressure loss. A dash in the source NC row is reported as NC <10. Performance data courtesy of Titus.");
-        else if (selection.Product.StartsWith("Price", StringComparison.OrdinalIgnoreCase))
-            Line("Price SCD performance data; ASHRAE Standard 70-2006 test basis. A dash in the source table is reported as NC <15. Throw is listed for 150/100/50 fpm terminal velocities.");
-        else
-            Line("Titus TBD-80 D plenum slot diffuser; ASHRAE Standard 70-2006 test basis. A dash in the source table is reported as NC <10. Throw is the one-way value for 150/100/50 fpm terminal velocities. Performance data courtesy of Titus.");
-        box.SelectionStart = 0;
-        box.ScrollToCaret();
-    }
 
     private double ReadFittingAirflowM3PerS()
     {
@@ -1670,216 +1545,26 @@ internal sealed partial class FittingCalculatorScreen
         "3. C is interpolated from the selected ASHRAE fitting table when safely digitized. Pressure loss is ΔPt = C × VP.\r\n\r\n" +
         "Entries marked Reference Coefficient Required accept C from the cited ASHRAE fitting and do not invent a value.";
 
-    private void UpdateFittingCalculationDetails(FittingCalculationResult result)
+    private void UpdateFittingCalculationDetails(FittingCalculationResult result) => RenderFittingWorksheet(result);
+
+    /// <summary>
+    /// The worksheet of this fitting, air terminal or VAV box: the same sections, table look-ups, equations and
+    /// variable list as its sheet in the PDF report and the Project tab's Calculations page (round W).
+    /// </summary>
+    private void RenderFittingWorksheet(FittingCalculationResult? result = null)
     {
-        var box = _fittingCalculationDetails;
-        box.Clear();
-        void Heading(string text)
+        result ??= _lastFittingCalculation;
+        if (result is null)
+            return;
+        var terminal = SurfaceAreaCalculator.IsTerminalOrBox(result.Definition.Code);
+        var sections = new List<DuctSystemPdfCalculationSection>
         {
-            if (box.TextLength > 0)
-                EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
-            box.SelectionFont = new Font(box.Font, FontStyle.Bold);
-            box.SelectionColor = Color.FromArgb(16, 45, 84);
-            EngineeringMathRichText.AppendAtEnd(box, text + Environment.NewLine);
-            box.SelectionFont = box.Font;
-            box.SelectionColor = box.ForeColor;
-        }
-        void Line(params (string Text, bool Input)[] parts)
-        {
-            foreach (var part in parts)
-            {
-                box.SelectionColor = part.Input ? Color.FromArgb(190, 44, 44) : box.ForeColor;
-                box.SelectionFont = part.Input ? new Font(box.Font, FontStyle.Bold) : box.Font;
-                EngineeringMathRichText.AppendAtEnd(box, part.Text);
-            }
-            EngineeringMathRichText.AppendAtEnd(box, Environment.NewLine);
-            box.SelectionColor = box.ForeColor;
-            box.SelectionFont = box.Font;
-        }
-        void MathLine(params (string Markup, bool Input)[] parts) =>
-            EngineeringMathRichText.AppendEquation(box, parts);
-
-        void StyledMathLine(params (string Markup, EngineeringMathRichText.MathTone Tone)[] parts) =>
-            EngineeringMathRichText.AppendStyledEquation(box, parts);
-
-        void DefinitionRow(string left, string right)
-        {
-            box.SelectionTabs = new[] { Math.Max(250, box.ClientSize.Width / 2) };
-            box.SelectionColor = box.ForeColor;
-            box.SelectionFont = box.Font;
-            EngineeringMathRichText.AppendAtEnd(box, $"{left}\t{right}{Environment.NewLine}");
-        }
-
-        Heading("REQUIRED EQUATIONS");
-        MathLine(("A_{ref} = A(geometry)", false));
-        MathLine(("D_{h} = \\frac{4A_{ref}}{P_{wetted}}", false));
-        MathLine(("V_{ref} = \\frac{Q}{A_{ref}}", false));
-        MathLine(("Re = \\frac{\\rho V_{ref}D_{h}}{\\mu}", false));
-        MathLine(("C = C_{ASHRAE}(table inputs)", false));
-        MathLine(("VP = (\\frac{V_{ref}}{4005})^{2}(\\frac{\\rho}{0.075})", false));
-        MathLine(("\\Delta P_{t} = C \\times VP", false));
-
-        Heading("PARAMETERS AND SUB-EQUATIONS");
-        DefinitionRow("Q  Reference airflow", "Aref  Reference area");
-        DefinitionRow("Vref  Reference velocity", "Dh  Hydraulic diameter");
-        DefinitionRow("ρ  Moist-air density", "μ  Dynamic viscosity");
-        DefinitionRow("Re  Reynolds number", "C  ASHRAE loss coefficient");
-        DefinitionRow("VP  Velocity pressure", "ΔPt  Total-pressure loss");
-        MathLine(("\\rho = \\rho_{moist}(T, RH, p_{atm})", false));
-        MathLine(("\\mu = \\mu_{Sutherland}(T)", false));
-
-        Heading("ASHRAE SOURCE AND SELECTION");
-        Line(($"ASHRAE {result.Definition.Code} — {result.Definition.Description}", false));
-        Line((result.Definition.SourceNote, false));
-        Line(("Reference velocity basis: ", false), (result.Definition.ReferenceVelocity, true));
-        Line(("Selection method: ", false), (result.Definition.IsAutomated
-            ? "continuous inputs are linearly interpolated between adjacent published table points; dropdown choices select an exact table family. Two-axis lookups use bilinear interpolation."
-            : "the user enters the signed or unsigned coefficient from the cited ASHRAE table; no missing coefficient is estimated.", false));
-
-        Heading("TABLE / EQUATION INPUTS");
-        if (result.Definition.Inputs.Count == 0)
-        {
-            Line(("This fitting has a fixed published coefficient and requires no table-axis input.", false));
-        }
-        else
-        {
-            foreach (var spec in result.Definition.Inputs)
-            {
-                result.Inputs.TryGetValue(spec.Key, out var value);
-                var selectedChoice = spec.Choices?.OrderBy(choice => Math.Abs(choice.Value - value)).FirstOrDefault();
-                var formattedValue = selectedChoice is not null && Math.Abs(selectedChoice.Value - value) < 1e-9
-                    ? $"{selectedChoice.Label} ({value:0.####})"
-                    : $"{value:0.####}{(string.IsNullOrWhiteSpace(spec.Unit) ? string.Empty : " " + spec.Unit)}";
-                Line(($"{spec.Label} [{spec.Key}] = ", false), (formattedValue, true),
-                    ($"   published range: {spec.Minimum:0.####} to {spec.Maximum:0.####}", false));
-                if (!string.IsNullOrWhiteSpace(spec.Help))
-                    Line(($"  {spec.Help}", false));
-            }
-        }
-
-        Heading("FLOW AND GEOMETRY");
-        if (result.AirflowM3PerS is double airflow)
-        {
-            var formattedFlow = $"{UnitConversions.M3PerSToCfm(airflow):0.##} cfm";
-            MathLine(("Q = ", false), (formattedFlow, true));
-        }
-        if (result.ReferenceGeometry is { } geometry)
-        {
-            var dimensions = geometry.Shape == DuctShape.Round
-                ? $"Diameter {UnitConversions.MToInches(geometry.DiameterM):0.###} in"
-                : $"{UnitConversions.MToInches(geometry.WidthM):0.###} × {UnitConversions.MToInches(geometry.HeightM):0.###} in";
-            Line(("Reference duct = ", false), ($"{geometry.Shape}, {dimensions}", true));
-            StyledMathLine(("A_{ref} = A(", EngineeringMathRichText.MathTone.Formula),
-                (dimensions, EngineeringMathRichText.MathTone.Input),
-                (") = ", EngineeringMathRichText.MathTone.Formula),
-                ($"{UnitConversions.SquareMetersToSquareFeet(geometry.ActualAreaM2):0.####} ft²", EngineeringMathRichText.MathTone.Solved));
-            StyledMathLine(("D_{h} = D_{h}(", EngineeringMathRichText.MathTone.Formula),
-                (dimensions, EngineeringMathRichText.MathTone.Input),
-                (") = ", EngineeringMathRichText.MathTone.Formula),
-                ($"{UnitConversions.MToInches(geometry.HydraulicDiameterM):0.###} in", EngineeringMathRichText.MathTone.Solved));
-        }
-        var referenceAreaFt2 = result.ReferenceGeometry is null
-            ? 0
-            : UnitConversions.SquareMetersToSquareFeet(result.ReferenceGeometry.ActualAreaM2);
-        var referenceFlowCfm = result.AirflowM3PerS is double referenceFlow
-            ? UnitConversions.M3PerSToCfm(referenceFlow)
-            : 0;
-        StyledMathLine(("V_{ref} = \\frac{Q}{A_{ref}} = ", EngineeringMathRichText.MathTone.Formula),
-            ($"\\frac{{{referenceFlowCfm:0.##} cfm}}{{{referenceAreaFt2:0.####} ft²}}", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{UnitConversions.MpsToFpm(result.ReferenceVelocityMPerS):0.#} fpm", EngineeringMathRichText.MathTone.Solved));
-
-        Heading("INTERMEDIATE CALCULATIONS");
-        var densityLbmFt3 = result.Air.DensityKgPerM3 * 0.0624279606;
-        var viscosityLbmFtS = result.Air.DynamicViscosityPaS * 0.671968975;
-        if (result.ReferenceGeometry is { } referenceGeometry)
-        {
-            var velocityFtS = UnitConversions.MpsToFpm(result.ReferenceVelocityMPerS) / 60.0;
-            var hydraulicDiameterFt = UnitConversions.MToFeet(referenceGeometry.HydraulicDiameterM);
-            var reynolds = result.Air.DensityKgPerM3 * result.ReferenceVelocityMPerS
-                           * referenceGeometry.HydraulicDiameterM / result.Air.DynamicViscosityPaS;
-            if (referenceGeometry.Shape == DuctShape.Rectangular)
-            {
-                StyledMathLine(("\\frac{W}{H} = ", EngineeringMathRichText.MathTone.Formula),
-                    ($"\\frac{{{UnitConversions.MToInches(referenceGeometry.WidthM):0.###}}}{{{UnitConversions.MToInches(referenceGeometry.HeightM):0.###}}}", EngineeringMathRichText.MathTone.Input),
-                    (" = ", EngineeringMathRichText.MathTone.Formula),
-                    ($"{referenceGeometry.WidthM / referenceGeometry.HeightM:0.####}", EngineeringMathRichText.MathTone.Solved));
-                StyledMathLine(("\\frac{H}{W} = ", EngineeringMathRichText.MathTone.Formula),
-                    ($"{referenceGeometry.HeightM / referenceGeometry.WidthM:0.####}", EngineeringMathRichText.MathTone.Solved));
-            }
-            StyledMathLine(("Re = \\frac{\\rho V D_{h}}{\\mu} = ", EngineeringMathRichText.MathTone.Formula),
-                ($"\\frac{{{densityLbmFt3:0.#####} \\times {velocityFtS:0.####} \\times {hydraulicDiameterFt:0.####}}}{{{viscosityLbmFtS:0.########}}}", EngineeringMathRichText.MathTone.Input),
-                (" = ", EngineeringMathRichText.MathTone.Formula),
-                ($"{reynolds:0}", EngineeringMathRichText.MathTone.Solved));
-        }
-        var publishedInputKeys = result.Definition.Inputs.Select(input => input.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var derived in result.Inputs.Where(pair => !publishedInputKeys.Contains(pair.Key)).OrderBy(pair => pair.Key))
-            StyledMathLine(($"{FittingIntermediateLabel(derived.Key)} = ", EngineeringMathRichText.MathTone.Formula),
-                ($"{derived.Value:0.####}", EngineeringMathRichText.MathTone.Solved));
-
-        var lookupLines = WorksheetLookups.Lines(result);
-        if (lookupLines.Count > 0)
-        {
-            // How each coefficient was read from its published table (interpolation, exact point, edge or conservative).
-            Heading("TABLE LOOK-UP (HOW C WAS READ FROM THE TABLE)");
-            foreach (var lookup in lookupLines)
-            {
-                if (lookup.IsEquation)
-                {
-                    // The interpolation is shown twice: in symbols (with the values listed), then with the numbers
-                    // substituted and the result.
-                    if (string.IsNullOrWhiteSpace(lookup.HighlightValue))
-                        StyledMathLine((lookup.Formula, EngineeringMathRichText.MathTone.Formula));
-                    else
-                        StyledMathLine((lookup.Formula + " = ", EngineeringMathRichText.MathTone.Formula),
-                            (lookup.HighlightValue, EngineeringMathRichText.MathTone.Solved));
-                    if (!string.IsNullOrWhiteSpace(lookup.InputSubstitution))
-                        Line(("    with ", false), (lookup.InputSubstitution, true));
-                }
-                else
-                    Line((lookup.Formula, false), (string.IsNullOrWhiteSpace(lookup.HighlightValue) ? string.Empty : "  " + lookup.HighlightValue, true));
-            }
-        }
-
-        Heading("COEFFICIENT AND PRESSURE LOSS");
-        if (result.CoefficientFactors.Count >= 2)
-        {
-            // A coefficient that is a product of named factors: C = Kθ × C'o = 0.66 × 0.185 = 0.1221.
-            StyledMathLine(("C = " + string.Join(" \\times ", result.CoefficientFactors.Select(factor => factor.Symbol)) + " = ", EngineeringMathRichText.MathTone.Formula),
-                (string.Join(" \\times ", result.CoefficientFactors.Select(factor => factor.Value.ToString("0.####", CultureInfo.InvariantCulture))), EngineeringMathRichText.MathTone.Input),
-                (" = ", EngineeringMathRichText.MathTone.Formula),
-                ($"{result.Coefficient:0.####}", EngineeringMathRichText.MathTone.Solved));
-            foreach (var factor in result.CoefficientFactors)
-                Line(($"    {WorksheetLookups.Plain(factor.Symbol)}: {factor.Meaning}", false));
-        }
-        else
-            StyledMathLine(("C = C_{ASHRAE}(", EngineeringMathRichText.MathTone.Formula),
-                ("table inputs", EngineeringMathRichText.MathTone.Input),
-                (") = ", EngineeringMathRichText.MathTone.Formula),
-                ($"{result.Coefficient:0.####}", EngineeringMathRichText.MathTone.Solved));
-        var velocityFpm = UnitConversions.MpsToFpm(result.ReferenceVelocityMPerS);
-        StyledMathLine(("VP = (\\frac{V}{4005})^{2}(\\frac{\\rho}{0.075}) = ", EngineeringMathRichText.MathTone.Formula),
-            ($"(\\frac{{{velocityFpm:0.#}}}{{4005}})^{{2}}(\\frac{{{densityLbmFt3:0.#####}}}{{0.075}})", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{UnitConversions.PaToInchesWater(result.VelocityPressurePa):0.####} in. w.c.", EngineeringMathRichText.MathTone.Solved));
-        StyledMathLine(("\\Delta P_{t} = C \\times VP = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{result.Coefficient:0.####} \\times {UnitConversions.PaToInchesWater(result.VelocityPressurePa):0.####} in. w.c.", EngineeringMathRichText.MathTone.Input),
-            (" = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{UnitConversions.PaToInchesWater(result.PressureLossPa):0.####} in. w.c.", EngineeringMathRichText.MathTone.Solved));
-
-        Heading("AIR AND MATERIAL");
-        var temperature = $"{UnitConversions.CelsiusToFahrenheit(result.Air.TemperatureC):0.##} °F";
-        Line(("Air temperature = ", false), (temperature, true), ("; RH = ", false), ($"{result.Air.RelativeHumidity:P0}", true));
-        Line(("Air density = ", false), ($"{densityLbmFt3:0.#####} lbm/ft³", false));
-        Line(("Dynamic viscosity = ", false), ($"{viscosityLbmFtS:0.########} lbm/(ft·s)", false));
-        Line(("Duct material/roughness is not used in the ASHRAE fitting-loss coefficient calculation.", false));
-
-        Heading("ASSUMPTIONS");
-        Line(("Standard sea-level pressure (14.696 psia); steady flow; reference velocity and C basis follow the selected ASHRAE fitting entry. Interpolation is restricted to the digitized published limits.", false));
-        box.SelectionStart = 0;
-        box.ScrollToCaret();
+            DuctSystemPdfCalculationSection.Title(terminal ? "COMPONENT SIZING CALCULATION" : "FITTING SIZING CALCULATION")
+        };
+        sections.AddRange(DuctSystemScreen.BuildFittingPdfCalculations(result));
+        WorksheetRichText.Render(_fittingCalculationDetails, sections);
     }
+
 
     /// <summary>Short symbol for a derived junction ratio, e.g. "Qb/Qc".</summary>
     internal static string FittingIntermediateSymbol(string key) => key.ToLowerInvariant() switch

@@ -80,7 +80,7 @@ public static class LayoutGeometryCheck
                 : (X: node.DeltaXM, Y: node.DeltaYM, Z: node.DeltaZM);
             var actual = (X: position.XM - parentPosition.XM, Y: position.YM - parentPosition.YM, Z: position.ZM - parentPosition.ZM);
             var closure = Distance(stored.X - actual.X, stored.Y - actual.Y, stored.Z - actual.Z);
-            var route = $"{parent.Id} → {node.Id}{(secondary ? " (second inlet)" : string.Empty)}";
+            var route = $"{parent.Id} to {node.Id}{(secondary ? " (second inlet)" : string.Empty)}";
             if (closure > ToleranceM)
                 issues.Add(new LayoutGeometryIssue(LayoutGeometryIssueKind.ConnectionDoesNotClose, node.Id,
                     $"Connection {route}: its entered offset does not close with the rest of the layout " +

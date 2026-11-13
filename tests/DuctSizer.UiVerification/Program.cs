@@ -400,8 +400,14 @@ internal static class Program
             form.PerformLayout();
             Application.DoEvents();
             Require(content.ColumnCount == 2, "Wide layout should display inputs and outputs side by side.");
-            Require(mode.FlatStyle == FlatStyle.Standard && fittingGroup.FlatStyle == FlatStyle.Standard,
-                "Calculator dropdowns should retain a visible standard border against white cards.");
+            // Round W: calculator inputs use the rounded frames of the redesigned windows.
+            Require(mode.FlatStyle == FlatStyle.Flat && fittingGroup.FlatStyle == FlatStyle.Flat,
+                "Calculator dropdowns should use the rounded input frame of the redesigned windows.");
+            Require(airflowInput.Parent is { } airflowHost
+                    && airflowInput.Width >= Px(60) && airflowInput.Height >= Px(12)
+                    && airflowHost.ClientRectangle.Contains(airflowInput.Bounds)
+                    && (!form.Visible || airflowInput.Visible),
+                $"The duct airflow input should be fully visible inside its value-and-unit field. Input={airflowInput.Bounds}, host={airflowInput.Parent?.Bounds}, visible={airflowInput.Visible}.");
             Require(!ductCalculatorSplitter.IsSplitterFixed && ductCalculatorSplitter.SplitterWidth >= 8
                     && ductCalculatorSplitter.Panel1MinSize >= 250 && ductCalculatorSplitter.Panel2MinSize >= 250
                     && !fittingCalculatorSplitter.IsSplitterFixed && fittingCalculatorSplitter.SplitterWidth >= 8,
@@ -452,35 +458,29 @@ internal static class Program
                     $"The Duct Calculator calculation worksheet should contain {requiredText}.");
             Require((ductCalculationDetails.Rtf ?? "").Contains("\\pict", StringComparison.Ordinal),
                 "The Duct Calculator should render equations as stacked display math.");
-            Require(ductCalculationDetails.Text.Contains("REQUIRED EQUATIONS", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("PARAMETERS AND SUB-EQUATIONS", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("INPUT VALUES", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("SOLVED PARAMETERS — EQUATION SUBSTITUTIONS", StringComparison.Ordinal)
-                    && (ductCalculationDetails.Rtf ?? "").Contains("\\emfblip", StringComparison.Ordinal)
-                    && (ductCalculationDetails.Rtf ?? "").Contains("\\red190\\green44\\blue44", StringComparison.Ordinal)
-                    && (ductCalculationDetails.Rtf ?? "").Contains("\\red10\\green88\\blue187", StringComparison.Ordinal),
-                "The Duct Calculator should show equations first, organized parameters, red inputs, and blue solved equation substitutions. "
-                + $"Headings={ductCalculationDetails.Text.Contains("REQUIRED EQUATIONS", StringComparison.Ordinal)}/{ductCalculationDetails.Text.Contains("PARAMETERS AND SUB-EQUATIONS", StringComparison.Ordinal)}/{ductCalculationDetails.Text.Contains("INPUT VALUES", StringComparison.Ordinal)}/{ductCalculationDetails.Text.Contains("SOLVED PARAMETERS — EQUATION SUBSTITUTIONS", StringComparison.Ordinal)}, "
-                + $"emf={(ductCalculationDetails.Rtf ?? "").Contains("\\emfblip", StringComparison.Ordinal)}, red={(ductCalculationDetails.Rtf ?? "").Contains("\\red190\\green44\\blue44", StringComparison.Ordinal)}, blue={(ductCalculationDetails.Rtf ?? "").Contains("\\red10\\green88\\blue187", StringComparison.Ordinal)}, length={ductCalculationDetails.TextLength}, box={ductCalculationDetails.Bounds}, visible={ductCalculationDetails.Visible}.");
-            Require(ductCalculationDetails.Text.Contains("1. FINAL DUCT GEOMETRY", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("2. AIR PROPERTIES", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("Sutherland relation", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("3. VELOCITY AND FLOW REGIME", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("implicit Colebrook equation applies", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("Starting bracket:", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("Convergence is accepted", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("5. VELOCITY PRESSURE AND DUCT LOSS", StringComparison.Ordinal)
-                    && ductCalculationDetails.Text.Contains("Final duct size", StringComparison.Ordinal)
-                    && !ductCalculationDetails.Text.Contains("Geometry_rounded", StringComparison.Ordinal),
-                "The solved worksheet should narrate geometry, Sutherland air properties, flow-regime selection, Colebrook convergence, and final pressure loss in dependency order.");
-            var equationOrder = new[]
+            // Round W: the Quick Calc worksheet is the duct's report worksheet (same sections and order as the PDF).
+            var ductWorksheetOrder = new[]
             {
-                "REQUIRED EQUATIONS", "PARAMETERS AND SUB-EQUATIONS", "INPUT VALUES",
-                "SOLVED PARAMETERS — EQUATION SUBSTITUTIONS"
+                "DUCT SIZING CALCULATION", "INPUT VALUES", "1. FINAL DUCT GEOMETRY", "2. AIR PROPERTIES",
+                "3. VELOCITY AND FLOW REGIME", "4. DARCY FRICTION FACTOR", "5. VELOCITY PRESSURE AND DUCT LOSS",
+                "VARIABLES AND WHERE THEY COME FROM", "ASSUMPTIONS"
             }.Select(text => ductCalculationDetails.Text.IndexOf(text, StringComparison.Ordinal)).ToArray();
-            Require(equationOrder.All(index => index >= 0)
-                    && equationOrder.SequenceEqual(equationOrder.OrderBy(index => index)),
-                "Duct equations should be presented in dependency order from governing equations through solved outputs.");
+            Require(ductWorksheetOrder.All(index => index >= 0)
+                    && ductWorksheetOrder.SequenceEqual(ductWorksheetOrder.OrderBy(index => index))
+                    && ductCalculationDetails.Text.Contains("Sutherland relation", StringComparison.Ordinal)
+                    && ductCalculationDetails.Text.Contains("Solved by bisection", StringComparison.Ordinal)
+                    && ductCalculationDetails.Text.Contains("Final duct geometry", StringComparison.Ordinal)
+                    && (ductCalculationDetails.Rtf ?? "").Contains("\\emfblip", StringComparison.Ordinal)
+                    && !ductCalculationDetails.Text.Contains("Geometry_rounded", StringComparison.Ordinal),
+                "The Duct Calculator should show the duct's report worksheet: inputs, steps 1 to 5 in dependency order, the variables and the assumptions. "
+                + $"Order={string.Join(",", ductWorksheetOrder)}, length={ductCalculationDetails.TextLength}.");
+            var reportDuctSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)typeof(MainForm).Assembly
+                .GetType("DuctSizer.WinForms.DuctSystemScreen")!
+                .GetMethod("BuildDuctPdfCalculations", BindingFlags.NonPublic | BindingFlags.Static)!
+                .Invoke(null, new object[] { PrivateField<DuctCalculationResult>(form, "_lastCalculation")! })!;
+            Require(reportDuctSections.Where(section => !section.IsTitle)
+                    .All(section => ductCalculationDetails.Text.Contains(section.Heading, StringComparison.Ordinal)),
+                "Every section of the duct's report worksheet should appear in the Duct Calculator.");
             Require(ductSummary.Controls.Cast<Control>().All(control => control.BackColor == Color.White)
                     && fittingSummary.Controls.Cast<Control>().All(control => control.BackColor == Color.White),
                 "Calculator outputs should use clean label/value rows without blue surrounding boxes.");
@@ -635,12 +635,13 @@ internal static class Program
             Application.DoEvents();
             Require(targetFrictionInput.Visible && !maximumVelocityInput.Visible
                     && ScreenBounds(targetFrictionInput).Top > ScreenBounds(lengthInput).Top
-                    && ScreenBounds(targetFrictionInput).Top - ScreenBounds(lengthInput).Bottom <= Px(16),
+                    // Next row: borderless inputs in rounded frames (round W) are shorter, so compare row tops.
+                    && ScreenBounds(targetFrictionInput).Top - ScreenBounds(lengthInput).Top <= Px(40),
                 $"SP autosizing should show its target directly below duct length in the Calculation section. Length={ScreenBounds(lengthInput)}, target={ScreenBounds(targetFrictionInput)}, visible={targetFrictionInput.Visible}/{maximumVelocityInput.Visible}, form={form.Size}.");
             Require(rectangularSizingDimension.Visible && rectangularSizingValue.Visible
                     && rectangularSizingDimension.Items.Cast<object>().Select(item => item.ToString())
                         .SequenceEqual(new[] { "Width", "Height" })
-                    && rectangularSizingUnit.Text == "(in)"
+                    && rectangularSizingUnit.Text == "in."
                     && ScreenBounds(rectangularSizingDimension).Right <= ScreenBounds(rectangularSizingUnit).Left
                     && ScreenBounds(rectangularSizingUnit).Right <= ScreenBounds(rectangularSizingValue).Left,
                 "Rectangular autosizing should use a Width/Height selector, an inch value, and an explicit unit suffix.");
@@ -676,7 +677,7 @@ internal static class Program
             Application.DoEvents();
             Require(maximumVelocityInput.Visible && !targetFrictionInput.Visible
                     && ScreenBounds(maximumVelocityInput).Top > ScreenBounds(lengthInput).Top
-                    && ScreenBounds(maximumVelocityInput).Top - ScreenBounds(lengthInput).Bottom <= Px(16),
+                    && ScreenBounds(maximumVelocityInput).Top - ScreenBounds(lengthInput).Top <= Px(40),
                 "Velocity autosizing should show its target directly below duct length in the Calculation section.");
             Require(!Descendants<Label>(inputCard).Any(label => label.Text == "DESIGN TARGET"),
                 "Autosize target inputs should remain in Calculation without a separate Design Target section.");
@@ -748,15 +749,13 @@ internal static class Program
             Require(IsDescendantOf(fittingSummary, Find<Control>(form, "FittingInputCard"))
                     && Descendants<Label>(fittingOutputCard).Any(label => label.Text == "CALCULATIONS")
                     && fittingCalculationSourceImage.Image is not null
-                    && fittingCalculationDetails.Text.Contains("REQUIRED EQUATIONS", StringComparison.Ordinal)
-                    && fittingCalculationDetails.Text.Contains("PARAMETERS AND SUB-EQUATIONS", StringComparison.Ordinal)
-                    && fittingCalculationDetails.Text.Contains("ASHRAE SOURCE AND SELECTION", StringComparison.Ordinal)
-                    && fittingCalculationDetails.Text.Contains("TABLE / EQUATION INPUTS", StringComparison.Ordinal)
+                    // Round W: the fitting's report worksheet, as in the PDF and the Project tab.
+                    && fittingCalculationDetails.Text.Contains("FITTING SIZING CALCULATION", StringComparison.Ordinal)
+                    && fittingCalculationDetails.Text.Contains("PUBLISHED TABLE / EQUATION INPUTS", StringComparison.Ordinal)
                     && fittingCalculationDetails.Text.Contains("FLOW AND GEOMETRY", StringComparison.Ordinal)
-                    && fittingCalculationDetails.Text.Contains("INTERMEDIATE CALCULATIONS", StringComparison.Ordinal)
-                    && fittingCalculationDetails.Text.Contains("Re =", StringComparison.Ordinal)
+                    && fittingCalculationDetails.Text.Contains("COEFFICIENT AND PRESSURE LOSS", StringComparison.Ordinal)
+                    && fittingCalculationDetails.Text.Contains("VARIABLES AND WHERE THEY COME FROM", StringComparison.Ordinal)
                     && fittingCalculationDetails.Text.Contains("in. w.c.", StringComparison.Ordinal)
-                    && fittingCalculationDetails.Text.Contains("AIR AND MATERIAL", StringComparison.Ordinal)
                     && (fittingCalculationDetails.Rtf ?? "").Contains("\\pict", StringComparison.Ordinal),
                 "The Fitting Calculator should keep summary outputs in its left card and show the ASHRAE source table with properly typeset Imperial equations on the right.");
             var fittingShowCalculations = PrivateField<Button>(form, "_fittingCalculationsShowButton");
@@ -862,15 +861,21 @@ internal static class Program
             fittingAirflow.Text = "500";
             Find<Button>(form, "CalculateFittingButton").PerformClick();
             Application.DoEvents();
+            // Round W: the Quick Calc worksheet is the item's report worksheet, section for section.
+            bool ShowsReportWorksheet(string details, FittingCalculationResult? calculation) =>
+                calculation is not null
+                && details.Contains("COMPONENT SIZING CALCULATION", StringComparison.Ordinal)
+                && ((IReadOnlyList<DuctSystemPdfCalculationSection>)UiMember.Method("BuildFittingPdfCalculations",
+                        BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { calculation })!)
+                    .Where(section => !section.IsTitle)
+                    .All(section => details.Contains(section.Heading, StringComparison.Ordinal));
             var titus350RDetails = Find<RichTextBox>(form, "FittingCalculationDetails").Text;
             Require(titus350RSize.Items.Count == 78
                     && PrivateField<Label>(form, "_fittingCoefficientValue").Text == "528 cfm"
                     && PrivateField<Label>(form, "_fittingVelocityValue").Text == "0.073 in. w.c."
                     && PrivateField<Label>(form, "_fittingVelocityPressureValue").Text == "NC 19"
                     && PrivateField<Label>(form, "_fittingPressureLossValue").Text == "600 fpm"
-                    && titus350RDetails.Contains("TITUS PERFORMANCE CHART / LOOKUP TABLE", StringComparison.Ordinal)
-                    && titus350RDetails.Contains("12x12", StringComparison.Ordinal)
-                    && titus350RDetails.Contains("courtesy of Titus", StringComparison.OrdinalIgnoreCase),
+                    && ShowsReportWorksheet(titus350RDetails, PrivateField<FittingCalculationResult>(form, "_lastFittingCalculation")),
                 "The Titus 350R grille calculator should expose all nominal sizes, round 500 cfm upward, and report chart pressure, NC, and core velocity.");
             var titus350RCalculation = PrivateField<FittingCalculationResult>(form, "_lastFittingCalculation")
                                        ?? throw new InvalidOperationException("The Titus 350R calculation result was not retained.");
@@ -892,7 +897,7 @@ internal static class Program
                     && PrivateField<Label>(form, "_fittingVelocityValue").Text == "0.199 in. w.c."
                     && PrivateField<Label>(form, "_fittingVelocityPressureValue").Text == "NC 36"
                     && PrivateField<Label>(form, "_fittingPressureLossValue").Text == "6-8-12 ft"
-                    && Find<RichTextBox>(form, "FittingCalculationDetails").Text.Contains("RECREATED PUBLISHED TABLE", StringComparison.Ordinal),
+                    && ShowsReportWorksheet(Find<RichTextBox>(form, "FittingCalculationDetails").Text, PrivateField<FittingCalculationResult>(form, "_lastFittingCalculation")),
                 $"The Price SCD calculator should expose face/neck choices, round 450 cfm upward, and show pressure, NC, throw, and the recreated table. " +
                 $"Face={Find<ComboBox>(form, "FittingInput_face").Items.Count}; Neck={Find<ComboBox>(form, "FittingInput_neck").Items.Count}; " +
                 $"Values={PrivateField<Label>(form, "_fittingCoefficientValue").Text}|{PrivateField<Label>(form, "_fittingVelocityValue").Text}|" +
@@ -918,9 +923,7 @@ internal static class Program
                     && PrivateField<Label>(form, "_fittingVelocityValue").Text == "0.178 in. w.c."
                     && PrivateField<Label>(form, "_fittingVelocityPressureValue").Text == "NC 36"
                     && PrivateField<Label>(form, "_fittingPressureLossValue").Text == "25-30-43 ft"
-                    && titusDetails.Contains("TITUS PERFORMANCE CHART / LOOKUP TABLE", StringComparison.Ordinal)
-                    && titusDetails.Contains("courtesy of Titus", StringComparison.OrdinalIgnoreCase)
-                    && titusDetails.Contains("Automatically selected inlet diameter: 12 in", StringComparison.Ordinal),
+                    && ShowsReportWorksheet(titusDetails, PrivateField<FittingCalculationResult>(form, "_lastFittingCalculation")),
                 "The Titus TBD-80 D calculator should use length, slot size, and slot count; select the published inlet; and show the referenced performance chart.");
             var titusCalculation = PrivateField<FittingCalculationResult>(form, "_lastFittingCalculation")
                                    ?? throw new InvalidOperationException("The Titus calculation result was not retained.");
@@ -948,8 +951,7 @@ internal static class Program
                     && PrivateField<Label>(form, "_fittingVelocityValue").Text.Contains("850", StringComparison.Ordinal)
                     && PrivateField<Label>(form, "_fittingVelocityPressureValue").Text == "1-row coil"
                     && PrivateField<Label>(form, "_fittingPressureLossValue").Text == "0.045 in. w.c."
-                    && vavDetails.Contains("RECREATED PUBLISHED AIRSIDE PRESSURE TABLE", StringComparison.Ordinal)
-                    && vavDetails.Contains("ΔP = ΔP₁", StringComparison.Ordinal)
+                    && ShowsReportWorksheet(vavDetails, vavCalculation)
                     && vavDetails.Contains("AHRI 410-2001", StringComparison.Ordinal),
                 "The Titus DESV VAV-with-reheat calculator should expose size, rows, airflow, interpolation, and manufacturer pressure drop without unrelated duct geometry inputs.");
             var vavPdfSections = (IReadOnlyList<DuctSystemPdfCalculationSection>)(UiMember.Method("BuildFittingPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
@@ -4035,7 +4037,7 @@ internal static class Program
                     && (criticalRoute is null || criticalRoute.Number == 1)
                     && numberedPaths.Where(path => path.IsComplete).Zip(numberedPaths.Where(path => path.IsComplete).Skip(1))
                         .All(pair => pair.First.IsCritical || pair.First.TotalLossPa >= pair.Second.TotalLossPa - 1e-12)
-                    && shownProfile.Series.All(series => series.Label.StartsWith("Path ", StringComparison.Ordinal) && series.Route.Contains('→')),
+                    && shownProfile.Series.All(series => series.Label.StartsWith("Path ", StringComparison.Ordinal) && series.Route.Contains(" to ", StringComparison.Ordinal)),
                 "Paths should be named by number: Path 1 is the critical path, then decreasing totals; the route is separate.");
             var pathSelector = Find<ComboBox>(form, "AnalysisProfilePathSelector");
             Require(pathSelector.Items.Count == shownProfile.Series.Count + 1 && Convert.ToString(pathSelector.Items[0]) == "All paths"
@@ -4191,6 +4193,11 @@ internal static class Program
                     && (!leakageResult.IsAvailable
                         || Math.Abs(leakageResult.TotalLeakageCfm - leakageResult.ByShape.Sum(x => x.FactorCfmPer100Ft2 * x.AreaFt2 / 100)) < 1e-9),
                 $"The overview should show the SMACNA pressure class, seal class and allowable leakage. Class={leakageSummary.PressureClass}, leakage={leakageSummary.Leakage}, note={leakageSummary.Note}");
+            // Round W: a column per side of the fan; with nothing upstream of the fan the negative column says so.
+            var (negativeSide, _) = analysisScreen.BuildLeakageSides();
+            Require(Find<Label>(form, "AnalysisNegativePressureClassValue").Text
+                    == (negativeSide?.PressureClass ?? "No ductwork upstream of the fan"),
+                $"The negative (suction) column should show its own class. Got {Find<Label>(form, "AnalysisNegativePressureClassValue").Text}.");
             var donut = Find<SystemSummaryDonut>(form, "AnalysisSystemSummaryDonut");
             Require(donut.Counts == analysisScreen.SystemItemCounts() && donut.Counts.Ducts == analysisScreen._ductSystem.Ducts.Count,
                 "The Analysis tab should show the system summary donut with the duct, fitting and component counts.");
@@ -4473,7 +4480,7 @@ internal static class Program
                                  SpaceRole = index == 0 ? "Space Source" : "Space Sink",
                                  AirflowM3PerS = UnitConversions.CfmToM3PerS(index == 0 ? 2400 : 300), PressurePa = index == 0 ? 0 : -30
                              }).ToArray())),
-                             ("ductclass", () => new DuctClassDialog(SmacnaLeakage.Analyze(captureModel), captureModel.AnalysisExpectations, UnitSystem.Imperial)),
+                             ("ductclass", () => new DuctClassDialog(SmacnaLeakage.AnalyzeSides(captureModel), captureModel.AnalysisExpectations, UnitSystem.Imperial)),
                              ("analysissettings", () => new AnalysisSettingsDialog(captureModel.AnalysisExpectations, UnitSystem.Imperial)),
                              ("rounding", () => new RoundingIncrementDialog(captureModel.DefaultSizingIncrementM, UnitSystem.Imperial)),
                              ("faninfo2", () => new FanInformationDialog("Fan-001\r\n2,400 cfm at 1.25 in. w.c. total static\r\n0.8 bhp; select a 1 hp motor"))

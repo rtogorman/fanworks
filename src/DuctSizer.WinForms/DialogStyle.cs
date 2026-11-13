@@ -301,6 +301,75 @@ internal static class DialogStyle
         }
     }
 
+    /// <summary>
+    /// The rounded input frames alone (text boxes, number boxes and drop-downs; buttons and group boxes are left
+    /// as they are), for screens rather than windows: the Quick Calc calculators (round W). Inputs added later,
+    /// such as the fitting calculator's pages that are rebuilt when the fitting changes, are styled as they arrive.
+    /// </summary>
+    internal static void AttachFieldInputs(Control root)
+    {
+        HookFieldInputs(root, root);
+        StyleFieldInputs(root);
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Control, object> FieldHooked = new();
+    private static readonly HashSet<Control> FieldPending = new();
+
+    private static void HookFieldInputs(Control control, Control root)
+    {
+        if (FieldHooked.TryGetValue(control, out _))
+            return;
+        FieldHooked.Add(control, new object());
+        control.ControlAdded += (_, args) =>
+        {
+            if (args.Control is null)
+                return;
+            HookFieldInputs(args.Control, root);
+            foreach (var descendant in Descendants(args.Control))
+                HookFieldInputs(descendant, root);
+            if (!root.IsHandleCreated)
+            {
+                StyleFieldInputs(args.Control);
+                return;
+            }
+            if (root.IsDisposed || !FieldPending.Add(root))
+                return;
+            root.BeginInvoke(new Action(() =>
+            {
+                FieldPending.Remove(root);
+                if (!root.IsDisposed)
+                    StyleFieldInputs(root);
+            }));
+        };
+        foreach (Control child in control.Controls)
+            HookFieldInputs(child, root);
+    }
+
+    private static void StyleFieldInputs(Control root)
+    {
+        foreach (var control in new[] { root }.Concat(Descendants(root)).ToArray())
+        {
+            switch (control)
+            {
+                case TextBox { Multiline: false } textBox when !InsideGrid(textBox):
+                    StyleInput(textBox, () => textBox.BorderStyle = BorderStyle.None);
+                    break;
+                case NumericUpDown numeric:
+                    StyleInput(numeric, () => numeric.BorderStyle = BorderStyle.None);
+                    break;
+                case ComboBox combo when !InsideGrid(combo):
+                    StyleInput(combo, () =>
+                    {
+                        combo.FlatStyle = FlatStyle.Flat;
+                        if (combo.Enabled)
+                            combo.BackColor = Color.White;
+                        ComboBorderEraser.Attach(combo);
+                    });
+                    break;
+            }
+        }
+    }
+
     private static bool InsideGrid(Control control)
     {
         for (var parent = control.Parent; parent is not null; parent = parent.Parent)
