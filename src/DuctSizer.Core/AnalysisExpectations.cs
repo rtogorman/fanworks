@@ -53,7 +53,11 @@ public enum ExpectedQuantity
     /// <summary>Reference velocity of a fitting (the velocity its loss coefficient applies to), m/s (fpm).</summary>
     FittingVelocity,
     /// <summary>Total pressure loss across a fitting at its saved flow path, Pa (in. w.c.).</summary>
-    FittingLoss
+    FittingLoss,
+    /// <summary>Static pressure at a VAV box inlet from the system calculation, Pa (in. w.c.). Schema 19.</summary>
+    VavInletPressure,
+    /// <summary>Pressure drop across a VAV box (its published or calculated loss), Pa (in. w.c.). Schema 19.</summary>
+    VavPressureDrop
 }
 
 /// <summary>Expected ranges for the Analysis tab (schema 16). All ranges are optional and empty by default.</summary>
@@ -63,6 +67,10 @@ public sealed class AnalysisExpectations
     public ExpectedRange DuctVelocityMPerS { get; set; } = new();
     public ExpectedRange FittingVelocityMPerS { get; set; } = new();
     public ExpectedRange FittingLossPa { get; set; } = new();
+    /// <summary>VAV inlet static pressure range, Pa (schema 19).</summary>
+    public ExpectedRange VavInletPressurePa { get; set; } = new();
+    /// <summary>VAV pressure drop range, Pa (schema 19).</summary>
+    public ExpectedRange VavPressureDropPa { get; set; } = new();
 
     /// <summary>
     /// Engineer's SMACNA static pressure class, in. w.c., replacing the calculated one (Customize Duct Class). Null
@@ -75,7 +83,8 @@ public sealed class AnalysisExpectations
 
     /// <summary>True when any range has a bound entered.</summary>
     public bool AnySet => DuctPressureRatePaPerM.IsSet || DuctVelocityMPerS.IsSet
-                          || FittingVelocityMPerS.IsSet || FittingLossPa.IsSet;
+                          || FittingVelocityMPerS.IsSet || FittingLossPa.IsSet
+                          || VavInletPressurePa.IsSet || VavPressureDropPa.IsSet;
 
     public ExpectedRange RangeFor(ExpectedQuantity quantity) => quantity switch
     {
@@ -83,6 +92,8 @@ public sealed class AnalysisExpectations
         ExpectedQuantity.DuctVelocity => DuctVelocityMPerS,
         ExpectedQuantity.FittingVelocity => FittingVelocityMPerS,
         ExpectedQuantity.FittingLoss => FittingLossPa,
+        ExpectedQuantity.VavInletPressure => VavInletPressurePa,
+        ExpectedQuantity.VavPressureDrop => VavPressureDropPa,
         _ => throw new ArgumentOutOfRangeException(nameof(quantity))
     };
 
@@ -97,6 +108,8 @@ public sealed class AnalysisExpectations
         DuctVelocityMPerS ??= new ExpectedRange();
         FittingVelocityMPerS ??= new ExpectedRange();
         FittingLossPa ??= new ExpectedRange();
+        VavInletPressurePa ??= new ExpectedRange();
+        VavPressureDropPa ??= new ExpectedRange();
     }
 
     public AnalysisExpectations Copy() => new()
@@ -105,6 +118,8 @@ public sealed class AnalysisExpectations
         DuctVelocityMPerS = DuctVelocityMPerS.Copy(),
         FittingVelocityMPerS = FittingVelocityMPerS.Copy(),
         FittingLossPa = FittingLossPa.Copy(),
+        VavInletPressurePa = VavInletPressurePa.Copy(),
+        VavPressureDropPa = VavPressureDropPa.Copy(),
         PressureClassOverrideInWc = PressureClassOverrideInWc,
         SealClassOverride = SealClassOverride
     };
@@ -154,15 +169,37 @@ public static class AnalysisRangeCheck
             Compare(expectations.DuctVelocityMPerS, ExpectedQuantity.DuctVelocity, result.ActualVelocityMPerS, null));
     }
 
-    /// <summary>Checks a fitting's reference velocity and its pressure loss at the saved flow path.</summary>
-    public static RangeCheckResult CheckFitting(AnalysisExpectations expectations, FittingCalculationResult result)
+    /// <summary>
+    /// Checks a fitting's reference velocity and its pressure loss at the saved flow path. A VAV box (code
+    /// <see cref="VavPerformanceCatalog.WithReheatCode"/> or <see cref="VavPerformanceCatalog.WithoutReheatCode"/>)
+    /// is also checked for its pressure drop and, when <paramref name="inletPressurePa"/> is known, its inlet static
+    /// pressure.
+    /// </summary>
+    public static RangeCheckResult CheckFitting(AnalysisExpectations expectations, FittingCalculationResult result,
+        double? inletPressurePa = null)
     {
         ArgumentNullException.ThrowIfNull(expectations);
         ArgumentNullException.ThrowIfNull(result);
-        return Combine(
+        var comparisons = new List<Comparison>
+        {
             Compare(expectations.FittingVelocityMPerS, ExpectedQuantity.FittingVelocity, result.ReferenceVelocityMPerS, null),
-            Compare(expectations.FittingLossPa, ExpectedQuantity.FittingLoss, result.PressureLossPa, null));
+            Compare(expectations.FittingLossPa, ExpectedQuantity.FittingLoss, result.PressureLossPa, null)
+        };
+        if (IsVav(result.Definition.Code))
+        {
+            comparisons.Add(Compare(expectations.VavPressureDropPa, ExpectedQuantity.VavPressureDrop, result.PressureLossPa, null));
+            if (expectations.VavInletPressurePa.IsSet)
+                comparisons.Add(inletPressurePa is double inlet && double.IsFinite(inlet)
+                    ? Compare(expectations.VavInletPressurePa, ExpectedQuantity.VavInletPressure, inlet, null)
+                    : new Comparison(null, "The VAV inlet static pressure is not calculated (connect it and calculate the system)."));
+        }
+        return Combine(comparisons.ToArray());
     }
+
+    /// <summary>True for the VAV box codes.</summary>
+    public static bool IsVav(string code) =>
+        string.Equals(code, VavPerformanceCatalog.WithReheatCode, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(code, VavPerformanceCatalog.WithoutReheatCode, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Checks a scheduled duct by its saved inputs; NotAvailable when it cannot be calculated.</summary>
     public static RangeCheckResult CheckDuct(AnalysisExpectations expectations, SavedDuct duct)
@@ -179,12 +216,13 @@ public static class AnalysisRangeCheck
     }
 
     /// <summary>Checks a scheduled fitting by its saved inputs; NotAvailable when it cannot be calculated.</summary>
-    public static RangeCheckResult CheckFitting(AnalysisExpectations expectations, SavedFitting fitting)
+    public static RangeCheckResult CheckFitting(AnalysisExpectations expectations, SavedFitting fitting,
+        double? inletPressurePa = null)
     {
         ArgumentNullException.ThrowIfNull(fitting);
         try
         {
-            return CheckFitting(expectations, fitting.Calculate());
+            return CheckFitting(expectations, fitting.Calculate(), inletPressurePa);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException
                                        or KeyNotFoundException)

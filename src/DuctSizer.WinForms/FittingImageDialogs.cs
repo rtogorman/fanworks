@@ -282,6 +282,7 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
     private readonly FlowLayoutPanel _gallery = new();
     private readonly ComboBox _groupFilter = new();
     private readonly string? _selectedCode;
+    private bool _loaded;
     internal FittingDefinition? SelectedDefinition { get; private set; }
 
     internal FittingGalleryDialog(IReadOnlyList<FittingDefinition> definitions, string? selectedCode)
@@ -326,7 +327,11 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
         _groupFilter.MaxDropDownItems = 8;
         _groupFilter.Items.Add("All Fittings");
         _groupFilter.Items.AddRange(FittingCatalog.SelectionGroups.Cast<object>().ToArray());
-        _groupFilter.SelectedIndexChanged += (_, _) => PopulateGallery();
+        _groupFilter.SelectedIndexChanged += (_, _) =>
+        {
+            if (_loaded)
+                PopulateGallery();
+        };
         filterHost.Controls.Add(_groupFilter);
         filterHost.Controls.Add(filterLabel);
 
@@ -369,6 +374,21 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
         Controls.Add(instruction);
     }
 
+    /// <summary>
+    /// The tiles are built after the window has been scaled to the display (base.OnLoad), at sizes already scaled,
+    /// so every view — the first one and after changing the group — lays out the same way. (Built earlier, the
+    /// first view's tiles were scaled as a group and their contents were cut off at 150 % display scale.)
+    /// </summary>
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        _loaded = true;
+        PopulateGallery();
+        if (_gallery.Controls.OfType<Control>().FirstOrDefault(tile =>
+                string.Equals((tile.Tag as FittingDefinition)?.Code, _selectedCode, StringComparison.OrdinalIgnoreCase)) is { } selectedTile)
+            _gallery.ScrollControlIntoView(selectedTile);
+    }
+
     private void PopulateGallery()
     {
         _gallery.SuspendLayout();
@@ -382,9 +402,9 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
             : _definitions.Where(definition => FittingCatalog.SelectionGroup(definition) == group).ToArray();
         // Every card in the view gets the same description band so the rows line up.
         using var descriptionFont = new Font("Segoe UI", 10.2F, FontStyle.Bold);
-        var descriptionHeight = Math.Max(64, definitions.Select(definition => TextRenderer.MeasureText(
-            definition.Description, descriptionFont, new Size(346, int.MaxValue),
-            TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height + 16).DefaultIfEmpty(64).Max());
+        var descriptionHeight = Math.Max(DpiScaling.Scale(64), definitions.Select(definition => TextRenderer.MeasureText(
+            definition.Description, descriptionFont, new Size(DpiScaling.Scale(346), int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height + DpiScaling.Scale(16)).DefaultIfEmpty(DpiScaling.Scale(64)).Max());
         foreach (var definition in definitions)
             _gallery.Controls.Add(CreateGalleryTile(definition,
                 string.Equals(definition.Code, _selectedCode, StringComparison.OrdinalIgnoreCase), descriptionHeight));
@@ -398,9 +418,9 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
         var tile = new RoundedPanel
         {
             Name = $"FittingGalleryTile_{definition.Code}",
-            Size = new Size(380, descriptionHeight + 356),
-            Margin = new Padding(8),
-            Padding = new Padding(15),
+            Size = new Size(DpiScaling.Scale(380), descriptionHeight + DpiScaling.Scale(356)),
+            Margin = new Padding(DpiScaling.Scale(8)),
+            Padding = new Padding(DpiScaling.Scale(15)),
             BackColor = selected ? Color.FromArgb(232, 242, 251) : Color.White,
             CornerRadius = 12,
             ClipToShape = false,
@@ -410,7 +430,7 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
             AccessibleName = $"Select fitting {definition.Code}"
         };
         tile.Tag = definition;
-        var image = FittingImageResources.CreateThumbnail(definition.Code, new Size(348, 290));
+        var image = FittingImageResources.CreateThumbnail(definition.Code, new Size(DpiScaling.Scale(348), DpiScaling.Scale(290)));
         _thumbnails.Add(image);
         var layout = new TableLayoutPanel
         {
@@ -424,8 +444,8 @@ internal sealed class FittingGalleryDialog : DpiScaledForm
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, descriptionHeight));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 290));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScaling.Scale(290)));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiScaling.Scale(36)));
         var picture = new PictureBox
         {
             Name = $"FittingGalleryImage_{definition.Code}",

@@ -1827,9 +1827,15 @@ internal sealed partial class FittingCalculatorScreen
             {
                 if (lookup.IsEquation)
                 {
-                    StyledMathLine((lookup.Formula + " = ", EngineeringMathRichText.MathTone.Formula),
-                        (lookup.HighlightValue, EngineeringMathRichText.MathTone.Solved));
-                    Line(("    with ", false), (lookup.InputSubstitution, true));
+                    // The interpolation is shown twice: in symbols (with the values listed), then with the numbers
+                    // substituted and the result.
+                    if (string.IsNullOrWhiteSpace(lookup.HighlightValue))
+                        StyledMathLine((lookup.Formula, EngineeringMathRichText.MathTone.Formula));
+                    else
+                        StyledMathLine((lookup.Formula + " = ", EngineeringMathRichText.MathTone.Formula),
+                            (lookup.HighlightValue, EngineeringMathRichText.MathTone.Solved));
+                    if (!string.IsNullOrWhiteSpace(lookup.InputSubstitution))
+                        Line(("    with ", false), (lookup.InputSubstitution, true));
                 }
                 else
                     Line((lookup.Formula, false), (string.IsNullOrWhiteSpace(lookup.HighlightValue) ? string.Empty : "  " + lookup.HighlightValue, true));

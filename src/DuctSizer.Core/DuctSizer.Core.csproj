@@ -18,5 +18,6 @@
     <EmbeddedResource Include="Fonts\FanWorksSymbols.ttf" />
     <EmbeddedResource Include="Brand\mark-rgb.jpg" />
     <EmbeddedResource Include="Brand\mark-alpha.z" />
+    <EmbeddedResource Include="Brand\wordmark.path" />
   </ItemGroup>
 </Project>

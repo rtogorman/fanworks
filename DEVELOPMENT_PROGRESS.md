@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-12 (round U, v0.102.0); earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
+Last updated: 2026-11-12 (round V, v0.103.0); earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
 
 ## Where things live
 
@@ -566,4 +566,19 @@ Checks: engine 82/82 (4 new: AHU total/motor power, ESP-only ductwork, format 18
 Open with Ryan: outlet stored pressure drops still not refreshed automatically (round T question); the title-bar
 change needs a look on Windows; an AHU's ID depends on how it was placed, so a fan cannot be converted to an AHU
 (delete and place an AHU instead).
+
+### Round V (requested 2026-11-12 22:03, after v0.102.0) — v0.103.0
+
+Done: wordmark from the supplied lettering (potrace of wordmark-source-spacing.svg, n stem straightened; `BrandWordmark`
+outlines in app and PDF); Reports preview built in the background (values gathered on the UI thread, PDF written and
+pages rendered off it, visible pages first, fingerprint skip when unchanged) with zoom (− / +, Fit width, Ctrl+wheel);
+item sheets: "Quick check", duct velocity and pressure rate, C to 0.000, interpolation shown with numbers (rule once),
+Re only when used; static pressure template shared by fan and AHU (internal SP input for both, ESP calculated and shown,
+not entered); System Overview: TSP, ISP, ESP, negative/positive ESP, fan set value; path graph − / + side shading with
+check box, all-paths list (scrolling), hover label without path name and total; VAV inlet pressure and VAV pressure-drop
+ranges (schema 19); fitting gallery tiles built after DPI scaling (cut-off pictures at 150 %).
+Item sheet type size search by halving (cached per export).
+Checks: engine 84/84, interface 24/24 at 100 %, 150 % and 1080p (Wine).
+Open with Ryan: a fan's static pressure is no longer typed in (Auto-size sets it), the same as an AHU; the wordmark is a
+trace of the raster brand image (smoothed), not a font file.
 

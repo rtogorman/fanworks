@@ -70,6 +70,7 @@ var tests = new (string Name, Action Run)[]
     ("Item notes: older files open with no notes", ItemNotesTests.OlderFilesOpenWithNoNotes),
     ("Expected ranges: inclusive, one-sided, no defaults", AnalysisTests.RangesCompareInclusiveAndOneSided),
     ("Expected ranges: ducts and fittings checked against their own ranges", AnalysisTests.DuctsAndFittingsAreCheckedAgainstTheirOwnRanges),
+    ("VAV expected ranges: inlet static pressure and pressure drop", AnalysisTests.VavRangesCheckInletPressureAndDrop),
     ("Expected ranges: transitional duct checked across its whole band", AnalysisTests.TransitionalDuctUsesBothBounds),
     ("Expected ranges: saved with the project; older files open empty", AnalysisTests.ExpectationsRoundTripAndOlderFilesOpenEmpty),
     ("Route profiles: totals and order match the critical-path analysis", AnalysisTests.RouteProfilesMatchTheCriticalPath),
@@ -80,6 +81,7 @@ var tests = new (string Name, Action Run)[]
     ("Air handling unit: total static = external + internal; motor power on total", AirHandlingUnitTests.TotalStaticIsExternalPlusInternalAndSetsMotorPower),
     ("Air handling unit: duct system sees only the external static pressure", AirHandlingUnitTests.DuctSystemSeesOnlyTheExternalStaticPressure),
     ("Air handling unit: saved in format 18; format-17 fans open unchanged", AirHandlingUnitTests.AirHandlingUnitRoundTripsAndOlderFilesOpenAsFans),
+    ("External static pressure splits at the fan: suction (negative) + discharge (positive)", AirHandlingUnitTests.ExternalStaticSplitsAtTheFan),
     ("Table look-ups: interpolation recorded with its table points", TableLookupTests.InterpolationIsRecordedWithItsTablePoints),
     ("Elbow factors named (Kθ, C'o) and combined as C = Kθ × C'o", TableLookupTests.ElbowFactorsAreNamedAndCombined),
     ("Table look-ups: conservative value between columns", TableLookupTests.BetweenColumnsTheConservativeValueIsUsed),
@@ -1352,12 +1354,14 @@ static void TestDuctSystemExchange()
             || !pdfText.Contains("(\\256) Tj", StringComparison.Ordinal)
             || pdfText.Contains("L-001 ? L-010", StringComparison.Ordinal)
             || !pdfText.Contains("CALCULATED OUTPUTS", StringComparison.Ordinal)
-            || !pdfText.Contains("QA/QC QUICK CHECK", StringComparison.Ordinal)
+            || !pdfText.Contains("QUICK CHECK", StringComparison.Ordinal)
             || !pdfText.Contains("(ENGINEERING CALCULATION)", StringComparison.Ordinal)
             || !pdfText.Contains("(Inputs substituted)", StringComparison.Ordinal)
             || !pdfText.Contains("(Solved result)", StringComparison.Ordinal)
             || !pdfText.Contains("HVAC AIRSIDE DESIGN", StringComparison.Ordinal)
-            || !pdfText.Contains("(fan works)", StringComparison.Ordinal)
+            // The wordmark is the brand board's own lettering as filled vector outlines, not typeset text.
+            || pdfText.Contains("(fan works)", StringComparison.Ordinal)
+            || !pdfText.Contains("h f*", StringComparison.Ordinal)
             // Brand typeface (embedded TrueType) and the embedded symbol font: real glyphs, no hand-drawn symbols.
             || !pdfText.Contains("/BaseFont /Nunito-Italic", StringComparison.Ordinal)
             || !pdfText.Contains("/FontFile2", StringComparison.Ordinal)

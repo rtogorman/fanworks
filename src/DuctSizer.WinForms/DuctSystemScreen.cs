@@ -418,7 +418,7 @@ internal sealed partial class DuctSystemScreen
         _analysisPageScroll = page;
         _analysisPageContent = root;
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 490F));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 570F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 350F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));
@@ -1052,11 +1052,10 @@ internal sealed partial class DuctSystemScreen
         _criticalPathFilterEnabled = true;
         ApplyCriticalRoute(ComputeLongestRoute());
         var horsepower = TryBrakeHorsepower(requiredAirflow, fan.FanTotalStaticPressurePa, fan.FanEfficiencyPercent);
-        message = fan.IsAirHandlingUnit
-            ? $"{fan.Id} was sized to {PdfAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} external static pressure "
-              + $"+ {FormatSystemTotal(fan.AhuInternalStaticPressurePa)} internal = {FormatSystemTotal(fan.FanTotalStaticPressurePa)} total static pressure, "
-              + $"and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency."
-            : $"{fan.Id} was sized to {PdfAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} static pressure, and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency.";
+        // Same template for a fan and an air handling unit: external + internal = total static pressure.
+        message = $"{fan.Id} was sized to {PdfAirflow(requiredAirflow)}, {FormatSystemTotal(fan.FanStaticPressurePa)} external static pressure "
+                  + $"+ {FormatSystemTotal(fan.FanInternalStaticPressurePa)} internal = {FormatSystemTotal(fan.FanTotalStaticPressurePa)} total static pressure, "
+                  + $"and {FormatHorsepower(horsepower)} at {fan.FanEfficiencyPercent:0.#}% efficiency.";
         return true;
     }
 
@@ -1115,15 +1114,14 @@ internal sealed partial class DuctSystemScreen
     }
 
     /// <summary>
-    /// Static pressure lines for a fan or air handling unit, each ending in <paramref name="newLine"/>. A fan shows
-    /// its static pressure. An air handling unit shows its external static pressure (the duct system, set by
-    /// auto-size), its internal static pressure (an input) and their sum, the total static pressure the fan develops.
+    /// Static pressure lines for a fan or air handling unit (the same for both), each ending in
+    /// <paramref name="newLine"/>: external static pressure (the duct system, set by Auto-size), internal static
+    /// pressure (an input; normally 0 for a bare fan) and their sum, the total static pressure the fan develops.
     /// </summary>
-    internal string FanStaticPressureLines(SavedLayoutNode fan, string newLine) => fan.IsAirHandlingUnit
-        ? $"External static pressure (ESP): {FormatSystemTotal(fan.FanStaticPressurePa)}{newLine}"
-          + $"Internal static pressure: {FormatSystemTotal(fan.AhuInternalStaticPressurePa)}{newLine}"
-          + $"Total static pressure: {FormatSystemTotal(fan.FanTotalStaticPressurePa)}{newLine}"
-        : $"Static pressure: {FormatSystemTotal(fan.FanStaticPressurePa)}{newLine}";
+    internal string FanStaticPressureLines(SavedLayoutNode fan, string newLine) =>
+        $"External static pressure (ESP): {FormatSystemTotal(fan.FanStaticPressurePa)}{newLine}"
+        + $"Internal static pressure: {FormatSystemTotal(fan.FanInternalStaticPressurePa)}{newLine}"
+        + $"Total static pressure: {FormatSystemTotal(fan.FanTotalStaticPressurePa)}{newLine}";
 
     internal void ToggleCriticalPathFilter()
     {
@@ -1410,10 +1408,8 @@ internal sealed partial class DuctSystemScreen
                     ? $"Leaving {UnitConversions.CelsiusToFahrenheit(equipment.TemperatureC):0.#}°F"
                     : equipment.Type == LayoutNodeType.Reservoir
                         ? $"Space {UnitConversions.CelsiusToFahrenheit(equipment.TemperatureC):0.#}°F"
-                    : equipment.IsAirHandlingUnit
-                        ? $"Air {UnitConversions.CelsiusToFahrenheit(equipment.TemperatureC):0.#}°F; internal static {FormatSystemTotal(equipment.AhuInternalStaticPressurePa)}"
                     : equipment.Type == LayoutNodeType.Fan
-                        ? $"Air {UnitConversions.CelsiusToFahrenheit(equipment.TemperatureC):0.#}°F"
+                        ? $"Air {UnitConversions.CelsiusToFahrenheit(equipment.TemperatureC):0.#}°F; internal static {FormatSystemTotal(equipment.FanInternalStaticPressurePa)}"
                         : equipment.Type == LayoutNodeType.Grd ? "User-entered GRD loss"
                         : equipment.Type == LayoutNodeType.CustomComponent ? "User-entered custom component loss" : "Filter loss",
                 "—", "—");
@@ -2609,7 +2605,14 @@ internal sealed partial class DuctSystemScreen
     /// Writes the project report (the PDF that Save produces next to the project file) to <paramref name="pdfPath"/>.
     /// Used by Save, Print Report and the Reports tab preview, so all three show the same document.
     /// </summary>
-    internal void WriteReportPdf(string pdfPath)
+    /// <summary>Writes the project report PDF (the same report Print Report and Save write).</summary>
+    internal void WriteReportPdf(string pdfPath) => PrepareReportPdf()(pdfPath);
+
+    /// <summary>
+    /// Gathers everything the report shows from the current project and window (on the UI thread) and returns the
+    /// step that writes the PDF from those values alone, which may run on a background thread.
+    /// </summary>
+    internal Action<string> PrepareReportPdf()
     {
         RefreshDuctSystemGrid();
         var headers = new[]
@@ -2659,13 +2662,18 @@ internal sealed partial class DuctSystemScreen
             BuildPressureProfile(),
             BuildLeakageSummary(),
             fan?.IsAirHandlingUnit == true,
-            fan?.IsAirHandlingUnit == true ? FormatSystemTotal(fan.AhuInternalStaticPressurePa) : string.Empty,
-            fan?.IsAirHandlingUnit == true ? FormatSystemTotal(fan.FanTotalStaticPressurePa) : string.Empty);
-        DuctSystemPdf.Export(pdfPath, "Duct System Schedule",
-            $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_host._currentUnits} units", headers, rows,
-            _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)
-                .Replace("\n", " — ", StringComparison.Ordinal),
-            metadata, BuildPdfLayout(), BuildPdfReportItems(), BuildPdfSchematics());
+            fan is null ? "Not available" : FormatSystemTotal(fan.FanInternalStaticPressurePa),
+            fan is null ? "Not available" : FormatSystemTotal(fan.FanTotalStaticPressurePa));
+        var layout = BuildPdfLayout();
+        var reportItems = BuildPdfReportItems();
+        var schematics = BuildPdfSchematics();
+        var total = _systemTotalLabel.Text.Replace("\r", string.Empty, StringComparison.Ordinal)
+            .Replace("\n", " — ", StringComparison.Ordinal);
+        var subtitle = $"Exported {DateTime.Now:MMMM d, yyyy h:mm tt} - {_host._currentUnits} units";
+        // Everything above reads the window's state; the PDF itself is built from these values only, so it can be
+        // written on another thread.
+        return path => DuctSystemPdf.Export(path, "Duct System Schedule", subtitle, headers, rows, total,
+            metadata, layout, reportItems, schematics);
     }
 
     internal void ExportDuctSystem()
@@ -3017,6 +3025,10 @@ internal sealed partial class DuctSystemScreen
             PdfField("Duct size", SafeDuctSize(duct)),
             PdfField("Airflow", PdfAirflow(duct.AirflowM3PerS)),
             PdfField("Duct length", PdfLength(duct.LengthM)),
+            PdfField("Duct velocity", outputs.FirstOrDefault(field => field.Label == "Actual velocity")?.Value
+                ?? "Not calculated"),
+            PdfField("Pressure rate", outputs.FirstOrDefault(field => field.Label == "Pressure-loss rate")?.Value
+                ?? "Not calculated"),
             PdfField("Pressure drop", outputs.FirstOrDefault(field => field.Label == "Total pressure loss")?.Value
                 ?? "Not calculated")
         };
@@ -3042,9 +3054,11 @@ internal sealed partial class DuctSystemScreen
         var outputs = new List<DuctSystemPdfField>();
         var calculations = new List<DuctSystemPdfCalculationSection>();
         var referenceImage = BuildFittingReportImage(fitting.FittingCode);
+        double? quickCheckCoefficient = null;
         try
         {
             var result = fitting.Calculate();
+            quickCheckCoefficient = result.Coefficient;
             var pressure = SystemPressureForFittingPair(fitting.Sequence);
             foreach (var pair in fitting.Inputs.OrderBy(x => x.Key))
             {
@@ -3113,8 +3127,9 @@ internal sealed partial class DuctSystemScreen
         {
             PdfField("Fitting type / name", outputs.FirstOrDefault(field => field.Label == "Fitting description")?.Value
                 ?? $"{fitting.FittingCode} - {fitting.Description}"),
-            PdfField("Fitting C-value", outputs.FirstOrDefault(field => field.Label == "Loss coefficient C")?.Value
-                ?? "Not calculated"),
+            // Rounded to the thousandths for a quick read; the full value is in the outputs and the calculation.
+            PdfField("Fitting C-value", quickCheckCoefficient is double coefficient
+                ? coefficient.ToString("0.000", CultureInfo.InvariantCulture) : "Not calculated"),
             PdfField("Pressure drop", outputs.FirstOrDefault(field => field.Label == "Fitting pressure loss")?.Value
                 ?? "Not calculated")
         };
@@ -3160,15 +3175,11 @@ internal sealed partial class DuctSystemScreen
             }
             if (node.Type == LayoutNodeType.CustomComponent)
                 inputs.Add(PdfField("Component description", node.Description));
-            if (node.IsAirHandlingUnit)
+            if (node.Type == LayoutNodeType.Fan)
             {
+                // Same for a fan and an air handling unit.
                 inputs.Add(PdfField("External static pressure (ESP)", PdfPressure(node.FanStaticPressurePa)));
-                inputs.Add(PdfField("Internal static pressure", PdfPressure(node.AhuInternalStaticPressurePa)));
-                inputs.Add(PdfField("Fan efficiency", $"{node.FanEfficiencyPercent:0.##}%"));
-            }
-            else if (node.Type == LayoutNodeType.Fan)
-            {
-                inputs.Add(PdfField("Fan system static pressure", PdfPressure(node.FanStaticPressurePa)));
+                inputs.Add(PdfField("Internal static pressure", PdfPressure(node.FanInternalStaticPressurePa)));
                 inputs.Add(PdfField("Fan efficiency", $"{node.FanEfficiencyPercent:0.##}%"));
             }
             if (node.Type == LayoutNodeType.CalculationPoint)
@@ -3204,7 +3215,7 @@ internal sealed partial class DuctSystemScreen
             if (!string.Equals(node.GrdType, "Grille", StringComparison.OrdinalIgnoreCase))
                 outputs.Add(PdfField("Throw (150/100/50 fpm)", $"{node.GrdThrowFt} ft"));
         }
-        if (node.IsDefined && node.IsAirHandlingUnit)
+        if (node.IsDefined && node.Type == LayoutNodeType.Fan)
             outputs.Add(PdfField("Total static pressure", PdfPressure(node.FanTotalStaticPressurePa)));
         var reportType = node.Type == LayoutNodeType.CalculationPoint
             ? "CALCULATION POINT"
@@ -3236,22 +3247,14 @@ internal sealed partial class DuctSystemScreen
                 PdfField("Calculation status", "Not calculated")
             };
 
-        if (node.IsAirHandlingUnit)
-        {
-            return new[]
-            {
-                PdfField("Component", description), PdfField("Airflow", Input("Airflow")),
-                PdfField("External static pressure", Input("External static pressure (ESP)")),
-                PdfField("Internal static pressure", Input("Internal static pressure")),
-                PdfField("Fan efficiency", Input("Fan efficiency"))
-            };
-        }
         return node.Type switch
         {
             LayoutNodeType.Fan => new[]
             {
                 PdfField("Component", description), PdfField("Airflow", Input("Airflow")),
-                PdfField("Fan static pressure", Input("Fan system static pressure")),
+                PdfField("External static pressure", Input("External static pressure (ESP)")),
+                PdfField("Internal static pressure", Input("Internal static pressure")),
+                PdfField("Total static pressure", Output("Total static pressure")),
                 PdfField("Fan efficiency", Input("Fan efficiency"))
             },
             LayoutNodeType.Reservoir => new[]
@@ -3581,7 +3584,9 @@ internal sealed partial class DuctSystemScreen
 
         var intermediates = new List<DuctSystemPdfCalculationLine>();
         var density = result.Air.DensityKgPerM3 * 0.0624279606;
-        if (result.ReferenceGeometry is { } reference)
+        // Reynolds number only for a fitting whose coefficient depends on it (an "re" input, e.g. a K_Re correction).
+        var usesReynolds = result.Inputs.Keys.Any(key => key.Equals("re", StringComparison.OrdinalIgnoreCase));
+        if (usesReynolds && result.ReferenceGeometry is { } reference)
         {
             var velocityFtS = UnitConversions.MpsToFpm(result.ReferenceVelocityMPerS) / 60.0;
             var dhFt = UnitConversions.MToFeet(reference.HydraulicDiameterM);
@@ -3645,6 +3650,8 @@ internal sealed partial class DuctSystemScreen
         // D, W, H and R are shown as inputs (D = ... in round; R = R/D × D) at the top of the flow section.
         foreach (var factor in result.CoefficientFactors)
             fittingVariables.Insert(fittingVariables.FindIndex(line => line.Formula == "C") + 1, V(factor.Symbol, factor.Meaning));
+        if (!usesReynolds)
+            fittingVariables.RemoveAll(line => line.Formula is "Re" or "\\mu");
         if (derived.Length > 0)
             fittingVariables.Add(V("Q, A, V ratios", "Airflow, area and velocity ratios of the junction legs (b branch, s straight, c common): from the system airflows and duct sizes."));
         sections.Add(new DuctSystemPdfCalculationSection("VARIABLES AND WHERE THEY COME FROM", fittingVariables));
@@ -3959,44 +3966,38 @@ internal sealed partial class DuctSystemScreen
             var airHandlingUnit = node.IsAirHandlingUnit;
             var airflowCfm = UnitConversions.M3PerSToCfm(node.AirflowM3PerS);
             var external = UnitConversions.PaToInchesWater(node.FanStaticPressurePa);
-            var internalStatic = UnitConversions.PaToInchesWater(node.AhuInternalStaticPressurePa);
+            var internalStatic = UnitConversions.PaToInchesWater(node.FanInternalStaticPressurePa);
             var total = UnitConversions.PaToInchesWater(node.FanTotalStaticPressurePa);
             var efficiency = node.FanEfficiencyPercent / 100.0;
             var horsepower = TryBrakeHorsepower(node.AirflowM3PerS, node.FanTotalStaticPressurePa, node.FanEfficiencyPercent);
             var horsepowerText = double.IsFinite(horsepower) ? $"{horsepower:0.####} hp" : FormatHorsepower(horsepower);
-            var pressureLines = airHandlingUnit
-                ? new[]
-                {
-                    Given("ESP", W(external)),
-                    Given("ISP", W(internalStatic)),
-                    E("TSP = ESP + ISP", W(total), $"ESP = {external:0.####}; ISP = {internalStatic:0.####} in. w.c."),
-                    E("SP_{out} = SP_{in} + ESP", W(outlet), $"SPin = {inlet:0.####}; ESP = {external:0.####} in. w.c."),
-                    L("The duct system sees only the external static pressure; the internal static pressure is used inside the unit.")
-                }
-                : new[]
-                {
-                    Given("SP_{fan}", W(external)),
-                    E("SP_{out} = SP_{in} + SP_{fan}", W(outlet), $"SPin = {inlet:0.####}; SPfan = {external:0.####} in. w.c.")
-                };
+            // The same template for a fan and an air handling unit (a bare fan's ISP is normally 0).
+            var pressureLines = new[]
+            {
+                Given("ESP", W(external)),
+                Given("ISP", W(internalStatic)),
+                E("TSP = ESP + ISP", W(total), $"ESP = {external:0.####}; ISP = {internalStatic:0.####} in. w.c."),
+                E("SP_{out} = SP_{in} + ESP", W(outlet), $"SPin = {inlet:0.####}; ESP = {external:0.####} in. w.c."),
+                L("The duct system sees only the external static pressure; the internal static pressure is used inside the unit.")
+            };
             var power = new[]
             {
-                E(airHandlingUnit ? "BHP = \\frac{Q \\times TSP}{6356 \\eta}" : "BHP = \\frac{Q \\times SP_{fan}}{6356 \\eta}", horsepowerText,
-                    $"Q = {airflowCfm:0.##} cfm; {(airHandlingUnit ? "TSP" : "SPfan")} = {total:0.####} in. w.c.; η = {efficiency:0.####}"),
+                E("BHP = \\frac{Q \\times TSP}{6356 \\eta}", horsepowerText,
+                    $"Q = {airflowCfm:0.##} cfm; TSP = {total:0.####} in. w.c.; η = {efficiency:0.####}"),
                 L("Positive fan pressure is a source term and is excluded from the reported critical-path total pressure loss.")
             };
-            var variables = new List<DuctSystemPdfCalculationLine>();
-            if (airHandlingUnit)
+            var variables = new List<DuctSystemPdfCalculationLine>
             {
-                variables.Add(DuctSystemPdfCalculationLine.Variable("ESP", "External static pressure, in. w.c.: the pressure available to the ductwork outside the unit. Auto-size sets it to the critical-path pressure loss."));
-                variables.Add(DuctSystemPdfCalculationLine.Variable("ISP", "Internal static pressure, in. w.c.: drop across the unit's filters, coils and other internal components; entered from the manufacturer's data."));
-                variables.Add(DuctSystemPdfCalculationLine.Variable("TSP", "Total static pressure, in. w.c.: what the unit's fan must develop."));
-            }
-            else
-                variables.Add(DuctSystemPdfCalculationLine.Variable("SP_{fan}", "Fan static pressure, in. w.c.: the rise the fan adds to the duct system. Auto-size sets it to the critical-path pressure loss."));
-            variables.Add(DuctSystemPdfCalculationLine.Variable("SP_{in}, SP_{out}", "Static pressure entering and leaving, in. w.c.: from the system calculation."));
-            variables.Add(DuctSystemPdfCalculationLine.Variable("Q", "Airflow through the fan, cfm."));
-            variables.Add(DuctSystemPdfCalculationLine.Variable("\\eta", "Fan efficiency, entered (as a fraction)."));
-            variables.Add(DuctSystemPdfCalculationLine.Variable("6356", "Unit constant: cfm x in. w.c. per horsepower (ASHRAE Handbook, Fundamentals, Fans)."));
+                DuctSystemPdfCalculationLine.Variable("ESP", "External static pressure, in. w.c.: the pressure available to the ductwork outside the unit. Auto-size sets it to the critical-path pressure loss."),
+                DuctSystemPdfCalculationLine.Variable("ISP", airHandlingUnit
+                    ? "Internal static pressure, in. w.c.: drop across the unit's filters, coils and other internal components; entered from the manufacturer's data."
+                    : "Internal static pressure, in. w.c.: drop inside the fan's own housing or accessories; entered (normally 0 for a bare fan)."),
+                DuctSystemPdfCalculationLine.Variable("TSP", "Total static pressure, in. w.c.: what the fan must develop."),
+                DuctSystemPdfCalculationLine.Variable("SP_{in}, SP_{out}", "Static pressure entering and leaving, in. w.c.: from the system calculation."),
+                DuctSystemPdfCalculationLine.Variable("Q", "Airflow through the fan, cfm."),
+                DuctSystemPdfCalculationLine.Variable("\\eta", "Fan efficiency, entered (as a fraction)."),
+                DuctSystemPdfCalculationLine.Variable("6356", "Unit constant: cfm x in. w.c. per horsepower (ASHRAE Handbook, Fundamentals, Fans).")
+            };
             return new[]
             {
                 new DuctSystemPdfCalculationSection(airHandlingUnit ? "AIR HANDLING UNIT STATIC PRESSURE" : "FAN STATIC PRESSURE", pressureLines),

@@ -33,6 +33,21 @@ internal static class WorksheetLookups
         : result.TableLookups.Count == 1 && Math.Abs(step.Result - result.Coefficient) <= 1e-9 * Math.Max(1, Math.Abs(result.Coefficient)) ? "C"
         : "y";
 
+    /// <summary>
+    /// The straight-line interpolation with the numbers substituted, in worksheet markup:
+    /// y1 + (x − x1)/(x2 − x1) × (y2 − y1), e.g. "0.22 + \frac{1.25 - 1}{1.5 - 1}(0.15 - 0.22)".
+    /// Negative numbers are bracketed.
+    /// </summary>
+    internal static string Interpolation(double y1, double x, double x1, double x2, double y2)
+    {
+        static string P(double value) => value < 0 ? $"({N(value)})" : N(value);
+        return $"{P(y1)} + \\frac{{{P(x)} - {P(x1)}}}{{{P(x2)} - {P(x1)}}}({P(y2)} - {P(y1)})";
+    }
+
+    /// <summary>An axis name for use inside a sentence ("Elbow angle" -> "elbow angle"; "R/D" unchanged).</summary>
+    private static string Lower(string name) =>
+        name.Length > 1 && char.IsUpper(name[0]) && char.IsLower(name[1]) ? char.ToLowerInvariant(name[0]) + name[1..] : name;
+
     /// <summary>The look-up lines for <paramref name="result"/>, empty when no table was read.</summary>
     internal static IReadOnlyList<DuctSystemPdfCalculationLine> Lines(FittingCalculationResult result)
     {
@@ -40,15 +55,19 @@ internal static class WorksheetLookups
         var lines = new List<DuctSystemPdfCalculationLine>();
         if (lookups.Count == 0)
             return lines;
-        lines.Add(L("Between published points a value is interpolated in a straight line: x is the input; x1 and x2 are the " +
-                    "published points either side of it; y1 and y2 are the published values at those points. Never extrapolated."));
+        lines.Add(L("Straight-line interpolation (never extrapolated): x is the input, x1 and x2 the published points either " +
+                    "side of it, y1 and y2 the published values there."));
+        // The rule once in symbols; each look-up below then shows it with its numbers substituted and the result.
+        if (lookups.Any(step => step.Kind is TableLookupKind.Linear or TableLookupKind.Bilinear))
+            lines.Add(E("y = y_{1} + \\frac{x - x_{1}}{x_{2} - x_{1}}(y_{2} - y_{1})", string.Empty, string.Empty));
         for (var index = 0; index < lookups.Count; index++)
         {
             var step = lookups[index];
             var symbol = OutputSymbol(result, step);
             var y = Plain(symbol);
+            // The value's meaning is in the variables list; here only its name.
             var number = (lookups.Count > 1 ? $"Look-up {index + 1}: " : string.Empty)
-                         + (string.IsNullOrEmpty(step.Meaning) ? string.Empty : $"{y}, {char.ToLowerInvariant(step.Meaning[0])}{step.Meaning[1..].TrimEnd('.')}. ");
+                         + (string.IsNullOrEmpty(step.Symbol) ? string.Empty : $"{y}. ");
             var axes = step.Axes;
             switch (step.Kind)
             {
@@ -65,8 +84,8 @@ internal static class WorksheetLookups
                     var axis = axes[0];
                     lines.Add(L($"{number}{axis.Name}: linear interpolation between published points {N(axis.Lower)} and {N(axis.Upper)}."
                                 + (string.IsNullOrWhiteSpace(step.Note) ? string.Empty : " " + step.Note)));
-                    lines.Add(E(symbol + " = y_{1} + \\frac{x - x_{1}}{x_{2} - x_{1}}(y_{2} - y_{1})", N(step.Result),
-                        $"x = {N(axis.Value)}; x1 = {N(axis.Lower)}; x2 = {N(axis.Upper)}; y1 = {N(step.Values[0])}; y2 = {N(step.Values[1])}"));
+                    lines.Add(E(symbol + " = " + Interpolation(step.Values[0], axis.Value, axis.Lower, axis.Upper, step.Values[1]),
+                        N(step.Result), $"x = {Lower(axis.Name)} = {N(axis.Value)}"));
                     break;
                 }
                 case TableLookupKind.Bilinear:
@@ -78,12 +97,13 @@ internal static class WorksheetLookups
                     lines.Add(L($"{number}two-way interpolation. Rows r: {row.Name} = {N(row.Value)} between {N(row.Lower)} and {N(row.Upper)}" +
                                 $"{(row.OutsideTable ? " (outside the table: edge row used)" : string.Empty)}; columns c: {column.Name} = {N(column.Value)} " +
                                 $"between {N(column.Lower)} and {N(column.Upper)}{(column.OutsideTable ? " (outside the table: edge column used)" : string.Empty)}."));
-                    lines.Add(E("y_{r1} = z_{11} + \\frac{c - c_{1}}{c_{2} - c_{1}}(z_{12} - z_{11})", N(rowLow),
-                        $"c = {N(column.Value)}; c1 = {N(column.Lower)}; c2 = {N(column.Upper)}; z11 = {N(v[0])}; z12 = {N(v[1])} (row r1 = {N(row.Lower)})"));
-                    lines.Add(E("y_{r2} = z_{21} + \\frac{c - c_{1}}{c_{2} - c_{1}}(z_{22} - z_{21})", N(rowHigh),
-                        $"z21 = {N(v[2])}; z22 = {N(v[3])} (row r2 = {N(row.Upper)})"));
-                    lines.Add(E(symbol + " = y_{r1} + \\frac{r - r_{1}}{r_{2} - r_{1}}(y_{r2} - y_{r1})", N(step.Result),
-                        $"r = {N(row.Value)}; r1 = {N(row.Lower)}; r2 = {N(row.Upper)}"));
+                    // Along the columns in each bracketing row, then between the two rows; each with its numbers.
+                    lines.Add(E("y_{r1} = " + Interpolation(v[0], column.Value, column.Lower, column.Upper, v[1]), N(rowLow),
+                        $"row r1 = {N(row.Lower)}; x = c = {N(column.Value)}"));
+                    lines.Add(E("y_{r2} = " + Interpolation(v[2], column.Value, column.Lower, column.Upper, v[3]), N(rowHigh),
+                        $"row r2 = {N(row.Upper)}; x = c = {N(column.Value)}"));
+                    lines.Add(E(symbol + " = " + Interpolation(rowLow, row.Value, row.Lower, row.Upper, rowHigh), N(step.Result),
+                        $"between rows: x = r = {N(row.Value)}"));
                     break;
                 }
                 case TableLookupKind.Trilinear:

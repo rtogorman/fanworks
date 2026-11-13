@@ -15,7 +15,7 @@ internal static class AirHandlingUnitTests
         var ahu = SystemTests.AddNode(document, LayoutNodeType.Fan, parent: null, duct: null);
         ahu.IsAirHandlingUnit = true;
         ahu.FanStaticPressurePa = UnitConversions.InchesWaterToPa(1.0);
-        ahu.AhuInternalStaticPressurePa = UnitConversions.InchesWaterToPa(1.5);
+        ahu.FanInternalStaticPressurePa = UnitConversions.InchesWaterToPa(1.5);
         ahu.FanEfficiencyPercent = 65;
         Require(ahu.Id == $"AHU-{ahu.Sequence:000}" && ahu.FanEquipmentName == "Air Handling Unit",
             $"An air handling unit is named AHU-nnn; got {ahu.Id}.");
@@ -26,13 +26,14 @@ internal static class AirHandlingUnitTests
         Near(bhp, 5000.0 / (6356 * 0.65), 1e-9, "AHU brake horsepower on total static pressure");
         Near(bhp, 1.210243, 1e-6, "AHU brake horsepower hand value");
 
-        // A plain fan ignores any internal value (it has no internal components).
+        // From v0.103 a fan uses the same template: total = external + internal (internal is 0 unless entered).
         var fanDocument = new DuctSystemDocument();
         var fan = SystemTests.AddNode(fanDocument, LayoutNodeType.Fan, parent: null, duct: null);
         fan.FanStaticPressurePa = 300;
-        fan.AhuInternalStaticPressurePa = 100;
         Require(fan.Id == $"Fan-{fan.Sequence:000}" && !fan.IsAirHandlingUnit && fan.FanTotalStaticPressurePa == 300,
-            "A fan's total static pressure is its static pressure; its ID stays Fan-nnn.");
+            "A fan with no internal static pressure: total = external; its ID stays Fan-nnn.");
+        fan.FanInternalStaticPressurePa = 100;
+        Require(fan.FanTotalStaticPressurePa == 400, "A fan's internal static pressure is added to its total.");
     }
 
     public static void DuctSystemSeesOnlyTheExternalStaticPressure()
@@ -49,13 +50,13 @@ internal static class AirHandlingUnitTests
         sink.SpaceRole = "Space Sink";
         sink.AirflowM3PerS = duct.AirflowM3PerS;
 
-        ahu.AhuInternalStaticPressurePa = 0;
+        ahu.FanInternalStaticPressurePa = 0;
         SystemSolver.Solve(document);
         var outletWithoutInternal = ahu.PressurePa;
         var sinkWithoutInternal = sink.PressurePa;
         var classWithoutInternal = SmacnaLeakage.Analyze(document).CalculatedPressureClassInWc;
 
-        ahu.AhuInternalStaticPressurePa = UnitConversions.InchesWaterToPa(5.0);
+        ahu.FanInternalStaticPressurePa = UnitConversions.InchesWaterToPa(5.0);
         SystemSolver.Solve(document);
         Near(ahu.PressurePa, outletWithoutInternal, 1e-9, "AHU outlet pressure (ESP only)");
         Near(sink.PressurePa, sinkWithoutInternal, 1e-9, "downstream pressure (internal static not in the ductwork)");
@@ -71,7 +72,7 @@ internal static class AirHandlingUnitTests
         var document = new DuctSystemDocument();
         var ahu = SystemTests.AddNode(document, LayoutNodeType.Fan, parent: null, duct: null);
         ahu.IsAirHandlingUnit = true;
-        ahu.AhuInternalStaticPressurePa = 211.5;
+        ahu.FanInternalStaticPressurePa = 211.5;
         ahu.FanStaticPressurePa = 180;
         var coil = SystemTests.AddNode(document, LayoutNodeType.Coil, ahu, duct: null);
         var path = Path.Combine(Path.GetTempPath(), $"fanworks-ahu-{Guid.NewGuid():N}.json");
@@ -79,12 +80,12 @@ internal static class AirHandlingUnitTests
         {
             DuctSystemStore.Save(path, document);
             var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
-            Require((int)json["SchemaVersion"]! == 18 && DuctSystemDocument.CurrentSchemaVersion == 18,
+            Require((int)json["SchemaVersion"]! == DuctSystemDocument.CurrentSchemaVersion && DuctSystemDocument.CurrentSchemaVersion >= 18,
                 "Air handling units are saved in file format 18.");
             var loaded = DuctSystemStore.Load(path);
             var loadedAhu = loaded.LayoutNodes.Single(x => x.Sequence == ahu.Sequence);
             var loadedCoil = loaded.LayoutNodes.Single(x => x.Sequence == coil.Sequence);
-            Require(loadedAhu.IsAirHandlingUnit && loadedAhu.AhuInternalStaticPressurePa == 211.5
+            Require(loadedAhu.IsAirHandlingUnit && loadedAhu.FanInternalStaticPressurePa == 211.5
                     && loadedAhu.FanStaticPressurePa == 180 && loadedAhu.Id == ahu.Id
                     && loadedCoil.ParentNodeId == ahu.Id,
                 "The AHU flag, internal and external static pressure, its ID and connections must round-trip.");
@@ -101,7 +102,7 @@ internal static class AirHandlingUnitTests
             File.WriteAllText(path, json.ToJsonString());
             var older = DuctSystemStore.Load(path);
             var olderFan = older.LayoutNodes.Single(x => x.Sequence == ahu.Sequence);
-            Require(older.SchemaVersion == 18 && !olderFan.IsAirHandlingUnit && olderFan.AhuInternalStaticPressurePa == 0
+            Require(older.SchemaVersion == DuctSystemDocument.CurrentSchemaVersion && !olderFan.IsAirHandlingUnit && olderFan.FanInternalStaticPressurePa == 0
                     && olderFan.Id == $"Fan-{ahu.Sequence:000}" && olderFan.FanTotalStaticPressurePa == 180,
                 "A format-17 fan must open as a plain fan, unchanged.");
 
@@ -110,13 +111,53 @@ internal static class AirHandlingUnitTests
             fanBlock["IsAirHandlingUnit"] = true;
             fanBlock["InternalStaticPressurePa"] = -40;
             File.WriteAllText(path, json.ToJsonString());
-            Require(DuctSystemStore.Load(path).LayoutNodes.Single(x => x.Sequence == ahu.Sequence).AhuInternalStaticPressurePa == 0,
+            Require(DuctSystemStore.Load(path).LayoutNodes.Single(x => x.Sequence == ahu.Sequence).FanInternalStaticPressurePa == 0,
                 "A negative internal static pressure opens as 0.");
         }
         finally
         {
             File.Delete(path);
         }
+    }
+
+    public static void ExternalStaticSplitsAtTheFan()
+    {
+        // Return space -> 12 in x 40 ft -> AHU -> 14 in x 30 ft -> supply space. The critical path's external static
+        // pressure divides at the AHU: negative (suction) = the return duct's loss, positive (discharge) = the supply's.
+        var document = new DuctSystemDocument();
+        var source = SystemTests.AddNode(document, LayoutNodeType.Reservoir, parent: null, duct: null);
+        source.SpaceRole = "Space Source";
+        source.AirflowM3PerS = UnitConversions.CfmToM3PerS(1500);
+        var returnDuct = SystemTests.AddDuct(document, 12, 1500, 40);
+        var ahu = SystemTests.AddNode(document, LayoutNodeType.Fan, source, returnDuct);
+        ahu.IsAirHandlingUnit = true;
+        ahu.AirflowM3PerS = UnitConversions.CfmToM3PerS(1500);
+        var supplyDuct = SystemTests.AddDuct(document, 14, 1500, 30);
+        var sink = SystemTests.AddNode(document, LayoutNodeType.Reservoir, ahu, supplyDuct);
+        sink.SpaceRole = "Space Sink";
+        sink.AirflowM3PerS = supplyDuct.AirflowM3PerS;
+        SystemSolver.Solve(document);
+        var profiles = SystemPathProfiles.Build(document);
+        var critical = profiles.Paths.Single(path => path.IsCritical);
+        var returnLoss = returnDuct.Calculate().TotalPressureLossUpperPa;
+        var supplyLoss = supplyDuct.Calculate().TotalPressureLossUpperPa;
+        Require(critical.FanStepIndex >= 0, "The critical path passes through the AHU.");
+        Near(critical.SuctionLossPa!.Value, returnLoss, 1e-9, "negative ESP (suction) = return duct loss");
+        Near(critical.DischargeLossPa!.Value, supplyLoss, 1e-9, "positive ESP (discharge) = supply duct loss");
+        Near(critical.SuctionLossPa.Value + critical.DischargeLossPa.Value, critical.TotalLossPa, 1e-9, "suction + discharge = ESP");
+
+        // A route that starts at the fan has no suction side.
+        var simple = new DuctSystemDocument();
+        var fan = SystemTests.AddNode(simple, LayoutNodeType.Fan, parent: null, duct: null);
+        fan.AirflowM3PerS = UnitConversions.CfmToM3PerS(800);
+        var duct = SystemTests.AddDuct(simple, 10, 800, 25);
+        var end = SystemTests.AddNode(simple, LayoutNodeType.Reservoir, fan, duct);
+        end.SpaceRole = "Space Sink";
+        end.AirflowM3PerS = duct.AirflowM3PerS;
+        SystemSolver.Solve(simple);
+        var path = SystemPathProfiles.Build(simple).Paths.Single(item => item.IsCritical);
+        Require(path.SuctionLossPa == 0.0 && Math.Abs(path.DischargeLossPa!.Value - path.TotalLossPa) < 1e-12,
+            "A route that starts at the fan is all discharge (positive pressure).");
     }
 
     private static void Near(double actual, double expected, double tolerance, string what)

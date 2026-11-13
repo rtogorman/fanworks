@@ -247,7 +247,7 @@ internal sealed class MainRibbon
         AddButton(report, "RibbonPrintReportButton", "Print\nReport", RibbonIcon.PrintReport,
             "Save the project report as a PDF and open it for printing.", () => _reportPreview?.PrintReport());
         AddButton(report, "RibbonRefreshPreviewButton", "Refresh\nPreview", RibbonIcon.Reports,
-            "Rebuild the report preview from the current project.", () => _reportPreview?.RefreshPreview());
+            "Rebuild the report preview from the current project.", () => _reportPreview?.RefreshPreview(force: true));
         return page;
     }
 

@@ -197,6 +197,31 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.103.0
+
+- **Wordmark**: the "fan works" lettering in the top bar and on every report sheet is now drawn from the brand's own
+  letter outlines (traced from the supplied FanWorks lettering: single-storey "a", no spurs), not a similar font.
+- **Reports tab**: the preview no longer freezes the window. The report is written and its pages drawn in the
+  background, visible pages first, each page appearing as soon as it is ready; reopening the tab with the project
+  unchanged shows the existing preview at once (Refresh Preview always rebuilds). **Zoom** with − / +, Fit width or
+  Ctrl + mouse wheel (50 % to 300 %); zoomed pages are redrawn sharp.
+- **Report sheets**: "QA/QC quick check" is now **Quick check**. Ducts add **duct velocity** and **pressure rate**
+  (in. w.c./100 ft); fittings show C to three decimals. Table look-ups show the interpolation rule once, then each
+  look-up with its numbers substituted and the result (e.g. Kθ = 0.6 + (50 − 45)/(60 − 45)(0.78 − 0.6) = 0.66). A
+  fitting sheet shows the Reynolds number only when its coefficient uses it.
+- **Static pressure, same for a fan or an AHU**: both have an **Internal Static Pressure** input (normally 0 for a bare
+  fan); the external static pressure is calculated (Auto-size), so it is shown, not entered, in the component window.
+  The Analysis System Overview shows total (TSP), internal (ISP) and external (ESP) static pressure, the ESP split into
+  its **negative (suction)** and **positive (discharge)** sides, and what the fan or AHU is set to. The report title
+  page shows ESP, internal and total for both.
+- **Path graph**: a **Show − / + static sides** check box shades the graph before the fan or AHU (negative, blue) and
+  after it (positive, amber) with a dashed line at the fan. With **All paths** shown, the panel at the left lists every
+  path's total and its gap to the critical path (scrolls for large systems; click one to show it alone). The hover
+  label shows the component, its drop and the drop from the start.
+- **Analysis Settings**: **VAV inlet static pressure** and **pressure drop across VAV** ranges (low and high), checked
+  on the critical path like the other ranges. Projects are saved in file format 19.
+- **Fitting gallery**: the pictures are no longer cut off when the gallery first opens at 125 % or 150 % display scale.
+
 ## What changed in 0.102.0
 
 - **Numbered paths**: on the Analysis tab Path 1 is the critical path, then Path 2, 3 … by decreasing pressure drop;

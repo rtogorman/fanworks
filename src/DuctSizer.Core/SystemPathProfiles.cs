@@ -28,6 +28,31 @@ public sealed record SystemPathProfile(string StartId, string EndId, IReadOnlyLi
 
     /// <summary>True when every item on the route was calculated; an incomplete route must not be shown as a result.</summary>
     public bool IsComplete => Steps.All(step => step.Calculated);
+
+    /// <summary>Index of the fan or air handling unit on the route, or -1 when the route has none.</summary>
+    public int FanStepIndex => Steps.ToList().FindIndex(step => IsFanKind(step.Kind));
+
+    /// <summary>
+    /// Pressure loss before the fan or air handling unit (its suction side, where the static pressure is negative),
+    /// Pa; null when the route has no fan. 0 when the route starts at the fan.
+    /// </summary>
+    public double? SuctionLossPa => FanStepIndex switch
+    {
+        < 0 => null,
+        0 => 0.0,
+        var index => Steps[index - 1].CumulativeLossPa
+    };
+
+    /// <summary>
+    /// Pressure loss after the fan or air handling unit (its discharge side, where the static pressure is
+    /// positive), Pa; null when the route has no fan. Suction + discharge = <see cref="TotalLossPa"/> (the fan's own
+    /// step carries no loss: its pressure is a source term).
+    /// </summary>
+    public double? DischargeLossPa => FanStepIndex < 0 ? null : TotalLossPa - Steps[FanStepIndex].CumulativeLossPa;
+
+    /// <summary>True for the step kinds of a fan or an air handling unit.</summary>
+    public static bool IsFanKind(string kind) =>
+        string.Equals(kind, "Fan", StringComparison.Ordinal) || string.Equals(kind, "Air handling unit", StringComparison.Ordinal);
 }
 
 /// <summary>Every route through the drawn system, in the order the critical-path analysis visits them.</summary>

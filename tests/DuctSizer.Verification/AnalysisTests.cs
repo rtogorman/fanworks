@@ -89,6 +89,41 @@ internal static class AnalysisTests
             "A range covering the whole band is within range.");
     }
 
+    public static void VavRangesCheckInletPressureAndDrop()
+    {
+        // Titus DESV with reheat, size 8, 1 row, 850 cfm: published drop 0.045 in. w.c. (verified elsewhere).
+        var vav = VavPerformanceCatalog.CalculateFittingResult(
+            FittingCatalog.Find(VavPerformanceCatalog.WithReheatCode),
+            new Dictionary<string, double> { ["sizeIndex"] = 8, ["rows"] = 1 },
+            UnitConversions.CfmToM3PerS(850), UnitConversions.FahrenheitToCelsius(70));
+        var expectations = new AnalysisExpectations
+        {
+            VavPressureDropPa = new ExpectedRange { Low = UnitConversions.InchesWaterToPa(0.03), High = UnitConversions.InchesWaterToPa(0.05) },
+            VavInletPressurePa = new ExpectedRange { Low = UnitConversions.InchesWaterToPa(0.5), High = UnitConversions.InchesWaterToPa(1.5) }
+        };
+        var inside = AnalysisRangeCheck.CheckFitting(expectations, vav, UnitConversions.InchesWaterToPa(0.8));
+        Require(inside.Status == RangeCheckStatus.Within && inside.Findings.Count == 2
+                && inside.Findings.Any(x => x.Quantity == ExpectedQuantity.VavPressureDrop)
+                && inside.Findings.Any(x => x.Quantity == ExpectedQuantity.VavInletPressure),
+            "A VAV with 0.045 in. w.c. drop and 0.8 in. w.c. inlet pressure is inside 0.03-0.05 and 0.5-1.5.");
+        var lowInlet = AnalysisRangeCheck.CheckFitting(expectations, vav, UnitConversions.InchesWaterToPa(0.3));
+        Require(lowInlet.Status == RangeCheckStatus.Outside
+                && !lowInlet.Findings.Single(x => x.Quantity == ExpectedQuantity.VavInletPressure).Within
+                && lowInlet.Findings.Single(x => x.Quantity == ExpectedQuantity.VavPressureDrop).Within,
+            "A VAV inlet pressure below the low value is outside the range.");
+        Require(AnalysisRangeCheck.CheckFitting(expectations, vav, null).Status == RangeCheckStatus.NotAvailable,
+            "An unknown inlet pressure cannot be checked (not available, never 'within').");
+        // VAV ranges do not apply to other fittings.
+        var elbow = FittingCalculator.Calculate(FittingCatalog.Find("3-1"),
+            new Dictionary<string, double> { ["rd"] = 1.5, ["angle"] = 90 }, UnitConversions.CfmToM3PerS(800),
+            GeometryCalculator.Round(UnitConversions.InchesToM(12)), UnitConversions.FahrenheitToCelsius(70));
+        Require(AnalysisRangeCheck.CheckFitting(expectations, elbow, 0).Status == RangeCheckStatus.NotSet,
+            "VAV ranges apply only to VAV boxes.");
+        var copy = expectations.Copy();
+        Require(copy.VavInletPressurePa.High == expectations.VavInletPressurePa.High && copy.AnySet,
+            "The VAV ranges are copied and count as set.");
+    }
+
     public static void ExpectationsRoundTripAndOlderFilesOpenEmpty()
     {
         var document = new DuctSystemDocument();

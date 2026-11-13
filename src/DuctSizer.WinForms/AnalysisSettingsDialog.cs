@@ -5,7 +5,7 @@ namespace DuctSizer.WinForms;
 
 /// <summary>
 /// Analysis Settings (Analysis ribbon): the low and high values the engineer expects for duct friction rate, duct
-/// velocity, fitting velocity and fitting loss. Values are shown in the project's units and stored in SI. Every
+/// velocity, fitting velocity, fitting loss, VAV inlet static pressure and pressure drop across VAV boxes. Values are shown in the project's units and stored in SI. Every
 /// value is optional; FanWorks supplies no defaults. The Analysis tab's top-10 list then shows whether each duct
 /// and fitting is within its expected ranges.
 /// </summary>
@@ -31,7 +31,7 @@ internal sealed class AnalysisSettingsDialog : DpiScaledForm
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(600, 362);
+        ClientSize = new Size(600, 446);
         Font = new Font("Segoe UI", 9F);
         BackColor = Color.FromArgb(245, 247, 250);
         Shown += (_, _) => UiPolish.ApplyDialogSurface(this);
@@ -71,7 +71,7 @@ internal sealed class AnalysisSettingsDialog : DpiScaledForm
             Name = "AnalysisSettingsTable",
             Dock = DockStyle.Fill,
             ColumnCount = 4,
-            RowCount = 5,
+            RowCount = 7,
             BackColor = Color.White,
             Padding = new Padding(14, 6, 14, 6),
             Margin = new Padding(0, 4, 0, 8)
@@ -81,7 +81,7 @@ internal sealed class AnalysisSettingsDialog : DpiScaledForm
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        for (var index = 0; index < 4; index++)
+        for (var index = 0; index < 6; index++)
             table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         table.Controls.Add(Header("Quantity", ContentAlignment.MiddleLeft), 0, 0);
         table.Controls.Add(Header("Low", ContentAlignment.MiddleLeft), 1, 0);
@@ -99,6 +99,12 @@ internal sealed class AnalysisSettingsDialog : DpiScaledForm
             imperial ? UnitConversions.MpsToFpm : value => value,
             imperial ? UnitConversions.FpmToMps : value => value);
         AddRange(ExpectedQuantity.FittingLoss, "Fitting pressure loss", imperial ? "in. w.c." : "Pa", imperial ? "0.####" : "0.##",
+            imperial ? UnitConversions.PaToInchesWater : value => value,
+            imperial ? UnitConversions.InchesWaterToPa : value => value);
+        AddRange(ExpectedQuantity.VavInletPressure, "VAV inlet static pressure", imperial ? "in. w.c." : "Pa", imperial ? "0.####" : "0.##",
+            imperial ? UnitConversions.PaToInchesWater : value => value,
+            imperial ? UnitConversions.InchesWaterToPa : value => value);
+        AddRange(ExpectedQuantity.VavPressureDrop, "Pressure drop across VAV", imperial ? "in. w.c." : "Pa", imperial ? "0.####" : "0.##",
             imperial ? UnitConversions.PaToInchesWater : value => value,
             imperial ? UnitConversions.InchesWaterToPa : value => value);
         root.Controls.Add(table, 0, 2);
@@ -182,7 +188,8 @@ internal sealed class AnalysisSettingsDialog : DpiScaledForm
 
     private void SaveRanges()
     {
-        var result = new AnalysisExpectations();
+        // Start from the current settings so the pressure and seal class overrides (Customize Duct Class) are kept.
+        var result = Expectations.Copy();
         foreach (var row in _rows)
         {
             if (!TryBound(row, row.Low, row.OriginalLow, row.Original.Low, "low", out var low)

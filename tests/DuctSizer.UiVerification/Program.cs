@@ -51,13 +51,59 @@ internal static class Program
             }
 
             // Report-only run (Linux review aid): write the report of the loaded project and stop.
+            if (Environment.GetEnvironmentVariable("FANWORKS_GALLERY_SHOT") is { Length: > 0 } galleryShot)
+            {
+                // Quick capture of the fitting gallery as opened from a fitting's editor (fan/plenum fitting selected).
+                var galleryDialogType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.FittingGalleryDialog")!;
+                var code = FittingCatalog.All.First(definition => FittingCatalog.SelectionGroup(definition) == FittingCatalog.FanExitsAndPlenumsSelectionGroup).Code;
+                using var gallery = (Form)Activator.CreateInstance(galleryDialogType, BindingFlags.Instance | BindingFlags.NonPublic, null,
+                    new object?[] { FittingCatalog.All, code }, null)!;
+                gallery.StartPosition = FormStartPosition.Manual;
+                gallery.Location = new Point(0, 0);
+                gallery.Show(form);
+                for (var pump = 0; pump < 40; pump++)
+                {
+                    Application.DoEvents();
+                    Thread.Sleep(25);
+                }
+                using var shot = new Bitmap(gallery.Width, gallery.Height);
+                using (var shotGraphics = Graphics.FromImage(shot))
+                    shotGraphics.CopyFromScreen(gallery.Location, Point.Empty, gallery.Size);
+                shot.Save(galleryShot, System.Drawing.Imaging.ImageFormat.Png);
+                var firstPicture = gallery.Controls.Find("FittingGalleryPanel", true)[0].Controls[0].Controls[0].Controls
+                    .OfType<PictureBox>().First();
+                Console.WriteLine($"Gallery {gallery.Size}; first tile {gallery.Controls.Find("FittingGalleryPanel", true)[0].Controls[0].Size}; picture {firstPicture.Size} image {firstPicture.Image?.Size}");
+                gallery.Close();
+                return 0;
+            }
+            if (Environment.GetEnvironmentVariable("FANWORKS_PREVIEW_ONLY") == "1")
+            {
+                // Quick check of the Reports tab preview alone (timing and status).
+                if (Environment.GetEnvironmentVariable("FANWORKS_REPORT_PROJECT") is { Length: > 0 } previewProject)
+                    form.DuctSystemScreen.ReplaceCurrentSystem(DuctSystemStore.Load(previewProject));
+                var previewClock = System.Diagnostics.Stopwatch.StartNew();
+                ClickButton(Find<Button>(form, "TopTabReports"));
+                var preview = Find<Control>(form, "ReportsPage");
+                Console.WriteLine($"Tab opened (UI blocked) for {previewClock.ElapsedMilliseconds} ms.");
+                var ready = (bool)preview.GetType().GetMethod("WaitUntilReady", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(preview, new object[] { 60_000 })!;
+                Console.WriteLine($"Ready={ready} after {previewClock.ElapsedMilliseconds} ms. Status: {Find<Label>(form, "ReportPreviewStatus").Text}");
+                return ready ? 0 : 1;
+            }
             var reportOnlyPath = Environment.GetEnvironmentVariable("FANWORKS_REPORT_ONLY");
             if (!string.IsNullOrWhiteSpace(reportOnlyPath))
             {
                 if (Environment.GetEnvironmentVariable("FANWORKS_REPORT_PROJECT") is { Length: > 0 } reportProject)
                     form.DuctSystemScreen.ReplaceCurrentSystem(DuctSystemStore.Load(reportProject));
+                var reportClock = System.Diagnostics.Stopwatch.StartNew();
                 form.DuctSystemScreen.WriteReportPdf(reportOnlyPath);
-                Console.WriteLine("Report written.");
+                Console.WriteLine($"Report written in {reportClock.ElapsedMilliseconds} ms.");
+                if (Environment.GetEnvironmentVariable("FANWORKS_REPORT_TIMING") == "1")
+                {
+                    reportClock.Restart();
+                    form.DuctSystemScreen.WriteReportPdf(reportOnlyPath);
+                    Console.WriteLine($"Report written again in {reportClock.ElapsedMilliseconds} ms.");
+                }
                 return 0;
             }
 
@@ -987,8 +1033,11 @@ internal static class Program
                 var galleryDescriptions = Descendants<Label>(galleryForm)
                     .Where(label => label.Name.StartsWith("FittingGalleryDescription_", StringComparison.Ordinal))
                     .ToArray();
-                Require(galleryImage.Image is { Width: 348, Height: 290 },
-                    "Gallery fitting images should be twice the previous width and height.");
+                // 348 x 290 at 100 %, scaled with the display (round V: built after the window is scaled).
+                var galleryScale = galleryForm.DeviceDpi / 96.0;
+                Require(galleryImage.Image is { } galleryPicture
+                        && Math.Abs(galleryPicture.Width - 348 * galleryScale) <= 2 && Math.Abs(galleryPicture.Height - 290 * galleryScale) <= 2,
+                    $"Gallery fitting images should be 348 x 290 at 100 % display scale (scaled with the display); got {galleryImage.Image?.Size}.");
                 Require(galleryDescriptions.Length == FittingCatalog.All.Count
                         && galleryDescription.Text == initialFitting.Description,
                     "Every fitting gallery card should show its ASHRAE description.");
@@ -1668,11 +1717,14 @@ internal static class Program
                        BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { fanInputNode }, null)
                    ?? throw new InvalidOperationException("Could not create the fan editor."))
             {
-                Require(Find<TextBox>(fanDialog, "LayoutEquipmentPressureDropText").Text == "1.5"
+                // Round V: the external static pressure is calculated (shown, not entered); internal static is entered.
+                Require(Find<Label>(fanDialog, "LayoutExternalStaticLabel").Text.StartsWith("1.5 in. w.c. — calculated", StringComparison.Ordinal)
+                        && Descendants<TextBox>(fanDialog).All(box => box.Name != "LayoutEquipmentPressureDropText")
+                        && Find<TextBox>(fanDialog, "LayoutInternalStaticText").Text == "0"
                         && Find<TextBox>(fanDialog, "LayoutFanEfficiencyText").Text == "72.5"
                         && Descendants<Label>(fanDialog).Any(label => label.Text == "%")
-                        && Descendants<Label>(fanDialog).Any(label => label.Text == "System Static Pressure (in. w.c.)"),
-                    "The fan popup should provide system-static-pressure and numeric percent-efficiency inputs.");
+                        && Descendants<Label>(fanDialog).Any(label => label.Text == "Internal Static Pressure (in. w.c.)"),
+                    "The fan popup should show the calculated external static pressure and offer internal static pressure and percent-efficiency inputs.");
             }
             var customInputNode = new SavedLayoutNode
             {
@@ -2332,10 +2384,12 @@ internal static class Program
             Require((bool)fanInformationMethod.Invoke(form, fanInformationArguments)!
                     && Convert.ToString(fanInformationArguments[0])!.Contains(fanNode.Id, StringComparison.Ordinal)
                     && Convert.ToString(fanInformationArguments[0])!.Contains("Airflow:", StringComparison.Ordinal)
-                    && Convert.ToString(fanInformationArguments[0])!.Contains("Static pressure:", StringComparison.Ordinal)
+                    && Convert.ToString(fanInformationArguments[0])!.Contains("External static pressure (ESP):", StringComparison.Ordinal)
+                    && Convert.ToString(fanInformationArguments[0])!.Contains("Internal static pressure:", StringComparison.Ordinal)
+                    && Convert.ToString(fanInformationArguments[0])!.Contains("Total static pressure:", StringComparison.Ordinal)
                     && Convert.ToString(fanInformationArguments[0])!.Contains("Fan efficiency:", StringComparison.Ordinal)
                     && Convert.ToString(fanInformationArguments[0])!.Contains("Required motor power:", StringComparison.Ordinal),
-                "View Fan Information should report the fan ID, airflow, static pressure, efficiency, and horsepower.");
+                "View Fan Information should report the fan ID, airflow, external, internal and total static pressure, efficiency, and horsepower.");
             var fanInformationDialogType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.FanInformationDialog")
                                            ?? throw new InvalidOperationException("Could not find the fan information dialog.");
             using (var fanInformationDialog = (Form?)Activator.CreateInstance(fanInformationDialogType,
@@ -2994,8 +3048,9 @@ internal static class Program
                         && item.Inputs.Any(field => field.Label == "Equivalent diameter method")
                         && item.QuickCheck?.Select(field => field.Label).SequenceEqual(new[]
                         {
-                            "Duct size", "Airflow", "Duct length", "Pressure drop"
+                            "Duct size", "Airflow", "Duct length", "Duct velocity", "Pressure rate", "Pressure drop"
                         }) == true
+                        && item.QuickCheck![4].Value.EndsWith("in. w.c./100 ft", StringComparison.Ordinal)
                         && item.Outputs.Any(field => field.Label == "Reynolds number")
                         && item.Outputs.Any(field => field.Label == "Static pressure in")
                         && item.Outputs.Any(field => field.Label == "Static pressure out")
@@ -3023,6 +3078,7 @@ internal static class Program
                         {
                             "Fitting type / name", "Fitting C-value", "Pressure drop"
                         }) == true
+                        && System.Text.RegularExpressions.Regex.IsMatch(item.QuickCheck![1].Value, @"^\d+\.\d{3}$")
                         && item.Calculations?.Any(section => section.Heading == "COEFFICIENT AND PRESSURE LOSS") == true
                         && item.Calculations?.Any(section => section.Heading == "VARIABLES AND WHERE THEY COME FROM"
                             && section.Lines.Any(line => line.Formula == "C")) == true
@@ -3880,13 +3936,26 @@ internal static class Program
                         || expectedTop.Count == criticalProfile.Steps.Count
                            && Math.Abs(expectedTop.Sum(entry => entry.LossPa) - criticalProfile.TotalLossPa) < 1e-6)
                     && Find<Label>(form, "AnalysisAirflowValue").Text.Length > 0
-                    && Find<Label>(form, "AnalysisPressureValue").Text.Length > 0
+                    && Find<Label>(form, "AnalysisExternalStaticValue").Text.Length > 0
+                    && Find<Label>(form, "AnalysisTotalStaticValue").Text.Length > 0
                     && Find<Label>(form, "AnalysisRouteValue").Text.Length > 0
                     && ScreenBounds(Find<Control>(form, "AnalysisSummary")).Bottom <= ScreenBounds(grid).Top,
                 "The Analysis tab should list every critical-path item (adding up to the critical-path total) above the full table.");
             var lossValues = expectedTop.Select(entry => entry.LossPa).ToArray();
             Require(lossValues.Zip(lossValues.Skip(1)).All(pair => pair.First >= pair.Second),
                 "The top pressure drops should be listed from highest to lowest.");
+            if (criticalProfile is { IsComplete: true, SuctionLossPa: double suctionSide, DischargeLossPa: double dischargeSide })
+            {
+                // ESP = the critical-path loss = negative (suction) + positive (discharge); TSP = ESP + ISP.
+                var formatTotal = UiMember.Method("FormatSystemTotal", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                string Total(double pa) => (string)formatTotal.Invoke(form, new object[] { pa })!;
+                var analysisFan = form.DuctSystemScreen._ductSystem.LayoutNodes.Single(node => node.Type == LayoutNodeType.Fan);
+                Require(Find<Label>(form, "AnalysisExternalStaticValue").Text == Total(criticalProfile.TotalLossPa)
+                        && Find<Label>(form, "AnalysisPositiveStaticValue").Text == "+" + Total(dischargeSide)
+                        && Find<Label>(form, "AnalysisNegativeStaticValue").Text == (suctionSide > 0 ? "−" + Total(suctionSide) : Total(0))
+                        && Find<Label>(form, "AnalysisTotalStaticValue").Text == Total(criticalProfile.TotalLossPa + analysisFan.FanInternalStaticPressurePa),
+                    $"Static pressure block: ESP {Find<Label>(form, "AnalysisExternalStaticValue").Text}, negative {Find<Label>(form, "AnalysisNegativeStaticValue").Text}, positive {Find<Label>(form, "AnalysisPositiveStaticValue").Text}, TSP {Find<Label>(form, "AnalysisTotalStaticValue").Text}.");
+            }
 
             // Analysis Settings, the "within expected range" column and the pressure drop along each path (round Q).
             var analysisScreen = form.DuctSystemScreen;
@@ -4006,6 +4075,37 @@ internal static class Program
                 Require(profileChart.IsolatedSeries is null && !Find<Control>(form, "AnalysisPathPanel").Visible,
                     "Choosing All paths should show every path again.");
             }
+            {
+                // Round V: with all paths shown, the left panel lists every path's total (scrollable); a row isolates it.
+                var allPaths = Find<FlowLayoutPanel>(form, "AnalysisAllPathsPanel");
+                var rows = allPaths.Controls.OfType<Label>().Where(label => label.Name.StartsWith("AnalysisAllPathsRow", StringComparison.Ordinal)).ToArray();
+                var firstTotal = shownProfile.Series[0].Values[^1].ToString(imperialUnits ? "0.###" : "0.#", System.Globalization.CultureInfo.CurrentCulture);
+                Require((!form.Visible || allPaths.Visible) && allPaths.AutoScroll && rows.Length == shownProfile.Series.Count
+                        && rows[0].Text.StartsWith(shownProfile.Series[0].IsCritical ? "Path 1 (critical)" : "Path 1", StringComparison.Ordinal)
+                        && rows[0].Text.Contains(firstTotal, StringComparison.Ordinal),
+                    $"All paths should list each path's total beside the graph. Rows {rows.Length} of {shownProfile.Series.Count}, first '{rows.FirstOrDefault()?.Text}', total {firstTotal}, visible {allPaths.Visible}, scroll {allPaths.AutoScroll}; chain {string.Join(" < ", Ancestors(allPaths))}.");
+                // Hover label: the component, its drop and the drop from the start (no path name, no path total).
+                var hoverAt = profileChart.PointOf(0, shownProfile.Series[0].Values.Count - 1);
+                var hover = profileChart.HitText(new Point((int)Math.Round(hoverAt.X), (int)Math.Round(hoverAt.Y)));
+                var hoverLines = hover.Split('\n');
+                Require(hoverLines.Length == 3 && hoverLines[0].StartsWith("Component ", StringComparison.Ordinal)
+                        && hoverLines[1].StartsWith("Drop: ", StringComparison.Ordinal)
+                        && hoverLines[2].StartsWith("From the start: ", StringComparison.Ordinal)
+                        && !hover.Contains("Path", StringComparison.Ordinal),
+                    $"The hover label should give the component, its drop and the drop from the start only. Got: {hover}");
+                // Negative / positive static sides: shaded at the fan on Path 1; the check box hides them.
+                var sides = Find<CheckBox>(form, "AnalysisPressureSidesCheck");
+                var critical = shownProfile.Series.FirstOrDefault(series => series.IsCritical) ?? shownProfile.Series[0];
+                Require(sides.Checked && profileChart.ShowPressureSides
+                        && profileChart.PressureSideFanComponent == (critical.FanIndex >= 0 ? critical.FanIndex + 1 : null),
+                    $"The suction/discharge sides should be marked at the fan on Path 1 (fan index {critical.FanIndex}, shown {profileChart.PressureSideFanComponent}).");
+                sides.Checked = false;
+                Application.DoEvents();
+                Require(!profileChart.ShowPressureSides && profileChart.PressureSideFanComponent is null,
+                    "Clearing the check box should hide the suction/discharge sides.");
+                sides.Checked = true;
+                Application.DoEvents();
+            }
             // Round U: air handling unit. Placed from the Equipment group like a fan (one fan or AHU per system); its
             // ID is AHU-nnn; the Analysis tile, Fan Information and the report show external, internal and total static.
             {
@@ -4027,7 +4127,7 @@ internal static class Program
                 ahu.IsDefined = true;
                 ahu.AirflowM3PerS = UnitConversions.CfmToM3PerS(2000);
                 ahu.FanStaticPressurePa = UnitConversions.InchesWaterToPa(1.0);
-                ahu.AhuInternalStaticPressurePa = UnitConversions.InchesWaterToPa(1.5);
+                ahu.FanInternalStaticPressurePa = UnitConversions.InchesWaterToPa(1.5);
                 ahu.FanEfficiencyPercent = 65;
                 var ahuInformation = new object?[] { null };
                 UiMember.Method("TryGetFanInformation", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, ahuInformation);
@@ -4042,10 +4142,14 @@ internal static class Program
                 Application.DoEvents();
                 analysisScreen.GetType().GetMethod("RefreshAnalysisSummary", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(analysisScreen, null);
-                Require(Find<Label>(form, "AnalysisFanStaticCaption").Text.Contains("external static pressure (ESP)", StringComparison.Ordinal)
-                        && (!form.Visible || Find<Label>(form, "AnalysisFanStaticNote").Visible)
-                        && Find<Label>(form, "AnalysisFanStaticNote").Text.Contains("total static", StringComparison.Ordinal),
-                    $"The Analysis tile should show the AHU's ESP with its internal and total static pressure. Caption={Find<Label>(form, "AnalysisFanStaticCaption").Text}, note={Find<Label>(form, "AnalysisFanStaticNote").Text} ({Find<Label>(form, "AnalysisFanStaticNote").Visible}; chain {string.Join(" < ", Ancestors(Find<Label>(form, "AnalysisFanStaticNote")))}), value={Find<Label>(form, "AnalysisFanStaticValue").Text}.");
+                // Round V: the same static pressure block for a fan or an AHU: TSP = ISP + ESP, ESP split into negative
+                // (suction) and positive (discharge), and the unit's set ESP beside them.
+                Require(Find<Label>(form, "AnalysisStaticHeading").Text.Contains(ahu.Id, StringComparison.Ordinal)
+                        && Find<Label>(form, "AnalysisStaticHeading").Text.Contains("air handling unit", StringComparison.Ordinal)
+                        && Find<Label>(form, "AnalysisInternalStaticValue").Text.StartsWith("1.5", StringComparison.Ordinal)
+                        && Find<Label>(form, "AnalysisFanSetCaption").Text == $"{ahu.Id} set to (ESP)"
+                        && Find<Label>(form, "AnalysisFanSetValue").Text.StartsWith("1 ", StringComparison.Ordinal),
+                    $"The Analysis static pressure block should show the AHU's internal static and its set ESP. Heading={Find<Label>(form, "AnalysisStaticHeading").Text}; ISP={Find<Label>(form, "AnalysisInternalStaticValue").Text}; set={Find<Label>(form, "AnalysisFanSetValue").Text}.");
                 var ahuSheet = analysisScreen.GetType().GetMethod("BuildEquipmentPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
                     .Invoke(null, new object[] { ahu, (0.0, ahu.FanStaticPressurePa) }) as IReadOnlyList<DuctSystemPdfCalculationSection>;
                 Require(ahuSheet is not null && ahuSheet.SelectMany(section => section.Lines)
@@ -4071,9 +4175,9 @@ internal static class Program
                 analysisScreen.RefreshDuctSystemGrid();
                 analysisScreen.GetType().GetMethod("RefreshAnalysisSummary", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(analysisScreen, null);
-                Require(Find<Label>(form, "AnalysisFanStaticCaption").Text == "Fan static pressure"
-                        && Find<Label>(form, "AnalysisFanStaticNote").Text.Length == 0,
-                    "With a fan again the tile should read Fan static pressure.");
+                Require(Find<Label>(form, "AnalysisFanSetCaption").Text == $"{existingFan.Id} set to (ESP)"
+                        && Find<Label>(form, "AnalysisStaticHeading").Text.Contains("(fan)", StringComparison.Ordinal),
+                    "With a fan again the static pressure block should name the fan (same template).");
             }
             // SMACNA pressure class, seal class and leakage; donut; whole-page scroll with the full-height table.
             var leakageSummary = analysisScreen.BuildLeakageSummary();
@@ -4114,10 +4218,50 @@ internal static class Program
             ClickButton(Find<Button>(form, "TopTabReports"));
             Application.DoEvents();
             var reportPreview = Find<Control>(form, "ReportsPage");
+            // Round V: the report is written and its pages drawn in the background; the window stays responsive.
+            var previewWait = System.Diagnostics.Stopwatch.StartNew();
+            var previewReady = (bool)reportPreview.GetType().GetMethod("WaitUntilReady", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(reportPreview, new object[] { 120_000 })!;
+            Console.WriteLine($"Report preview ready in {previewWait.ElapsedMilliseconds} ms.");
             var previewPages = (int)reportPreview.GetType().GetProperty("PageCount", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(reportPreview)!;
-            Require(previewPages >= 1 && Find<Control>(form, "ReportPreviewPage1") is PictureBox { Image: not null },
+            Require(previewReady && previewPages >= 1 && Find<Control>(form, "ReportPreviewPage1") is PictureBox { Image: not null },
                 $"The Reports tab should preview the report page by page. Status: {Find<Label>(form, "ReportPreviewStatus").Text}");
+            {
+                // Zoom: + and − step 100 % -> 110 % -> 100 %; the page grows with it; Fit width fills the window.
+                var firstPage = Find<PictureBox>(form, "ReportPreviewPage1");
+                var widthAt100 = firstPage.Width;
+                ClickButton(Find<Button>(form, "ReportZoomIn"));
+                Application.DoEvents();
+                Require(Find<Label>(form, "ReportZoomLabel").Text == "110%" && firstPage.Width > widthAt100,
+                    $"Zoom in should enlarge the pages to 110 %. Label {Find<Label>(form, "ReportZoomLabel").Text}, width {widthAt100} -> {firstPage.Width}.");
+                var setZoom = reportPreview.GetType().GetMethod("SetZoom", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                setZoom.Invoke(reportPreview, new object[] { 2.0 });
+                Application.DoEvents();
+                Require(Math.Abs(firstPage.Width - 2.0 * widthAt100) <= 2 && Find<Label>(form, "ReportZoomLabel").Text == "200%",
+                    $"At 200 % the page should be twice as wide ({widthAt100} -> {firstPage.Width}).");
+                var sharpClock = System.Diagnostics.Stopwatch.StartNew();
+                while (sharpClock.ElapsedMilliseconds < 30_000 && (firstPage.Image?.Width ?? 0) < firstPage.Width)
+                {
+                    Application.DoEvents();
+                    Thread.Sleep(20);
+                }
+                Require((firstPage.Image?.Width ?? 0) >= firstPage.Width,
+                    $"Zoomed-in pages near the view should be redrawn sharp ({firstPage.Image?.Width} px image for a {firstPage.Width} px page).");
+                ClickButton(Find<Button>(form, "ReportZoomOut"));
+                Application.DoEvents();
+                Require(Find<Label>(form, "ReportZoomLabel").Text == "175%", "Zoom out steps down to 175 %.");
+                setZoom.Invoke(reportPreview, new object[] { 1.0 });
+                Application.DoEvents();
+                // Reopening the tab with the project unchanged keeps the preview (no rebuild).
+                ClickButton(Find<Button>(form, "TopTabProject"));
+                Application.DoEvents();
+                ClickButton(Find<Button>(form, "TopTabReports"));
+                Application.DoEvents();
+                Require(Find<Control>(form, "ReportPreviewPage1") == firstPage
+                        && Find<Label>(form, "ReportPreviewStatus").Text.Contains("up to date", StringComparison.Ordinal),
+                    $"An unchanged project should keep its preview. Status: {Find<Label>(form, "ReportPreviewStatus").Text}");
+            }
             var printedReport = Path.Combine(testDirectory, "printed-report.pdf");
             AutomationOptions.ReportPdfPath = printedReport;
             try

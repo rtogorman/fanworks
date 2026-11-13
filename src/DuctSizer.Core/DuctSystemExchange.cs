@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -307,8 +308,10 @@ public sealed record DuctSystemPdfPressureProfile(
 /// <summary>One route: Values[i] is the running loss after component i + 1 along the route.</summary>
 /// <param name="Label">The path's name ("Path 1" is the critical path).</param>
 /// <param name="Route">The components it runs between ("FAN-001 → L-010").</param>
+/// <param name="FanIndex">0-based position of the fan or air handling unit on the path, or -1 when it has none:
+/// components before it are on the suction (negative static pressure) side, after it on the discharge side.</param>
 public sealed record DuctSystemPdfProfileSeries(string Label, IReadOnlyList<double> Values, bool IsCritical,
-    IReadOnlyList<string>? ItemIds = null, string Route = "");
+    IReadOnlyList<string>? ItemIds = null, string Route = "", int FanIndex = -1);
 
 public sealed record DuctSystemPdfSchematic(
     string Title,
@@ -548,20 +551,14 @@ public static class DuctSystemPdf
         var airHandlingUnit = metadata?.FanIsAirHandlingUnit == true;
         TextColor(builder, 32, 428, 9.5, airHandlingUnit ? "AIR HANDLING UNIT SELECTION" : "FAN SELECTION", ink, bold: true);
         builder.Append("0.055 0.435 0.902 rg 32 423 46 1.6 re f\n");
-        var fanValues = airHandlingUnit
-            ? new[]
+        // The same values for a fan and an air handling unit: external + internal = total static pressure.
+        var fanValues = new[]
             {
-                ("AIR HANDLING UNIT", metadata?.FanId), ("DESIGN AIRFLOW", metadata?.FanAirflow),
+                (airHandlingUnit ? "AIR HANDLING UNIT" : "FAN", metadata?.FanId), ("DESIGN AIRFLOW", metadata?.FanAirflow),
                 ("EXTERNAL STATIC (ESP)", metadata?.FanStaticPressure),
                 ("INTERNAL STATIC", metadata?.FanInternalStaticPressure),
                 ("TOTAL STATIC PRESSURE", metadata?.FanTotalStaticPressure),
                 ("FAN EFFICIENCY", metadata?.FanEfficiency), ("REQUIRED MOTOR POWER", metadata?.FanHorsepower)
-            }
-            : new[]
-            {
-                ("FAN", metadata?.FanId), ("DESIGN AIRFLOW", metadata?.FanAirflow),
-                ("SYSTEM STATIC PRESSURE", metadata?.FanStaticPressure), ("FAN EFFICIENCY", metadata?.FanEfficiency),
-                ("REQUIRED MOTOR POWER", metadata?.FanHorsepower)
             };
         const double tileGap = 10, tileTop = 414, tileHeight = 46;
         var tileWidth = (728 - tileGap * (fanValues.Length - 1)) / fanValues.Length;
@@ -580,9 +577,8 @@ public static class DuctSystemPdf
                      .Select((value, index) => (value, index)))
             Text(builder, 112, 354 - index * 10, 8.2, line, bold: index == 0);
         TextColor(builder, 32, 334, 8.2, Fit(total, 150), ink, bold: true);
-        TextColor(builder, 32, 323, 7, Fit(airHandlingUnit
-            ? "ESP is the critical-path loss outside the unit. Total static = ESP + internal static (manufacturer's data); it sets the motor power."
-            : "System static pressure is the fan selection pressure. The critical-path total excludes fan positive static.", 170), muted);
+        TextColor(builder, 32, 323, 7, Fit(
+            "ESP is the critical-path loss outside the unit. Total static = ESP + internal static (entered); it sets the motor power.", 170), muted);
 
         // Lower area. Left: report contents (compact), duct pressure class and leakage (SMACNA), system summary donut.
         // Right: pressure drop along every path.
@@ -1162,6 +1158,36 @@ public static class DuctSystemPdf
     /// two columns on the right. Everything normally fits one sheet; anything that does not continues on a
     /// following sheet, so no value or equation is ever left out.
     /// </summary>
+    /// <summary>
+    /// The worksheet type size chosen for an item, so the two passes of one export (counting sheets, then drawing them)
+    /// search it once. Keyed by the item object; entries go when the export's items are collected.
+    /// </summary>
+    private static readonly ConditionalWeakTable<DuctSystemPdfReportItem, StrongBox<double>> ItemSheetFontCache = new();
+
+    /// <summary>
+    /// The largest worksheet type size, 6.8 pt down to 5.2 pt in 0.1 pt steps, at which every block fits one sheet;
+    /// 5.8 pt (continued on further sheets) when none does. A smaller type never needs more room, so the sizes are
+    /// searched by halving (at most 5 trial layouts instead of up to 17).
+    /// </summary>
+    private static double LargestFittingFont(IReadOnlyList<CalculationBlock> blocks, double calculationTop)
+    {
+        bool Fits(int step) => DrawCalculationBlocks(new StringBuilder(), blocks, 0, CalculationLeft, calculationTop,
+            CalculationWidth, ItemContentBottom, Math.Round(6.8 - step * .1, 2)) >= blocks.Count;
+        const int smallest = 16; // 5.2 pt
+        if (!Fits(smallest))
+            return 5.8;
+        int low = 0, high = smallest; // find the first step that fits
+        while (low < high)
+        {
+            var middle = (low + high) / 2;
+            if (Fits(middle))
+                high = middle;
+            else
+                low = middle + 1;
+        }
+        return Math.Round(6.8 - low * .1, 2);
+    }
+
     private static List<string> BuildItemSheets(string subtitle, string total, DuctSystemPdfMetadata? metadata,
         DuctSystemPdfReportItem item, EmbeddedImage? referenceImage, int firstPage, int pageCount)
     {
@@ -1185,12 +1211,12 @@ public static class DuctSystemPdf
             steps.Add(new DuctSystemPdfCalculationSection("ASSUMPTIONS", assumptionLines));
         var blocks = CalculationBlocks(steps);
 
-        // Left column, in review order: the QA/QC quick check (the values a reviewer checks first, in a filled band),
+        // Left column, in review order: the quick check (the values a reviewer checks first, in a filled band),
         // then the inputs, then the calculated outputs.
         var side = new List<SideRow>();
         if (item.QuickCheck is { Count: > 0 })
         {
-            side.Add(new SideRow(SideRowKind.CheckHeading, "QA/QC QUICK CHECK", string.Empty));
+            side.Add(new SideRow(SideRowKind.CheckHeading, "QUICK CHECK", string.Empty));
             side.AddRange(item.QuickCheck.Select(field => new SideRow(SideRowKind.Check, field.Label, field.Value)));
         }
         side.Add(new SideRow(SideRowKind.Heading, "INPUTS", string.Empty));
@@ -1201,16 +1227,10 @@ public static class DuctSystemPdf
         // Type size: the largest (6.8 pt down to 5.2 pt) at which the whole worksheet fits one sheet; a worksheet that
         // does not fit even at 5.2 pt continues on another sheet at 5.8 pt rather than shrink further.
         var calculationTop = ItemContentTop - 14;
-        var calculationFont = 5.8;
-        for (var candidate = 6.8; candidate >= 5.19; candidate = Math.Round(candidate - .1, 2))
-        {
-            if (DrawCalculationBlocks(new StringBuilder(), blocks, 0, CalculationLeft, calculationTop, CalculationWidth,
-                    ItemContentBottom, candidate) >= blocks.Count)
-            {
-                calculationFont = candidate;
-                break;
-            }
-        }
+        var calculationFont = ItemSheetFontCache.TryGetValue(item, out var cachedFont)
+            ? cachedFont.Value
+            : LargestFittingFont(blocks, calculationTop);
+        ItemSheetFontCache.AddOrUpdate(item, new StrongBox<double>(calculationFont));
         // Largest left-column line height (6.4 pt down to 5.0 pt) at which every row fits the sheet.
         var sideLine = 6.4;
         while (sideLine > 5.0 && SideRowsHeight(side, sideLine) > ItemContentTop - ItemContentBottom - 4)
@@ -1400,7 +1420,7 @@ public static class DuctSystemPdf
         builder.Append(FormattableString.Invariant($"{left:0.##} {boxBottom:0.##} {width:0.##} {boxHeight:0.##} re f\n"));
         builder.Append("0.70 0.80 0.92 RG 0.45 w ");
         builder.Append(FormattableString.Invariant($"{left:0.##} {boxTop:0.##} m {left + width:0.##} {boxTop:0.##} l S\n"));
-        TextColor(builder, left + 7, boxTop - 15, 6.6, "QA/QC QUICK CHECK", "0.035 0.345 0.733", bold: true);
+        TextColor(builder, left + 7, boxTop - 15, 6.6, "QUICK CHECK", "0.035 0.345 0.733", bold: true);
 
         const double headingWidth = 126;
         var fieldsLeft = left + headingWidth;
@@ -2204,8 +2224,9 @@ public static class DuctSystemPdf
         builder.Append($"{BrandBlue} rg 18 538 756 2.6 re f\n");
         builder.Append($"{BrandLight} rg 196 547 2 38 re f\n");
         var markWidth = DrawBrandMark(builder, 26, 545, 40);
+        // The brand lettering as vector outlines (exactly the brand board's letters), on the text baseline.
         builder.Append("1 1 1 rg ");
-        builder.Append(PdfFonts.Show("fan works", 30 + markWidth, 563, 19, PdfFonts.Face.Brand));
+        builder.Append(BrandWordmark.PdfFill(31 + markWidth, 562.5, 14.5));
         TextColor(builder, 31 + markWidth, 551, 5.6, "HVAC AIRSIDE DESIGN", BrandLight, bold: true);
         FittedText(builder, 210, 562, 428, 11, 7.4, sheetTitle, bold: true, white: true);
         if (metadata is { LogoPixelWidth: > 0, LogoPixelHeight: > 0 }

@@ -159,6 +159,7 @@ internal sealed class PressureProfileChart : Control
         if (_plot.Width < 40 || _plot.Height < 30)
             return;
 
+        DrawPressureSides(graphics, lineHeight);
         using var gridPen = new Pen(GridLine, 1f);
         using var axisPen = new Pen(Color.FromArgb(160, 176, 190), 1f);
         foreach (var value in yLabels)
@@ -254,6 +255,66 @@ internal sealed class PressureProfileChart : Control
                 : others == 1 ? "Path 2" : $"Paths 2 to {others + 1}");
     }
 
+    /// <summary>Shading for the negative (suction) and positive (discharge) static pressure sides of the fan.</summary>
+    internal static readonly Color SuctionShade = Color.FromArgb(229, 240, 252);
+    internal static readonly Color DischargeShade = Color.FromArgb(253, 242, 228);
+    private bool _showPressureSides = true;
+
+    /// <summary>
+    /// Shows the fan's negative (suction) and positive (discharge) static pressure sides: the plot is tinted blue
+    /// before the fan or air handling unit and amber after it, with a dashed line at the fan and labels. The fan's
+    /// position is taken from the isolated path, otherwise Path 1 (the critical path).
+    /// </summary>
+    internal bool ShowPressureSides
+    {
+        get => _showPressureSides;
+        set
+        {
+            if (_showPressureSides == value)
+                return;
+            _showPressureSides = value;
+            Invalidate();
+        }
+    }
+
+    /// <summary>The fan's component number (1-based) on the reference path, or null when not shown.</summary>
+    internal int? PressureSideFanComponent
+    {
+        get
+        {
+            if (!_showPressureSides || _profile is null || _profile.Series.Count == 0)
+                return null;
+            var reference = _isolated is int only && only < _profile.Series.Count
+                ? _profile.Series[only]
+                : _profile.Series.FirstOrDefault(series => series.IsCritical) ?? _profile.Series[0];
+            return reference.FanIndex >= 0 ? reference.FanIndex + 1 : null;
+        }
+    }
+
+    private void DrawPressureSides(Graphics graphics, int lineHeight)
+    {
+        if (PressureSideFanComponent is not int fanComponent)
+            return;
+        var fanX = X(fanComponent);
+        using (var suction = new SolidBrush(SuctionShade))
+            if (fanX > _plot.Left)
+                graphics.FillRectangle(suction, _plot.Left, _plot.Top, fanX - _plot.Left, _plot.Height);
+        using (var discharge = new SolidBrush(DischargeShade))
+            graphics.FillRectangle(discharge, fanX, _plot.Top, _plot.Right - fanX, _plot.Height);
+        using var fanLine = new Pen(Color.FromArgb(11, 31, 59), DpiScaling.Scale(1.4f)) { DashStyle = DashStyle.Dash };
+        graphics.DrawLine(fanLine, fanX, _plot.Top, fanX, _plot.Bottom);
+        var gap = DpiScaling.Scale(6);
+        var y = _plot.Top + DpiScaling.Scale(3);
+        const string positive = "Positive static (discharge) →";
+        const string negative = "← Negative static (suction)";
+        var positiveSize = TextRenderer.MeasureText(positive, Font);
+        var negativeSize = TextRenderer.MeasureText(negative, Font);
+        if (fanX + gap + positiveSize.Width <= _plot.Right)
+            TextRenderer.DrawText(graphics, positive, Font, new Point((int)fanX + gap, y), Color.FromArgb(150, 82, 0));
+        if (fanX - gap - negativeSize.Width >= _plot.Left)
+            TextRenderer.DrawText(graphics, negative, Font, new Point((int)fanX - gap - negativeSize.Width, y), Color.FromArgb(10, 88, 187));
+    }
+
     private int LegendEntry(Graphics graphics, int x, int y, Pen pen, string text)
     {
         var swatch = DpiScaling.Scale(18);
@@ -340,17 +401,13 @@ internal sealed class PressureProfileChart : Control
                 if (distance >= best - 0.5 || distance > DpiScaling.Scale(8))
                     continue;
                 best = distance;
-                var item = line.ItemIds is { } ids && index < ids.Count ? $" ({ids[index]})" : string.Empty;
-                var total = line.Values[^1];
-                var critical = _profile.Series.FirstOrDefault(x => x.IsCritical);
-                var versus = line.IsCritical || critical is null || critical.Values.Count == 0
-                    ? string.Empty
-                    : $" ({(critical.Values[^1] - total).ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel} below the critical path)";
+                // The component, its own drop and the running drop from the start (the path and its total are in
+                // the panel beside the graph).
+                var item = line.ItemIds is { } ids && index < ids.Count ? $": {ids[index]}" : string.Empty;
                 var drop = line.Values[index] - (index == 0 ? 0 : line.Values[index - 1]);
-                text = $"{line.Label}{(line.IsCritical ? " (critical)" : string.Empty)}: {line.Route}\n"
-                       + $"Component {index + 1}{item}: {drop.ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel} drop; "
-                       + $"{line.Values[index].ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel} from the start\n"
-                       + $"Path total: {total.ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel}{versus}";
+                text = $"Component {index + 1}{item}\n"
+                       + $"Drop: {drop.ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel}\n"
+                       + $"From the start: {line.Values[index].ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel}";
             }
         return text;
     }

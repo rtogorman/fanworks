@@ -87,7 +87,7 @@ The window edits this model and redraws from it; nothing is inferred from drawin
 | Logs | `%LOCALAPPDATA%\FanWorks\logs` | daily log and crash reports, 30-day retention |
 
 `DuctSystemStore.Save` writes to a temporary file, keeps the previous file as `.bak`, then replaces it, so an
-interrupted save cannot destroy the last good file. Files carry `SchemaVersion` (currently 18) and
+interrupted save cannot destroy the last good file. Files carry `SchemaVersion` (currently 19) and
 `DuctSystemStore.Load` upgrades older versions step by step; a file from a newer FanWorks is refused with an update
 message. Changing the saved format means: increment the version, add an upgrade step, add a round-trip check.
 
@@ -228,3 +228,21 @@ the first starts a secondary calculation drawn after the assumptions with a divi
 - **Main window title bar**: `WindowLook.HideTitleBarIconAndText` (uxtheme `SetWindowThemeAttribute`,
   WTNCA_NODRAWCAPTION | WTNCA_NODRAWICON) hides the small icon and caption; the window text is kept for the taskbar.
   The top-bar wordmark is `BrandWordmarkLabel`: glyph outlines scaled to the icon's height.
+
+## Wordmark, background report preview, static pressure template (v0.103)
+
+- **Wordmark** (`Core/BrandWordmark.cs`, `Core/Brand/wordmark.path`): the "fan works" letters as filled outlines
+  (M/L/C/Z path, even-odd), traced from the supplied lettering. `BrandWordmarkLabel` (app top bar) and the PDF sheet
+  header (`BrandWordmark.PdfFill`) draw the same outlines.
+- **Report preview** (`ReportPreview`): `DuctSystemScreen.PrepareReportPdf` reads the window and project on the UI
+  thread and returns the PDF writer, which runs on a background thread; pages are rendered there, visible ones first, and
+  handed back one at a time. `DuctSystemStore.Fingerprint` (SHA-256 of the saved form) lets reopening the tab skip an
+  unchanged rebuild. Zoom 50–300 %; a few sharp pages near the view are kept, the rest stay at 100 % resolution.
+- **Item sheet type size**: `LargestFittingFont` searches 6.8–5.2 pt by halving and caches the result per item for the
+  export's two passes.
+- **Static pressure**: fans and AHUs share one template. `FanStaticPressurePa` = ESP (set by Auto-size; not typed in),
+  `FanInternalStaticPressurePa` = ISP (input, 0 for a bare fan), `FanTotalStaticPressurePa` = ESP + ISP (motor power).
+  `SystemPathProfile.SuctionLossPa` / `DischargeLossPa` split a path's loss at the fan (`FanStepIndex`); the Analysis
+  tab shows them as negative and positive ESP, and the path graph shades the two sides (`ShowPressureSides`).
+- **VAV ranges** (schema 19): `AnalysisExpectations.VavInletPressurePa` and `VavPressureDropPa`; `AnalysisRangeCheck`
+  checks VAV boxes (codes `VavPerformanceCatalog.WithReheatCode` / `WithoutReheatCode`) against them.

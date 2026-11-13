@@ -1,9 +1,10 @@
 using System.Drawing.Drawing2D;
+using DuctSizer.Core;
 
 namespace DuctSizer.WinForms;
 
 /// <summary>
-/// The "fan works" wordmark in the top bar, drawn as glyph outlines in the brand typeface so its letters can be as
+/// The "fan works" wordmark in the top bar, drawn from the brand board's own letter outlines so its letters can be as
 /// tall as the application icon beside it (the ascenders of "f" and "k" to the baseline fill
 /// <see cref="GlyphHeight"/>) without the line spacing of a large font making the top bar taller.
 /// </summary>
@@ -56,31 +57,39 @@ internal sealed class BrandWordmarkLabel : Control
         Invalidate();
     }
 
-    /// <summary>The text outline scaled so its letters are <paramref name="glyphHeight"/> pixels tall.</summary>
-    private (RectangleF Bounds, GraphicsPath Path) Outline(float glyphHeight)
+    /// <summary>
+    /// The wordmark outline (<see cref="BrandWordmark"/>: the brand board's own letters) scaled so its letters are
+    /// <paramref name="glyphHeight"/> pixels tall, with its bounds.
+    /// </summary>
+    private static (RectangleF Bounds, GraphicsPath Path) Outline(float glyphHeight)
     {
-        var path = new GraphicsPath();
-        var family = BrandFonts.Family;
-        var ownsFamily = family is null;
-        family ??= new FontFamily("Segoe UI");
-        try
+        var path = new GraphicsPath(FillMode.Alternate);
+        var scale = (float)(glyphHeight / BrandWordmark.Height);
+        PointF P(double x, double y) => new((float)x * scale, (float)y * scale);
+        var current = PointF.Empty;
+        foreach (var (op, args) in BrandWordmark.Commands)
         {
-            var style = ownsFamily ? FontStyle.Bold : FontStyle.Regular;
-            path.AddString(string.IsNullOrEmpty(Text) ? " " : Text, family, (int)style, 100F, PointF.Empty,
-                StringFormat.GenericTypographic);
+            switch (op)
+            {
+                case 'M':
+                    path.StartFigure();
+                    current = P(args[0], args[1]);
+                    break;
+                case 'L':
+                    var next = P(args[0], args[1]);
+                    path.AddLine(current, next);
+                    current = next;
+                    break;
+                case 'C':
+                    var end = P(args[4], args[5]);
+                    path.AddBezier(current, P(args[0], args[1]), P(args[2], args[3]), end);
+                    current = end;
+                    break;
+                case 'Z':
+                    path.CloseFigure();
+                    break;
+            }
         }
-        finally
-        {
-            if (ownsFamily)
-                family.Dispose();
-        }
-        var unscaled = path.GetBounds();
-        if (unscaled.Height <= 0)
-            return (RectangleF.Empty, path);
-        var scale = glyphHeight / unscaled.Height;
-        using var resize = new Matrix();
-        resize.Scale(scale, scale);
-        path.Transform(resize);
-        return (path.GetBounds(), path);
+        return (new RectangleF(0, 0, (float)BrandWordmark.Width * scale, glyphHeight), path);
     }
 }

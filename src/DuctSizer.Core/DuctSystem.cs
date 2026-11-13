@@ -78,7 +78,7 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 18;
+    public const int CurrentSchemaVersion = 19;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -323,10 +323,10 @@ public sealed class LayoutFanData
     public bool IsAirHandlingUnit { get; set; }
 
     /// <summary>
-    /// Air handling unit only: internal static pressure (Pa), 0 or more. The pressure drop across the unit's own
-    /// filters, coils and other internal components, as an input from the manufacturer's data (schema 18).
-    /// It is not part of the duct system pressure; it is added to the external static pressure to give the fan's
-    /// total static pressure.
+    /// Internal static pressure (Pa), 0 or more (schema 18; fans as well as air handling units from v0.103): the
+    /// pressure drop across the unit's own filters, coils and other internal components, as an input from the
+    /// manufacturer's data. Normally 0 for a bare fan. It is not part of the duct system pressure; it is added to the
+    /// external static pressure to give the fan's total static pressure.
     /// </summary>
     public double InternalStaticPressurePa { get; set; }
 }
@@ -431,16 +431,16 @@ public sealed class SavedLayoutNode
     [JsonIgnore] public double FanEfficiencyPercent { get => _fan.EfficiencyPercent; set => _fan.EfficiencyPercent = value; }
     /// <summary>True for an air handling unit (a fan component placed with the AHU tool). See <see cref="LayoutFanData.IsAirHandlingUnit"/>.</summary>
     [JsonIgnore] public bool IsAirHandlingUnit { get => Type == LayoutNodeType.Fan && _fan.IsAirHandlingUnit; set => _fan.IsAirHandlingUnit = value; }
-    /// <summary>Air handling unit internal static pressure (Pa); see <see cref="LayoutFanData.InternalStaticPressurePa"/>.</summary>
-    [JsonIgnore] public double AhuInternalStaticPressurePa { get => _fan.InternalStaticPressurePa; set => _fan.InternalStaticPressurePa = value; }
+    /// <summary>Fan or air handling unit internal static pressure (Pa); see <see cref="LayoutFanData.InternalStaticPressurePa"/>.</summary>
+    [JsonIgnore] public double FanInternalStaticPressurePa { get => _fan.InternalStaticPressurePa; set => _fan.InternalStaticPressurePa = value; }
 
     /// <summary>
     /// Total static pressure the fan must develop (Pa): the static pressure it adds to the duct system
-    /// (<see cref="FanStaticPressurePa"/>; the external static pressure of an air handling unit) plus, for an air
-    /// handling unit, its internal static pressure. Brake horsepower is based on this value.
+    /// (<see cref="FanStaticPressurePa"/>, the external static pressure) plus its internal static pressure (0 unless
+    /// entered; for a fan or an air handling unit alike). Brake horsepower is based on this value.
     /// </summary>
     [JsonIgnore]
-    public double FanTotalStaticPressurePa => FanStaticPressurePa + (IsAirHandlingUnit ? AhuInternalStaticPressurePa : 0.0);
+    public double FanTotalStaticPressurePa => FanStaticPressurePa + (Type == LayoutNodeType.Fan ? FanInternalStaticPressurePa : 0.0);
 
     /// <summary>"Air Handling Unit" or "System Fan" for fans; empty for other components.</summary>
     [JsonIgnore]
@@ -746,6 +746,17 @@ public static class DuctSystemStore
         Converters = { new JsonStringEnumConverter() }
     };
 
+    /// <summary>
+    /// A fingerprint of the whole document (SHA-256 of its saved form): equal fingerprints mean the saved project,
+    /// including calculated values, is the same. Used to skip rebuilding a report preview that is already current.
+    /// </summary>
+    public static string Fingerprint(DuctSystemDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+    }
+
     public static DuctSystemDocument Load(string path)
     {
         if (!File.Exists(path))
@@ -910,6 +921,10 @@ public static class DuctSystemStore
         // them is a plain fan with no internal static pressure, exactly as before.
         if (document.SchemaVersion == 17)
             document.SchemaVersion = 18;
+        // Version 19: VAV inlet static pressure and VAV pressure drop expected ranges (empty when absent); fans may
+        // carry an internal static pressure (0 when absent, as before).
+        if (document.SchemaVersion == 18)
+            document.SchemaVersion = 19;
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."
@@ -998,7 +1013,7 @@ public static class DuctSystemStore
                                         && node.FanEfficiencyPercent > 0.0
                 ? Math.Clamp(node.FanEfficiencyPercent, 0.1, 100.0)
                 : 70.0;
-            node.AhuInternalStaticPressurePa = Math.Max(0.0, FiniteOrZero(node.AhuInternalStaticPressurePa));
+            node.FanInternalStaticPressurePa = Math.Max(0.0, FiniteOrZero(node.FanInternalStaticPressurePa));
             node.VelocityMPerS = FiniteOrZero(node.VelocityMPerS);
             node.DeltaXM = FiniteOrZero(node.DeltaXM);
             node.DeltaYM = FiniteOrZero(node.DeltaYM);
