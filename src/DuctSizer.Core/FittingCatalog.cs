@@ -100,8 +100,15 @@ public sealed record FittingCalculationResult(
     DuctGeometry? ReferenceGeometry = null,
     JunctionFlowData? Junction = null,
     IReadOnlyList<string>? RangeWarnings = null,
-    IReadOnlyList<TableLookupStep>? Lookups = null)
+    IReadOnlyList<TableLookupStep>? Lookups = null,
+    IReadOnlyList<CoefficientFactor>? Factors = null)
 {
+    /// <summary>
+    /// When the coefficient is a product of named factors (for example C = Kθ × C'o for a smooth-radius elbow), the
+    /// factors in calculation order; their product is <see cref="Coefficient"/>. Empty otherwise.
+    /// </summary>
+    public IReadOnlyList<CoefficientFactor> CoefficientFactors => Factors ?? Array.Empty<CoefficientFactor>();
+
     /// <summary>
     /// The table look-ups behind the coefficient, in calculation order: each says whether the value was a published
     /// point, an interpolation (with the bracketing points), held at a table edge, or the conservative choice of two
@@ -211,12 +218,20 @@ public static class FittingCalculator
         double coefficient;
         IReadOnlyList<string> rangeWarnings;
         IReadOnlyList<TableLookupStep> lookups;
+        IReadOnlyList<CoefficientFactor> factors;
         using (var rangeLog = TableRangeLog.Begin())
         {
             coefficient = definition.CalculateCoefficient(inputs);
             rangeWarnings = rangeLog.Describe(definition, inputs);
             lookups = rangeLog.Lookups(definition, inputs);
+            factors = rangeLog.Factors;
         }
+        // The factors are shown as C = K1 × K2 × ...; only when their product is the coefficient (a fitting that
+        // combines its factors differently shows its look-ups without a combining equation).
+        if (factors.Count < 2
+            || Math.Abs(factors.Aggregate(1.0, (product, factor) => product * factor.Value) - coefficient)
+               > 1e-9 * Math.Max(1.0, Math.Abs(coefficient)))
+            factors = Array.Empty<CoefficientFactor>();
         var velocityPressure = air.DensityKgPerM3 * referenceVelocityMPerS * referenceVelocityMPerS / 2.0;
         return new FittingCalculationResult(
             definition,
@@ -227,7 +242,8 @@ public static class FittingCalculator
             velocityPressure,
             coefficient * velocityPressure,
             RangeWarnings: rangeWarnings,
-            Lookups: lookups);
+            Lookups: lookups,
+            Factors: factors);
     }
 }
 
@@ -478,11 +494,15 @@ public static class FittingCatalog
             v => I1(A2_12_Dd, A2_12, v["dd"])));
         Replace(items, Auto("3-5", "Elbows", "Elbow, without vanes, rectangular", "upstream/reference duct", "ASHRAE supplemental fitting 3-5; Co = K-angle × K-Re × C'o.",
             new[] { Axis("rw", "Centerline radius / width (r/W)", "ratio", 1, .5, 2), Axis("hw", "Aspect ratio H/W", "ratio", 1, .25, 8), Axis("angle", "Elbow angle", "degrees", 90, 0, 180), Axis("re", "Reynolds number", "", 200_000, 10_000, 2_000_000) },
-            v => I2(new[] { .5,.75,1d,1.5,2 }, new[] { .25,.5,.75,1d,1.5,2,3,4,5,6,8 }, A7F, v["rw"], v["hw"])
-                 * I1(AngleAxis, AngleFactor, v["angle"]) * RectSmoothElbowRe(v["rw"], v["re"])));
+            v => AngleFactorK(v["angle"])
+                 * Named(ReynoldsFactor, "Reynolds-number correction factor, from the ASHRAE table by r/W and Re.", () => RectSmoothElbowRe(v["rw"], v["re"]))
+                 * Named(BaseCoefficient, "Base loss coefficient of the 90° elbow, from the ASHRAE table by r/W and H/W.",
+                     () => I2(new[] { .5,.75,1d,1.5,2 }, new[] { .25,.5,.75,1d,1.5,2,3,4,5,6,8 }, A7F, v["rw"], v["hw"]))));
         Replace(items, Auto("3-6", "Elbows", "Elbow, mitered, rectangular", "upstream/reference duct", "ASHRAE supplemental fitting 3-6; Co = K-Re × C'o.",
             new[] { Axis("angle", "Elbow angle", "degrees", 90, 20, 90), Axis("hw", "Aspect ratio H/W", "ratio", 1, .25, 8), Axis("re", "Reynolds number", "", 140_000, 10_000, 2_000_000) },
-            v => I2(A7D_Angles, A7D_Hw, A7D, v["angle"], v["hw"]) * CommonReFactor(v["re"])));
+            v => Named(ReynoldsFactor, "Reynolds-number correction factor, from the ASHRAE table by Re.", () => CommonReFactor(v["re"]))
+                 * Named(BaseCoefficient, "Base loss coefficient of the mitered elbow, from the ASHRAE table by elbow angle θ and H/W.",
+                     () => I2(A7D_Angles, A7D_Hw, A7D, v["angle"], v["hw"]))));
         Replace(items, Auto("3-10", "Elbows", "Elbow, variable inlet/outlet areas, rectangular", "upstream/reference duct", "ASHRAE supplemental fitting 3-10; Co = K-Re × C'o.",
             new[] { Axis("hw", "Inlet aspect ratio Ho/Wo", "ratio", 1, .25, 100), Axis("w1w", "Width ratio W1/Wo", "ratio", 1.2, .6, 2), Axis("re", "Reynolds number", "", 140_000, 10_000, 2_000_000) },
             v => I2(new[] { .25,1d,4,100 }, new[] { .6,.8,1.2,1.4,1.6,2d }, A7E, v["hw"], v["w1w"]) * CommonReFactor(v["re"])));
@@ -648,7 +668,8 @@ public static class FittingCatalog
             {
                 Axis("rd", "Centerline radius / diameter (R/D)", "ratio", 1.5, 0.5, 2.5),
                 Axis("angle", "Elbow angle", "degrees", 90, 0, 180)
-            }, v => I1(RoundElbowRd, RoundElbowC, v["rd"]) * I1(AngleAxis, AngleFactor, v["angle"])));
+            }, v => AngleFactorK(v["angle"]) * Named(BaseCoefficient, "Base loss coefficient of the 90° elbow, from the ASHRAE table by R/D.",
+                () => I1(RoundElbowRd, RoundElbowC, v["rd"]))));
         items.Add(Auto("A7-B", "Elbows", "Elbow, round, 3 to 5 piece — 90°", "upstream", "Table A-7B. Piece count is limited to 3, 4, or 5.",
             new[] { Axis("pieces", "Number of pieces", "", 5, 3, 5), Axis("rd", "Centerline radius / diameter (R/D)", "ratio", 1.5, .5, 2) },
             v => RoundSegmentedElbow(v["pieces"], v["rd"])));
@@ -658,9 +679,11 @@ public static class FittingCatalog
             {
                 Axis("angle", "Elbow angle", "degrees", 90, 20, 90),
                 Axis("re", "Reynolds number", "", 140_000, 10_000, 2_000_000)
-            }, v => I1(new[] { 20d, 30, 45, 60, 75, 90 }, new[] { .08, .16, .34, .55, .81, 1.2 }, v["angle"])
-                    * I1(new[] { 10_000d, 20_000, 30_000, 40_000, 60_000, 80_000, 100_000, 140_000, 2_000_000 },
-                        new[] { 1.40, 1.26, 1.19, 1.14, 1.09, 1.06, 1.04, 1.0, 1.0 }, v["re"])));
+            }, v => Named(ReynoldsFactor, "Reynolds-number correction factor, from the ASHRAE table by Re.",
+                        () => I1(new[] { 10_000d, 20_000, 30_000, 40_000, 60_000, 80_000, 100_000, 140_000, 2_000_000 },
+                            new[] { 1.40, 1.26, 1.19, 1.14, 1.09, 1.06, 1.04, 1.0, 1.0 }, v["re"]))
+                    * Named(BaseCoefficient, "Base loss coefficient of the mitered elbow, from the ASHRAE table by elbow angle θ.",
+                        () => I1(new[] { 20d, 30, 45, 60, 75, 90 }, new[] { .08, .16, .34, .55, .81, 1.2 }, v["angle"]))));
         items.Add(Auto("A7-D", "Elbows", "Elbow, rectangular, mitered", "upstream",
             "Table A-7D; bilinear interpolation by angle and H/W.",
             new[] { Axis("angle", "Elbow angle", "degrees", 90, 20, 90), Axis("hw", "Aspect ratio H/W", "ratio", 1, .25, 8) },
@@ -672,8 +695,9 @@ public static class FittingCatalog
         items.Add(Auto("A7-F", "Elbows", "Elbow, rectangular, smooth radius without vanes", "upstream",
             "Table A-7F base coefficient. For non-90° fittings apply A7-A's angle factor; Reynolds correction is not applied below its published range.",
             new[] { Axis("rw", "Centerline radius / width (R/W)", "ratio", 1.0, .5, 2), Axis("hw", "Aspect ratio H/W", "ratio", 1, .25, 8), Axis("angle", "Elbow angle", "degrees", 90, 0, 180) },
-            v => I2(new[] { .5, .75, 1d, 1.5, 2 }, new[] { .25, .5, .75, 1d, 1.5, 2, 3, 4, 5, 6, 8 }, A7F, v["rw"], v["hw"])
-                 * I1(AngleAxis, AngleFactor, v["angle"])));
+            v => AngleFactorK(v["angle"])
+                 * Named(BaseCoefficient, "Base loss coefficient of the 90° elbow, from the ASHRAE table by R/W and H/W.",
+                     () => I2(new[] { .5, .75, 1d, 1.5, 2 }, new[] { .25, .5, .75, 1d, 1.5, 2, 3, 4, 5, 6, 8 }, A7F, v["rw"], v["hw"]))));
         items.Add(Manual("A7-G", "Elbows", "Elbow, rectangular, smooth radius with splitter vanes", "upstream", "Table A-7G; select vane count, R/W, curve ratio, and H/W."));
         items.Add(Manual("A7-H", "Elbows", "Elbow, rectangular, mitered with single-thickness turning vanes", "upstream", "Table A-7H."));
         items.Add(Manual("A7-I", "Elbows", "Elbow, rectangular, mitered with double-thickness turning vanes", "upstream", "Table A-7I."));
@@ -1279,6 +1303,21 @@ public static class FittingCatalog
         return result;
     }
 
+    /// <summary>Worksheet symbol of an elbow's base (90°) loss coefficient, C'o.</summary>
+    internal const string BaseCoefficient = "C'_{o}";
+    /// <summary>Worksheet symbol of the elbow angle correction factor, Kθ.</summary>
+    internal const string AngleCorrection = "K_{\\theta}";
+    /// <summary>Worksheet symbol of the Reynolds-number correction factor, K_Re.</summary>
+    internal const string ReynoldsFactor = "K_{Re}";
+
+    private static double Named(string symbol, string meaning, Func<double> evaluate) =>
+        TableRangeLog.Named(symbol, meaning, evaluate);
+
+    /// <summary>Elbow angle correction factor Kθ (1.0 at 90°), from the ASHRAE table by elbow angle.</summary>
+    private static double AngleFactorK(double angleDegrees) =>
+        Named(AngleCorrection, "Angle correction factor (1.0 at 90°), from the ASHRAE table by elbow angle θ.",
+            () => I1(AngleAxis, AngleFactor, angleDegrees));
+
     private static double CommonReFactor(double reynoldsNumber) =>
         I1(CommonReAxis, CommonReValues, reynoldsNumber);
 
@@ -1345,8 +1384,9 @@ public static class FittingCatalog
         };
         if (radiusRatio > maximum)
             throw new ArgumentOutOfRangeException("rw", $"The published table for {count} splitter vane(s) ends at R/W = {maximum:g}.");
-        return I2(axis, A3_7_Aspect, table, radiusRatio, values["hw"])
-               * I1(AngleAxis, AngleFactor, values["angle"]);
+        return AngleFactorK(values["angle"])
+               * Named(BaseCoefficient, $"Base loss coefficient of the 90° elbow with {count} splitter vane(s), from the ASHRAE table by R/W and H/W.",
+                   () => I2(axis, A3_7_Aspect, table, radiusRatio, values["hw"]));
     }
 
     private static double FanOutletElbow(double[,,] table, IReadOnlyDictionary<string, double> values) =>

@@ -252,7 +252,14 @@ public sealed record DuctSystemPdfMetadata(
     string FanHorsepower = "",
     string CriticalPath = "",
     DuctSystemPdfPressureProfile? PressureProfile = null,
-    DuctSystemPdfLeakageSummary? Leakage = null);
+    DuctSystemPdfLeakageSummary? Leakage = null,
+    bool FanIsAirHandlingUnit = false,
+    string FanInternalStaticPressure = "",
+    string FanTotalStaticPressure = "")
+{
+    // For an air handling unit FanStaticPressure is its external static pressure (ESP); FanTotalStaticPressure is
+    // ESP plus FanInternalStaticPressure and is the pressure the motor power is based on.
+}
 
 /// <summary>
 /// The system's SMACNA duct pressure class, seal class, leakage class and allowable leakage, ready to show (Analysis
@@ -298,8 +305,10 @@ public sealed record DuctSystemPdfPressureProfile(
     string Comparison = "");
 
 /// <summary>One route: Values[i] is the running loss after component i + 1 along the route.</summary>
+/// <param name="Label">The path's name ("Path 1" is the critical path).</param>
+/// <param name="Route">The components it runs between ("FAN-001 → L-010").</param>
 public sealed record DuctSystemPdfProfileSeries(string Label, IReadOnlyList<double> Values, bool IsCritical,
-    IReadOnlyList<string>? ItemIds = null);
+    IReadOnlyList<string>? ItemIds = null, string Route = "");
 
 public sealed record DuctSystemPdfSchematic(
     string Title,
@@ -534,15 +543,26 @@ public static class DuctSystemPdf
             FittedText(builder, x, 457, 130, 9.5, 6.5, info[index].Item2, color: ink);
         }
 
-        // Fan selection: the numbers a reviewer looks for first.
-        TextColor(builder, 32, 428, 9.5, "FAN SELECTION", ink, bold: true);
+        // Fan selection: the numbers a reviewer looks for first. An air handling unit shows its external static
+        // pressure (the duct system), its internal static pressure (filters, coils; an input) and the total.
+        var airHandlingUnit = metadata?.FanIsAirHandlingUnit == true;
+        TextColor(builder, 32, 428, 9.5, airHandlingUnit ? "AIR HANDLING UNIT SELECTION" : "FAN SELECTION", ink, bold: true);
         builder.Append("0.055 0.435 0.902 rg 32 423 46 1.6 re f\n");
-        var fanValues = new[]
-        {
-            ("FAN", metadata?.FanId), ("DESIGN AIRFLOW", metadata?.FanAirflow),
-            ("SYSTEM STATIC PRESSURE", metadata?.FanStaticPressure), ("FAN EFFICIENCY", metadata?.FanEfficiency),
-            ("REQUIRED MOTOR POWER", metadata?.FanHorsepower)
-        };
+        var fanValues = airHandlingUnit
+            ? new[]
+            {
+                ("AIR HANDLING UNIT", metadata?.FanId), ("DESIGN AIRFLOW", metadata?.FanAirflow),
+                ("EXTERNAL STATIC (ESP)", metadata?.FanStaticPressure),
+                ("INTERNAL STATIC", metadata?.FanInternalStaticPressure),
+                ("TOTAL STATIC PRESSURE", metadata?.FanTotalStaticPressure),
+                ("FAN EFFICIENCY", metadata?.FanEfficiency), ("REQUIRED MOTOR POWER", metadata?.FanHorsepower)
+            }
+            : new[]
+            {
+                ("FAN", metadata?.FanId), ("DESIGN AIRFLOW", metadata?.FanAirflow),
+                ("SYSTEM STATIC PRESSURE", metadata?.FanStaticPressure), ("FAN EFFICIENCY", metadata?.FanEfficiency),
+                ("REQUIRED MOTOR POWER", metadata?.FanHorsepower)
+            };
         const double tileGap = 10, tileTop = 414, tileHeight = 46;
         var tileWidth = (728 - tileGap * (fanValues.Length - 1)) / fanValues.Length;
         for (var index = 0; index < fanValues.Length; index++)
@@ -551,7 +571,7 @@ public static class DuctSystemPdf
             builder.Append("1 1 1 rg 0.76 0.84 0.93 RG 0.7 w ");
             RoundedRectangle(builder, x, tileTop - tileHeight, tileWidth, tileHeight, 6, fillAndStroke: true);
             builder.Append(FormattableString.Invariant($"0.067 0.176 0.329 rg {x + 6:0.##} {tileTop - 3:0.##} {tileWidth - 12:0.##} 2 re f\n"));
-            TextColor(builder, x + 10, tileTop - 15, 6.2, fanValues[index].Item1, accent, bold: true);
+            FittedText(builder, x + 10, tileTop - 15, tileWidth - 16, 6.2, 5.0, fanValues[index].Item1, bold: true, color: accent);
             FittedText(builder, x + 10, tileTop - 35, tileWidth - 20, 13, 8, Or(fanValues[index].Item2, "Not available"),
                 bold: true, color: ink);
         }
@@ -560,8 +580,9 @@ public static class DuctSystemPdf
                      .Select((value, index) => (value, index)))
             Text(builder, 112, 354 - index * 10, 8.2, line, bold: index == 0);
         TextColor(builder, 32, 334, 8.2, Fit(total, 150), ink, bold: true);
-        TextColor(builder, 32, 323, 7, Fit(
-            "System static pressure is the fan selection pressure. The critical-path total excludes fan positive static.", 160), muted);
+        TextColor(builder, 32, 323, 7, Fit(airHandlingUnit
+            ? "ESP is the critical-path loss outside the unit. Total static = ESP + internal static (manufacturer's data); it sets the motor power."
+            : "System static pressure is the fan selection pressure. The critical-path total excludes fan positive static.", 170), muted);
 
         // Lower area. Left: report contents (compact), duct pressure class and leakage (SMACNA), system summary donut.
         // Right: pressure drop along every path.
@@ -908,7 +929,7 @@ public static class DuctSystemPdf
         if (critical is not null)
         {
             builder.Append(FormattableString.Invariant($"0.84 0.50 0.00 RG 1.8 w {legendX:0.##} {legendY + 2:0.##} m {legendX + 14:0.##} {legendY + 2:0.##} l S\n"));
-            var text = Fit($"Critical path ({critical.Label})", 44);
+            var text = Fit(string.IsNullOrEmpty(critical.Route) ? $"{critical.Label} - critical" : $"{critical.Label} - critical ({critical.Route})", 52);
             TextColor(builder, legendX + 18, legendY, 6.4, text, ink);
             legendX += 26 + EstimatedPdfWidth(PdfText(text), 6.4, false);
         }
@@ -916,7 +937,7 @@ public static class DuctSystemPdf
         if (others > 0)
         {
             builder.Append(FormattableString.Invariant($"0.494 0.780 1 RG 0.9 w {legendX:0.##} {legendY + 2:0.##} m {legendX + 14:0.##} {legendY + 2:0.##} l S\n"));
-            TextColor(builder, legendX + 18, legendY, 6.4, others == 1 ? "Other path" : $"Other paths ({others})", ink);
+            TextColor(builder, legendX + 18, legendY, 6.4, others == 1 ? "Path 2" : $"Paths 2 to {others + 1}", ink);
         }
     }
 
@@ -1125,7 +1146,7 @@ public static class DuctSystemPdf
     /// <summary>A line of the item sheet's left column: a heading, a labelled value, or a note.</summary>
     private sealed record SideRow(SideRowKind Kind, string Label, string Value);
 
-    private enum SideRowKind { Heading, Field, Check, Note }
+    private enum SideRowKind { Heading, Field, Check, Note, CheckHeading }
 
     private const double ItemContentTop = 492, ItemContentBottom = 64;
 
@@ -1164,15 +1185,18 @@ public static class DuctSystemPdf
             steps.Add(new DuctSystemPdfCalculationSection("ASSUMPTIONS", assumptionLines));
         var blocks = CalculationBlocks(steps);
 
-        var side = new List<SideRow> { new(SideRowKind.Heading, "INPUTS", string.Empty) };
+        // Left column, in review order: the QA/QC quick check (the values a reviewer checks first, in a filled band),
+        // then the inputs, then the calculated outputs.
+        var side = new List<SideRow>();
+        if (item.QuickCheck is { Count: > 0 })
+        {
+            side.Add(new SideRow(SideRowKind.CheckHeading, "QA/QC QUICK CHECK", string.Empty));
+            side.AddRange(item.QuickCheck.Select(field => new SideRow(SideRowKind.Check, field.Label, field.Value)));
+        }
+        side.Add(new SideRow(SideRowKind.Heading, "INPUTS", string.Empty));
         side.AddRange(item.Inputs.Select(field => new SideRow(SideRowKind.Field, field.Label, field.Value)));
         side.Add(new SideRow(SideRowKind.Heading, "CALCULATED OUTPUTS", string.Empty));
         side.AddRange(item.Outputs.Select(field => new SideRow(SideRowKind.Field, field.Label, field.Value)));
-        if (item.QuickCheck is { Count: > 0 })
-        {
-            side.Add(new SideRow(SideRowKind.Heading, "QA/QC QUICK CHECK", string.Empty));
-            side.AddRange(item.QuickCheck.Select(field => new SideRow(SideRowKind.Check, field.Label, field.Value)));
-        }
 
         // Type size: the largest (6.8 pt down to 5.2 pt) at which the whole worksheet fits one sheet; a worksheet that
         // does not fit even at 5.2 pt continues on another sheet at 5.8 pt rather than shrink further.
@@ -1276,6 +1300,8 @@ public static class DuctSystemPdf
 
     private static double SideRowHeight(SideRow row, double lineHeight)
     {
+        if (row.Kind == SideRowKind.CheckHeading)
+            return 16;
         if (row.Kind == SideRowKind.Heading)
             return 14;
         var (label, value) = SideRowLines(row);
@@ -1298,12 +1324,19 @@ public static class DuctSystemPdf
         {
             var row = rows[index];
             var height = SideRowHeight(row, lineHeight);
-            var keepWithNext = row.Kind == SideRowKind.Heading && index + 1 < rows.Count
+            var keepWithNext = row.Kind is SideRowKind.Heading or SideRowKind.CheckHeading && index + 1 < rows.Count
                 ? SideRowHeight(rows[index + 1], lineHeight) : 0;
             if (y - height - keepWithNext < ItemContentBottom && y < ItemContentTop)
                 break;
             switch (row.Kind)
             {
+                case SideRowKind.CheckHeading:
+                    // A filled navy band with white text: the first thing on the sheet a reviewer reads.
+                    builder.Append("0.043 0.122 0.231 rg ");
+                    RoundedRectangle(builder, SideLeft, y - 14, SideWidth, 13, 2.5, fillAndStroke: false);
+                    TextColor(builder, SideLeft + 5, y - 10, 7.4, row.Label, "1 1 1", bold: true);
+                    shade = false;
+                    break;
                 case SideRowKind.Heading:
                     TextColor(builder, SideLeft, y - 10, 7.2, row.Label, "0.035 0.345 0.733", bold: true);
                     builder.Append("0.035 0.345 0.733 RG 0.6 w ");
@@ -1322,8 +1355,14 @@ public static class DuctSystemPdf
                     var (label, value) = SideRowLines(row);
                     if (shade || row.Kind == SideRowKind.Check)
                     {
-                        builder.Append(row.Kind == SideRowKind.Check ? "0.93 0.965 0.985 rg " : "0.965 0.978 0.988 rg ");
+                        builder.Append(row.Kind == SideRowKind.Check ? "0.886 0.937 0.988 rg " : "0.965 0.978 0.988 rg ");
                         builder.Append(FormattableString.Invariant($"{SideLeft:0.##} {y - height:0.##} {SideWidth:0.##} {height:0.##} re f\n"));
+                        if (row.Kind == SideRowKind.Check)
+                        {
+                            // Accent bar down the check rows (brand primary blue).
+                            builder.Append("0.055 0.435 0.902 rg ");
+                            builder.Append(FormattableString.Invariant($"{SideLeft:0.##} {y - height:0.##} 2 {height:0.##} re f\n"));
+                        }
                     }
                     shade = !shade;
                     var labelSize = Math.Clamp(lineHeight - 1.4, 4.6, 5.1);
@@ -2806,6 +2845,27 @@ public static class DuctSystemPdf
             builder.Append(FormattableString.Invariant($"{centerX - 5:0.##} {centerY + 5:0.##} m {centerX - 5:0.##} {centerY - 5:0.##} l "));
             builder.Append(FormattableString.Invariant($"{centerX - 5:0.##} {centerY - 5:0.##} m {centerX:0.##} {centerY - 5:0.##} l "));
             builder.Append(FormattableString.Invariant($"{centerX:0.##} {centerY - 5:0.##} m {centerX + 5:0.##} {centerY:0.##} l S\n"));
+        }
+        else if (componentType.Equals("Fan", StringComparison.OrdinalIgnoreCase)
+                 && fittingGroup.Equals(LayoutFanData.AirHandlingUnitTool, StringComparison.OrdinalIgnoreCase))
+        {
+            // Air handling unit, side view: cabinet, filter (inlet), fan, coil (outlet).
+            builder.Append(FormattableString.Invariant($"{fill} rg {color} RG {centerX - 14:0.##} {centerY - 9:0.##} 28 18 re B\n"));
+            builder.Append(FormattableString.Invariant($"0.6 w 1 1 1 rg {centerX - 11:0.##} {centerY - 6:0.##} 3.5 12 re B "));
+            builder.Append(FormattableString.Invariant($"{centerX - 11:0.##} {centerY - 2:0.##} m {centerX - 7.5:0.##} {centerY + 2:0.##} l "));
+            builder.Append(FormattableString.Invariant($"{centerX - 11:0.##} {centerY - 6:0.##} m {centerX - 7.5:0.##} {centerY - 2:0.##} l "));
+            builder.Append(FormattableString.Invariant($"{centerX - 11:0.##} {centerY + 2:0.##} m {centerX - 7.5:0.##} {centerY + 6:0.##} l S\n"));
+            builder.Append(FormattableString.Invariant($"0.494 0.78 1 rg {centerX + 7.5:0.##} {centerY - 6:0.##} 3.5 12 re B "));
+            builder.Append(FormattableString.Invariant($"{centerX + 8.4:0.##} {centerY + 4.5:0.##} m {centerX + 10.1:0.##} {centerY + 1.5:0.##} l {centerX + 8.4:0.##} {centerY - 1.5:0.##} l {centerX + 10.1:0.##} {centerY - 4.5:0.##} l S\n"));
+            // Fan: a wheel housing (circle) with its outlet stub.
+            const double k = 0.5523;
+            const double r = 5.2;
+            builder.Append(FormattableString.Invariant($"1.1 w {fill} rg {centerX + r:0.##} {centerY:0.##} m "));
+            builder.Append(FormattableString.Invariant($"{centerX + r:0.##} {centerY + r * k:0.##} {centerX + r * k:0.##} {centerY + r:0.##} {centerX:0.##} {centerY + r:0.##} c "));
+            builder.Append(FormattableString.Invariant($"{centerX - r * k:0.##} {centerY + r:0.##} {centerX - r:0.##} {centerY + r * k:0.##} {centerX - r:0.##} {centerY:0.##} c "));
+            builder.Append(FormattableString.Invariant($"{centerX - r:0.##} {centerY - r * k:0.##} {centerX - r * k:0.##} {centerY - r:0.##} {centerX:0.##} {centerY - r:0.##} c "));
+            builder.Append(FormattableString.Invariant($"{centerX + r * k:0.##} {centerY - r:0.##} {centerX + r:0.##} {centerY - r * k:0.##} {centerX + r:0.##} {centerY:0.##} c h B "));
+            builder.Append(FormattableString.Invariant($"{centerX:0.##} {centerY:0.##} m {centerX + 3.5:0.##} {centerY:0.##} l S 1.8 w\n"));
         }
         else if (componentType.Equals("Fan", StringComparison.OrdinalIgnoreCase))
         {

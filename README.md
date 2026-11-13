@@ -197,6 +197,31 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.102.0
+
+- **Numbered paths**: on the Analysis tab Path 1 is the critical path, then Path 2, 3 … by decreasing pressure drop;
+  each path's route ("L-013 → L-010") is shown as its description. The **Pressure drop along each path** graph has a
+  **Show** list at its upper right: all paths, or one path on its own. With one path shown, labels beside the graph
+  give its total, how far it is below the critical path and its route; click a point to see the component's number
+  along the path, its item ID and its pressure drop. Clicking an item ID in the tables rings that item on the graph.
+- **Air handling unit**: an **AHU** tool in the Project tab's Equipment group (a fan in a cabinet with a filter before
+  it and a coil after it). It has the fan's inputs plus **Internal Static Pressure** (the drop across the unit's
+  filters, coils and other components, from the manufacturer). Auto-size sets its **external static pressure (ESP)**
+  to the critical-path loss; the Analysis tab, Fan Information and the report show ESP, internal and **total static
+  pressure**, and the motor power uses the total. The ductwork (pressures, pressure class) sees only the ESP. One fan
+  or AHU per system. Projects are saved in file format 18.
+- **Fitting worksheets show the factors**: an elbow's coefficient is shown as C = Kθ × C'o (or with the Reynolds
+  correction K_Re), each factor with its own table look-up and meaning, then the product with the values substituted.
+  Each look-up names the value it gives (C'o, Kθ, C) instead of "y". The sheet lists the reference duct size
+  (D = 12 in round) and the elbow's centerline radius R = (R/D) × D.
+- **Item sheets**: the QA/QC quick check is first, in a navy band, above the inputs and calculated outputs. Duct step 1
+  reads "D = 14.5 in round". Fan, AHU, coil, filter and other component sheets write each value on the same line as
+  its symbol (no stray "=").
+- **Selection Inspector**: an equation, its equals sign and its value are on one line, with the substituted inputs
+  under it; input values read "Airflow Q = 1200 cfm".
+- **Top bar**: the "fan works" wordmark is as tall as the icon beside it; the window title bar no longer shows the
+  small icon or "FanWorks - project" (the taskbar still does).
+
 ## What changed in 0.101.0
 
 - **Brand**: the new fan works identity — navy #0B1F3B, primary blue #0E6FE6 and light blue #7EC7FF; the blower mark

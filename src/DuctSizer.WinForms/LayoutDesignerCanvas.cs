@@ -716,6 +716,7 @@ internal sealed class LayoutDesignerCanvas : Panel
             node.Type == LayoutNodeType.Grd ? node.GrdType
             : node.Type == LayoutNodeType.CalculationPoint ? node.CalculationPointType
             : node.Type == LayoutNodeType.Reservoir ? node.SpaceRole
+            : node.IsAirHandlingUnit ? LayoutFanData.AirHandlingUnitTool
             : node.FittingGroup);
         if (!ShowLabels)
         {

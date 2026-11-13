@@ -10,8 +10,19 @@ namespace DuctSizer.Core;
 public sealed record PathStep(string ItemKey, string ItemId, string Kind, double LossPa, double CumulativeLossPa, bool Calculated);
 
 /// <summary>A route from a start component (no upstream connection) to an end component (no downstream connection).</summary>
-public sealed record SystemPathProfile(string StartId, string EndId, IReadOnlyList<PathStep> Steps, bool IsCritical)
+/// <param name="Number">
+/// The path's number: 1 is the critical path, then 2, 3 … in order of decreasing total loss (complete paths before
+/// incomplete ones). The number is the path's name; the route (<see cref="Route"/>) describes it.
+/// </param>
+public sealed record SystemPathProfile(string StartId, string EndId, IReadOnlyList<PathStep> Steps, bool IsCritical,
+    int Number = 0)
 {
+    /// <summary>"Path 1", "Path 2" …</summary>
+    public string Name => $"Path {Number}";
+
+    /// <summary>The components the path runs between, e.g. "FAN-001 → L-010".</summary>
+    public string Route => string.Equals(StartId, EndId, StringComparison.OrdinalIgnoreCase) ? StartId : $"{StartId} → {EndId}";
+
     /// <summary>Total pressure loss along the route, Pa.</summary>
     public double TotalLossPa => Steps.Count == 0 ? 0.0 : Steps[^1].CumulativeLossPa;
 
@@ -77,6 +88,16 @@ public static class SystemPathProfiles
         }
         var paths = routes.Select((route, index) =>
             new SystemPathProfile(route.Start, route.End, route.Steps, index == criticalIndex)).ToArray();
+        // Numbers: the critical path is 1; the rest follow by decreasing total (complete paths first), ties in
+        // visiting order. The list itself stays in visiting order.
+        var numbered = paths.Select((path, index) => (Path: path, Index: index))
+            .OrderByDescending(item => item.Path.IsCritical)
+            .ThenByDescending(item => item.Path.IsComplete)
+            .ThenByDescending(item => item.Path.TotalLossPa)
+            .ThenBy(item => item.Index)
+            .Select((item, rank) => (item.Index, Number: rank + 1))
+            .ToDictionary(item => item.Index, item => item.Number);
+        paths = paths.Select((path, index) => path with { Number = numbered[index] }).ToArray();
         return new SystemPathProfileResult(paths, truncated);
 
         void Walk(SavedLayoutNode node, bool arrivedSecondary, List<PathStep> stepsBefore, HashSet<string> visited,
@@ -181,6 +202,7 @@ public static class SystemPathProfiles
             LayoutNodeType.Grd => "GRD",
             LayoutNodeType.CustomComponent => "Custom component",
             LayoutNodeType.Reservoir => "Source/Sink",
+            LayoutNodeType.Fan when node.IsAirHandlingUnit => "Air handling unit",
             _ => node.Type.ToString()
         };
     }

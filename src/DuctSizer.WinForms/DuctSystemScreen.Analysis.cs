@@ -18,6 +18,8 @@ internal sealed partial class DuctSystemScreen
     private readonly Label _analysisAirflowValue = new() { Name = "AnalysisAirflowValue" };
     private readonly Label _analysisPressureValue = new() { Name = "AnalysisPressureValue" };
     private readonly Label _analysisFanStaticValue = new() { Name = "AnalysisFanStaticValue" };
+    private readonly Label _analysisFanStaticCaption = new() { Name = "AnalysisFanStaticCaption" };
+    private readonly Label _analysisFanStaticNote = new() { Name = "AnalysisFanStaticNote", Visible = false };
     private readonly Label _analysisRouteValue = new() { Name = "AnalysisRouteValue" };
     private readonly Label _analysisPressureClassValue = new() { Name = "AnalysisPressureClassValue" };
     private readonly Label _analysisPressureClassNote = new() { Name = "AnalysisPressureClassNote" };
@@ -33,6 +35,14 @@ internal sealed partial class DuctSystemScreen
     private readonly PressureProfileChart _analysisProfileChart = new();
     private readonly Label _analysisProfileSubtitle = new() { Name = "AnalysisProfileSubtitle" };
     private readonly Label _analysisProfileComparison = new() { Name = "AnalysisProfileComparison" };
+    private readonly ComboBox _analysisPathSelector = new() { Name = "AnalysisProfilePathSelector", DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly TableLayoutPanel _analysisPathPanel = new() { Name = "AnalysisPathPanel" };
+    private readonly Label _analysisPathName = new() { Name = "AnalysisPathName" };
+    private readonly Label _analysisPathTotal = new() { Name = "AnalysisPathTotal" };
+    private readonly Label _analysisPathBelow = new() { Name = "AnalysisPathBelowCritical" };
+    private readonly Label _analysisPathRoute = new() { Name = "AnalysisPathRoute" };
+    private readonly Label _analysisPathPick = new() { Name = "AnalysisPathPick" };
+    private bool _updatingPathSelector;
 
     private static readonly RangeCheckResult NoRange = new(RangeCheckStatus.NotApplicable, Array.Empty<RangeFinding>());
 
@@ -74,17 +84,20 @@ internal sealed partial class DuctSystemScreen
         overviewLayout.RowCount = 7;
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        // Room for the air handling unit's second line (internal and total static pressure) under the ESP.
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         overviewLayout.Controls.Add(SectionTitle("System overview"), 0, 0);
         overviewLayout.SetColumnSpan(overviewLayout.GetControlFromPosition(0, 0)!, 2);
         overviewLayout.Controls.Add(Tile("Airflow", _analysisAirflowValue), 0, 1);
         overviewLayout.Controls.Add(Tile("Critical-path pressure drop", _analysisPressureValue), 1, 1);
-        overviewLayout.Controls.Add(Tile("Fan static pressure", _analysisFanStaticValue), 0, 2);
-        overviewLayout.Controls.Add(Tile("Items in the critical route", _analysisRouteValue), 1, 2);
+        overviewLayout.Controls.Add(Tile("Fan static pressure", _analysisFanStaticValue, _analysisFanStaticNote,
+            _analysisFanStaticCaption), 0, 2);
+        _analysisFanStaticNote.Height = 18;
+        overviewLayout.Controls.Add(Tile("Items on Path 1 (critical path)", _analysisRouteValue), 1, 2);
         // SMACNA duct construction and leakage (pressure class, seal class, allowable leakage).
         overviewLayout.Controls.Add(Tile("Duct pressure class", _analysisPressureClassValue, _analysisPressureClassNote), 0, 3);
         overviewLayout.Controls.Add(Tile("Seal class and leakage class", _analysisSealClassValue, _analysisSealClassNote), 1, 3);
@@ -154,7 +167,10 @@ internal sealed partial class DuctSystemScreen
         _analysisTopLossGrid.CellClick += (_, args) =>
         {
             if (args.RowIndex >= 0 && _analysisTopLossGrid.Rows[args.RowIndex].Cells["Item"].Value is string id)
+            {
                 SelectSystemGridRow(id);
+                HighlightOnPathGraph(id);
+            }
         };
         topLayout.Controls.Add(_analysisTopLossGrid, 0, 1);
         topCard.Controls.Add(topLayout);
@@ -172,7 +188,7 @@ internal sealed partial class DuctSystemScreen
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        static Control Tile(string caption, Label value, Label? note = null)
+        static Control Tile(string caption, Label value, Label? note = null, Label? captionLabel = null)
         {
             var tile = new Panel
             {
@@ -198,14 +214,14 @@ internal sealed partial class DuctSystemScreen
                 note.AutoEllipsis = true;
                 tile.Controls.Add(note);
             }
-            tile.Controls.Add(new Label
-            {
-                Text = caption,
-                Dock = DockStyle.Top,
-                Height = 18,
-                Font = new Font("Segoe UI", 8.5F),
-                ForeColor = Color.FromArgb(74, 91, 106)
-            });
+            captionLabel ??= new Label();
+            captionLabel.Text = caption;
+            captionLabel.Dock = DockStyle.Top;
+            captionLabel.Height = 18;
+            captionLabel.Font = new Font("Segoe UI", 8.5F);
+            captionLabel.ForeColor = Color.FromArgb(74, 91, 106);
+            captionLabel.AutoEllipsis = true;
+            tile.Controls.Add(captionLabel);
             return tile;
         }
     }
@@ -287,10 +303,18 @@ internal sealed partial class DuctSystemScreen
             : _criticalPathIssues.Count > 0 ? "Not available" : FormatSystemTotal(_criticalPathPressureLossPa);
         _analysisPressureValue.ForeColor = _criticalPathCalculated && _criticalPathIssues.Count > 0
             ? Color.Firebrick : Color.FromArgb(11, 31, 59);
+        // A fan shows its static pressure. An air handling unit shows its external static pressure (ESP, the duct
+        // system) with the internal static pressure (an input) and the total the unit's fan develops underneath.
+        var airHandlingUnit = fan?.IsAirHandlingUnit == true;
+        _analysisFanStaticCaption.Text = airHandlingUnit ? "AHU external static pressure (ESP)" : "Fan static pressure";
         _analysisFanStaticValue.Text = fan is { IsDefined: true } ? FormatSystemTotal(fan.FanStaticPressurePa) : "—";
+        _analysisFanStaticNote.Visible = airHandlingUnit;
+        _analysisFanStaticNote.Text = fan is { IsDefined: true, IsAirHandlingUnit: true }
+            ? $"+ {FormatSystemTotal(fan.AhuInternalStaticPressurePa)} internal = {FormatSystemTotal(fan.FanTotalStaticPressurePa)} total static"
+            : airHandlingUnit ? "Internal and total static pressure: not calculated" : string.Empty;
         _analysisRouteValue.Text = !_criticalPathCalculated || _criticalPathItemKeys.Count == 0
             ? "—"
-            : $"{_criticalPathItemKeys.Count}  ({_criticalPathRoute})";
+            : $"{_criticalPathItemKeys.Count}  ·  {_criticalPathRoute}";
 
         _analysisTopLossGrid.Rows.Clear();
         _analysisTopLossGrid.Columns["Range"]!.Visible = _ductSystem.AnalysisExpectations.AnySet;
@@ -454,11 +478,13 @@ internal sealed partial class DuctSystemScreen
         var unit = imperial ? "in. w.c." : "Pa";
         var result = SystemPathProfiles.Build(_ductSystem);
         var allComplete = result.CompletePathCount == result.Paths.Count && !result.Truncated;
-        var series = result.Paths.Where(path => path.IsComplete)
-            .Select(path => new DuctSystemPdfProfileSeries($"{path.StartId} → {path.EndId}",
+        // In path-number order: Path 1 (the critical path), then 2, 3 … by decreasing total.
+        var series = result.Paths.Where(path => path.IsComplete).OrderBy(path => path.Number)
+            .Select(path => new DuctSystemPdfProfileSeries(path.Name,
                 path.Steps.Select(step => imperial ? UnitConversions.PaToInchesWater(step.CumulativeLossPa) : step.CumulativeLossPa).ToArray(),
                 allComplete && path.IsCritical,
-                path.Steps.Select(step => step.ItemId).ToArray()))
+                path.Steps.Select(step => step.ItemId).ToArray(),
+                path.Route))
             .ToArray();
         var notes = new List<string>();
         var incomplete = result.Paths.Count - result.CompletePathCount;
@@ -479,7 +505,7 @@ internal sealed partial class DuctSystemScreen
             double Display(double pa) => imperial ? UnitConversions.PaToInchesWater(pa) : pa;
             var gap = criticalPath.TotalLossPa - nextPath.TotalLossPa;
             var percent = criticalPath.TotalLossPa > 0 ? gap / criticalPath.TotalLossPa * 100 : 0;
-            comparison = $"Closest to critical: {nextPath.StartId} → {nextPath.EndId}, "
+            comparison = $"Closest to the critical path: {nextPath.Name} ({nextPath.Route}), "
                          + $"{Display(nextPath.TotalLossPa).ToString(format, CultureInfo.CurrentCulture)} {unit} "
                          + $"({Display(gap).ToString(format, CultureInfo.CurrentCulture)} {unit} or {percent.ToString("0", CultureInfo.CurrentCulture)} % below "
                          + $"{Display(criticalPath.TotalLossPa).ToString(format, CultureInfo.CurrentCulture)} {unit})";
@@ -560,7 +586,24 @@ internal sealed partial class DuctSystemScreen
     private void RefreshPressureProfile()
     {
         var profile = BuildPressureProfile();
+        var previous = _analysisPathSelector.SelectedIndex > 0 ? Convert.ToString(_analysisPathSelector.SelectedItem) : null;
         _analysisProfileChart.Profile = profile;
+        _updatingPathSelector = true;
+        try
+        {
+            _analysisPathSelector.Items.Clear();
+            _analysisPathSelector.Items.Add("All paths");
+            foreach (var line in profile.Series)
+                _analysisPathSelector.Items.Add(line.IsCritical ? $"{line.Label} (critical)" : line.Label);
+            var keep = previous is null ? -1 : _analysisPathSelector.Items.IndexOf(previous);
+            _analysisPathSelector.SelectedIndex = keep > 0 ? keep : 0;
+            _analysisPathSelector.Enabled = profile.Series.Count > 1;
+        }
+        finally
+        {
+            _updatingPathSelector = false;
+        }
+        ApplyPathSelection();
         _analysisProfileChart.EmptyMessage = profile.PathCount == 0
             ? "Draw and connect the system in the Designer to see the pressure drop along each path."
             : "No path can be shown yet. " + profile.Note;
@@ -603,7 +646,11 @@ internal sealed partial class DuctSystemScreen
         return card;
     }
 
-    /// <summary>The Analysis tab's pressure-profile card (below the overview and the top-10 list).</summary>
+    /// <summary>
+    /// The Analysis tab's pressure-profile card: title with the path selector (all paths, or one path isolated) at the
+    /// upper right; when a path is isolated, a panel on the left gives its total, how far it is below the critical path,
+    /// its route and the component picked on the graph.
+    /// </summary>
     private Control BuildPressureProfileCard()
     {
         var card = new RoundedPanel
@@ -617,11 +664,15 @@ internal sealed partial class DuctSystemScreen
             Margin = new Padding(0, 10, 0, 0)
         };
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, BackColor = Color.White };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.Controls.Add(new Label
+        var titleRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, BackColor = Color.White, Margin = Padding.Empty };
+        titleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        titleRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        titleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        titleRow.Controls.Add(new Label
         {
             Text = "Pressure drop along each path",
             Dock = DockStyle.Fill,
@@ -629,6 +680,21 @@ internal sealed partial class DuctSystemScreen
             ForeColor = Color.FromArgb(11, 31, 59),
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
+        titleRow.Controls.Add(new Label
+        {
+            Text = "Show", AutoSize = true, Anchor = AnchorStyles.Right, Margin = new Padding(0, 0, 6, 0),
+            ForeColor = Color.FromArgb(74, 91, 106), Font = new Font("Segoe UI", 8.5F)
+        }, 1, 0);
+        _analysisPathSelector.Dock = DockStyle.Fill;
+        _analysisPathSelector.Margin = new Padding(0, 3, 0, 3);
+        _analysisPathSelector.Font = new Font("Segoe UI", 9F);
+        _analysisPathSelector.SelectedIndexChanged += (_, _) =>
+        {
+            if (!_updatingPathSelector)
+                ApplyPathSelection();
+        };
+        titleRow.Controls.Add(_analysisPathSelector, 2, 0);
+        layout.Controls.Add(titleRow, 0, 0);
         _analysisProfileSubtitle.Dock = DockStyle.Fill;
         _analysisProfileSubtitle.TextAlign = ContentAlignment.MiddleLeft;
         _analysisProfileSubtitle.AutoEllipsis = true;
@@ -641,12 +707,107 @@ internal sealed partial class DuctSystemScreen
         _analysisProfileComparison.ForeColor = Color.FromArgb(11, 31, 59);
         _analysisProfileComparison.Visible = false;
         layout.Controls.Add(_analysisProfileComparison, 0, 2);
+
+        var body = new TableLayoutPanel { Name = "AnalysisProfileBody", Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.White, Margin = Padding.Empty };
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        BuildPathPanel();
+        body.Controls.Add(_analysisPathPanel, 0, 0);
         _analysisProfileChart.Dock = DockStyle.Fill;
         _analysisProfileChart.Margin = new Padding(0, 4, 0, 0);
-        layout.Controls.Add(_analysisProfileChart, 0, 3);
+        _analysisProfileChart.SelectionChanged += (_, _) => DescribePickedComponent();
+        body.Controls.Add(_analysisProfileChart, 1, 0);
+        layout.Controls.Add(body, 0, 3);
         card.Controls.Add(layout);
         return card;
     }
+
+    private void BuildPathPanel()
+    {
+        var panel = _analysisPathPanel;
+        panel.Dock = DockStyle.Fill;
+        panel.ColumnCount = 1;
+        panel.RowCount = 6;
+        panel.BackColor = Color.FromArgb(244, 248, 253);
+        panel.Margin = new Padding(0, 6, 12, 4);
+        panel.Padding = new Padding(10, 8, 8, 8);
+        panel.Visible = false;
+        void Row(Label label, float size, bool bold, Color color, int row)
+        {
+            label.AutoSize = true;
+            label.MaximumSize = new Size(DpiScaling.Scale(200), 0);
+            label.Font = new Font(bold ? "Segoe UI Semibold" : "Segoe UI", size);
+            label.ForeColor = color;
+            label.Margin = new Padding(0, 0, 0, DpiScaling.Scale(6));
+            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            panel.Controls.Add(label, 0, row);
+        }
+        Row(_analysisPathName, 11F, true, Color.FromArgb(11, 31, 59), 0);
+        Row(_analysisPathTotal, 9F, true, Color.FromArgb(10, 88, 187), 1);
+        Row(_analysisPathBelow, 8.5F, false, Color.FromArgb(48, 65, 80), 2);
+        Row(_analysisPathRoute, 8.5F, false, Color.FromArgb(48, 65, 80), 3);
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 6));
+        panel.Controls.Add(new Panel { Height = 1, Dock = DockStyle.Top, BackColor = Color.FromArgb(214, 225, 236), Margin = Padding.Empty }, 0, 4);
+        Row(_analysisPathPick, 8.5F, false, Color.FromArgb(11, 31, 59), 5);
+    }
+
+    /// <summary>Shows all paths, or isolates the chosen one with its summary beside the graph.</summary>
+    private void ApplyPathSelection()
+    {
+        var profile = _analysisProfileChart.Profile;
+        var index = _analysisPathSelector.SelectedIndex - 1;
+        var isolated = profile is not null && index >= 0 && index < profile.Series.Count;
+        _analysisProfileChart.IsolatedSeries = isolated ? index : null;
+        if (_analysisPathPanel.Parent is TableLayoutPanel body)
+            body.ColumnStyles[0].Width = isolated ? DpiScaling.Scale(230) : 0;
+        _analysisPathPanel.Visible = isolated;
+        if (!isolated)
+            return;
+        var line = profile!.Series[index];
+        var unit = profile.UnitLabel;
+        var format = unit == "Pa" ? "0.#" : "0.###";
+        string Show(double value) => $"{value.ToString(format, CultureInfo.CurrentCulture)} {unit}";
+        var total = line.Values.Count == 0 ? 0 : line.Values[^1];
+        var critical = profile.Series.FirstOrDefault(series => series.IsCritical);
+        _analysisPathName.Text = line.IsCritical ? $"{line.Label} (critical path)" : line.Label;
+        _analysisPathTotal.Text = $"Total path: {Show(total)}";
+        if (line.IsCritical)
+            _analysisPathBelow.Text = "The highest total: this path sets the fan's required pressure.";
+        else if (critical is { Values.Count: > 0 })
+        {
+            var gap = critical.Values[^1] - total;
+            var percent = critical.Values[^1] > 0 ? gap / critical.Values[^1] * 100 : 0;
+            _analysisPathBelow.Text = $"{Show(gap)} below the critical path ({percent.ToString("0", CultureInfo.CurrentCulture)} %)";
+        }
+        else
+            _analysisPathBelow.Text = "The critical path is not known until every path can be calculated.";
+        _analysisPathRoute.Text = $"Route: {line.Route}\n{line.Values.Count} components";
+        DescribePickedComponent();
+    }
+
+    /// <summary>The component picked on the isolated path: its position, ID and pressure.</summary>
+    private void DescribePickedComponent()
+    {
+        var profile = _analysisProfileChart.Profile;
+        if (profile is null || _analysisProfileChart.SelectedPoint is not { } picked || picked.Series >= profile.Series.Count)
+        {
+            _analysisPathPick.Text = "Click a point on the graph to see that component.";
+            _analysisPathPick.ForeColor = Color.FromArgb(110, 124, 138);
+            return;
+        }
+        var line = profile.Series[picked.Series];
+        var unit = profile.UnitLabel;
+        var format = unit == "Pa" ? "0.#" : "0.####";
+        var drop = line.Values[picked.Index] - (picked.Index == 0 ? 0 : line.Values[picked.Index - 1]);
+        var id = line.ItemIds is { } ids && picked.Index < ids.Count ? ids[picked.Index] : "—";
+        _analysisPathPick.ForeColor = Color.FromArgb(11, 31, 59);
+        _analysisPathPick.Text = $"Component {picked.Index + 1} of {line.Values.Count}: {id}\n"
+                                 + $"Pressure drop: {drop.ToString(format, CultureInfo.CurrentCulture)} {unit}\n"
+                                 + $"From the start: {line.Values[picked.Index].ToString(format, CultureInfo.CurrentCulture)} {unit}";
+    }
+
+    /// <summary>Rings the item on the path graph (when it lies on a path shown).</summary>
+    private void HighlightOnPathGraph(string? itemId) => _analysisProfileChart.HighlightItemId = itemId;
 
     /// <summary>Selects the item's row in the full system table and scrolls it into view.</summary>
     private void SelectSystemGridRow(string itemId)

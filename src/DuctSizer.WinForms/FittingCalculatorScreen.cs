@@ -1837,10 +1837,21 @@ internal sealed partial class FittingCalculatorScreen
         }
 
         Heading("COEFFICIENT AND PRESSURE LOSS");
-        StyledMathLine(("C = C_{ASHRAE}(", EngineeringMathRichText.MathTone.Formula),
-            ("table inputs", EngineeringMathRichText.MathTone.Input),
-            (") = ", EngineeringMathRichText.MathTone.Formula),
-            ($"{result.Coefficient:0.####}", EngineeringMathRichText.MathTone.Solved));
+        if (result.CoefficientFactors.Count >= 2)
+        {
+            // A coefficient that is a product of named factors: C = Kθ × C'o = 0.66 × 0.185 = 0.1221.
+            StyledMathLine(("C = " + string.Join(" \\times ", result.CoefficientFactors.Select(factor => factor.Symbol)) + " = ", EngineeringMathRichText.MathTone.Formula),
+                (string.Join(" \\times ", result.CoefficientFactors.Select(factor => factor.Value.ToString("0.####", CultureInfo.InvariantCulture))), EngineeringMathRichText.MathTone.Input),
+                (" = ", EngineeringMathRichText.MathTone.Formula),
+                ($"{result.Coefficient:0.####}", EngineeringMathRichText.MathTone.Solved));
+            foreach (var factor in result.CoefficientFactors)
+                Line(($"    {WorksheetLookups.Plain(factor.Symbol)}: {factor.Meaning}", false));
+        }
+        else
+            StyledMathLine(("C = C_{ASHRAE}(", EngineeringMathRichText.MathTone.Formula),
+                ("table inputs", EngineeringMathRichText.MathTone.Input),
+                (") = ", EngineeringMathRichText.MathTone.Formula),
+                ($"{result.Coefficient:0.####}", EngineeringMathRichText.MathTone.Solved));
         var velocityFpm = UnitConversions.MpsToFpm(result.ReferenceVelocityMPerS);
         StyledMathLine(("VP = (\\frac{V}{4005})^{2}(\\frac{\\rho}{0.075}) = ", EngineeringMathRichText.MathTone.Formula),
             ($"(\\frac{{{velocityFpm:0.#}}}{{4005}})^{{2}}(\\frac{{{densityLbmFt3:0.#####}}}{{0.075}})", EngineeringMathRichText.MathTone.Input),

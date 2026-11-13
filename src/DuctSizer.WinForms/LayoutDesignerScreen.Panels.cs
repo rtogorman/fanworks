@@ -398,6 +398,7 @@ internal sealed partial class LayoutDesignerScreen
         {
             var description = !string.IsNullOrWhiteSpace(node.Description) ? node.Description
                 : node.Type == LayoutNodeType.Fitting && !string.IsNullOrWhiteSpace(node.FittingGroup) ? node.FittingGroup
+                : node.IsAirHandlingUnit ? "Air Handling Unit"
                 : node.Type.ToString();
             return new ExplorerEntry($"{node.Id}  {description}{(node.IsDefined ? string.Empty : "  (undefined)")}", node, null, null);
         }

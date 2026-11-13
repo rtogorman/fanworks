@@ -173,7 +173,7 @@ internal static class Program
             var fittingOutputsHeader = Find<Label>(form, "FittingOutputsHeader");
             var assumptionsText = PrivateField<TextBox>(form, "_assumptionsText");
             var projectHeader = Find<Label>(form, "ProjectHeaderLabel");
-            var projectHeaderBrand = Find<Label>(form, "ProjectHeaderBrand");
+            var projectHeaderBrand = Find<Control>(form, "ProjectHeaderBrand");
             var projectHeaderAppIcon = Find<PictureBox>(form, "ProjectHeaderAppIcon");
             var projectIdentityHeader = Find<Control>(form, "ProjectIdentityHeader");
             var projectHeaderLogo = Find<PictureBox>(form, "ProjectHeaderLogo");
@@ -487,7 +487,7 @@ internal static class Program
                 "Airflow, air temperature, and duct length should use a clear vertical Calculation column.");
             ClickButton(layoutNavigation);
             Application.DoEvents();
-            Require(ribbonComponentTools.Length == 19
+            Require(ribbonComponentTools.Length == 20
                     && ribbonComponentTools.All(card => IsDescendantOf(card, ribbon) && card.Height <= Px(40))
                     && ScreenBounds(ribbon).Bottom <= ScreenBounds(layoutCanvasHost).Top
                     && form.Controls.Find("LayoutToolPalette", true).Length == 0,
@@ -1517,7 +1517,7 @@ internal static class Program
                         .All(tool => tool.Visible && tool.Cursor == Cursors.Hand)
                     && form.Controls.Find("LayoutToolDuct", true).Length == 0,
                 "The layout toolbox should expose source/sink spaces, equipment, grouped fittings, and four calculation points without a duct icon.");
-            Require(ribbonComponentTools.Length == 19
+            Require(ribbonComponentTools.Length == 20
                     && ribbonComponentTools.All(tool => tool.Height <= Px(40)
                         && (layoutToolTips.GetToolTip(tool) ?? "").Contains("\r\n", StringComparison.Ordinal)),
                 $"The ribbon components should be compact captioned tools with names and explanations as hover help. Count={ribbonComponentTools.Length}.");
@@ -3959,6 +3959,122 @@ internal static class Program
                         : shownProfile.Comparison.Contains(nextRoute.EndId, StringComparison.Ordinal)
                           && Find<Label>(form, "AnalysisProfileComparison").Text == shownProfile.Comparison,
                 $"The Analysis tab should name the path closest to the critical path when there is one. Comparison={shownProfile.Comparison}");
+            // Round U: paths are numbered (Path 1 = critical, then by decreasing total); one path can be isolated, with its
+            // total, gap to the critical path and route beside the graph; a picked point is described; a table row rings the item.
+            var numberedPaths = routeProfiles.Paths.OrderBy(path => path.Number).ToArray();
+            Require(numberedPaths.Select(path => path.Number).SequenceEqual(Enumerable.Range(1, numberedPaths.Length))
+                    && (criticalRoute is null || criticalRoute.Number == 1)
+                    && numberedPaths.Where(path => path.IsComplete).Zip(numberedPaths.Where(path => path.IsComplete).Skip(1))
+                        .All(pair => pair.First.IsCritical || pair.First.TotalLossPa >= pair.Second.TotalLossPa - 1e-12)
+                    && shownProfile.Series.All(series => series.Label.StartsWith("Path ", StringComparison.Ordinal) && series.Route.Contains('→')),
+                "Paths should be named by number: Path 1 is the critical path, then decreasing totals; the route is separate.");
+            var pathSelector = Find<ComboBox>(form, "AnalysisProfilePathSelector");
+            Require(pathSelector.Items.Count == shownProfile.Series.Count + 1 && Convert.ToString(pathSelector.Items[0]) == "All paths"
+                    && pathSelector.SelectedIndex == 0 && profileChart.IsolatedSeries is null,
+                "The path graph should have a selector: All paths, then each path.");
+            if (shownProfile.Series.Count >= 2)
+            {
+                pathSelector.SelectedIndex = 2;
+                Application.DoEvents();
+                using (var chartPaint = new Bitmap(Math.Max(1, profileChart.Width), Math.Max(1, profileChart.Height)))
+                using (var chartGraphics = Graphics.FromImage(chartPaint))
+                    typeof(PressureProfileChart).GetMethod("OnPaint", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .Invoke(profileChart, new object[] { new PaintEventArgs(chartGraphics, new Rectangle(Point.Empty, chartPaint.Size)) });
+                var isolatedLine = shownProfile.Series[1];
+                var gap = shownProfile.Series[0].Values[^1] - isolatedLine.Values[^1];
+                Require(profileChart.IsolatedSeries == 1 && Find<Control>(form, "AnalysisPathPanel").Visible
+                        && Find<Label>(form, "AnalysisPathName").Text.StartsWith("Path 2", StringComparison.Ordinal)
+                        && Find<Label>(form, "AnalysisPathTotal").Text.Contains(isolatedLine.Values[^1].ToString(imperialUnits ? "0.###" : "0.#", System.Globalization.CultureInfo.CurrentCulture), StringComparison.Ordinal)
+                        && Find<Label>(form, "AnalysisPathBelowCritical").Text.Contains(gap.ToString(imperialUnits ? "0.###" : "0.#", System.Globalization.CultureInfo.CurrentCulture), StringComparison.Ordinal)
+                        && Find<Label>(form, "AnalysisPathRoute").Text.Contains(isolatedLine.Route, StringComparison.Ordinal),
+                    "Isolating a path should show its total, how far below the critical path it is, and its route.");
+                var pickAt = profileChart.PointOf(1, isolatedLine.Values.Count - 1);
+                typeof(PressureProfileChart).GetMethod("OnMouseClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(profileChart, new object[] { new MouseEventArgs(MouseButtons.Left, 1, (int)pickAt.X, (int)pickAt.Y, 0) });
+                Application.DoEvents();
+                var lastId = isolatedLine.ItemIds![^1];
+                Require(profileChart.SelectedPoint == (1, isolatedLine.Values.Count - 1)
+                        && Find<Label>(form, "AnalysisPathPick").Text.Contains($"Component {isolatedLine.Values.Count} of {isolatedLine.Values.Count}: {lastId}", StringComparison.Ordinal),
+                    $"Clicking a point of the isolated path should describe that component. Pick={Find<Label>(form, "AnalysisPathPick").Text}");
+                analysisScreen.GetType().GetMethod("HighlightOnPathGraph", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(analysisScreen, new object?[] { lastId });
+                Require(profileChart.HighlightItemId == lastId && profileChart.ShowsItem(lastId)
+                        && !profileChart.ShowsItem("NOT-AN-ITEM"),
+                    "Choosing an item in a table should ring it on the path graph when it lies on a path shown.");
+                pathSelector.SelectedIndex = 0;
+                Application.DoEvents();
+                Require(profileChart.IsolatedSeries is null && !Find<Control>(form, "AnalysisPathPanel").Visible,
+                    "Choosing All paths should show every path again.");
+            }
+            // Round U: air handling unit. Placed from the Equipment group like a fan (one fan or AHU per system); its
+            // ID is AHU-nnn; the Analysis tile, Fan Information and the report show external, internal and total static.
+            {
+                var ahuTool = form.Controls.Find("LayoutToolAirHandlingUnit", true);
+                Require(ahuTool.Length == 1 && ahuTool[0].Parent?.Name == "RibbonEquipmentGroupTools",
+                    $"The Project tab's Equipment group should offer an AHU tool next to the fan. Found {ahuTool.Length}.");
+                var existingFan = analysisScreen._ductSystem.LayoutNodes.Single(node => node.Type == LayoutNodeType.Fan);
+                var fanIndex = analysisScreen._ductSystem.LayoutNodes.IndexOf(existingFan);
+                var placeNode = UiMember.Method("PlaceLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                placeNode.Invoke(form, new object?[] { LayoutNodeType.Fan, existingFan.GridX + 31, existingFan.GridY + 37, LayoutFanData.AirHandlingUnitTool });
+                Require(analysisScreen._ductSystem.LayoutNodes.Count(node => node.Type == LayoutNodeType.Fan) == 1
+                        && Find<Label>(form, "LayoutDesignerStatus").Text.Contains("Only one fan or air handling unit", StringComparison.Ordinal),
+                    "An air handling unit cannot be added while the system has a fan.");
+                analysisScreen._ductSystem.LayoutNodes.Remove(existingFan);
+                placeNode.Invoke(form, new object?[] { LayoutNodeType.Fan, existingFan.GridX + 31, existingFan.GridY + 37, LayoutFanData.AirHandlingUnitTool });
+                var ahu = analysisScreen._ductSystem.LayoutNodes.Single(node => node.Type == LayoutNodeType.Fan);
+                Require(ahu.IsAirHandlingUnit && ahu.Id == $"AHU-{ahu.Sequence:000}",
+                    $"The AHU tool should place an air handling unit named AHU-nnn; got {ahu.Id}.");
+                ahu.IsDefined = true;
+                ahu.AirflowM3PerS = UnitConversions.CfmToM3PerS(2000);
+                ahu.FanStaticPressurePa = UnitConversions.InchesWaterToPa(1.0);
+                ahu.AhuInternalStaticPressurePa = UnitConversions.InchesWaterToPa(1.5);
+                ahu.FanEfficiencyPercent = 65;
+                var ahuInformation = new object?[] { null };
+                UiMember.Method("TryGetFanInformation", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, ahuInformation);
+                var ahuText = Convert.ToString(ahuInformation[0])!;
+                Require(ahuText.Contains("Air Handling Unit", StringComparison.Ordinal)
+                        && ahuText.Contains("External static pressure (ESP):", StringComparison.Ordinal)
+                        && ahuText.Contains("Internal static pressure:", StringComparison.Ordinal)
+                        && ahuText.Contains("Total static pressure:", StringComparison.Ordinal)
+                        && ahuText.Contains("1.21", StringComparison.Ordinal),
+                    $"Fan Information for an AHU should show ESP, internal and total static pressure, and motor power on the total (1.21 hp). Got: {ahuText}");
+                ClickButton(Find<Button>(form, "TopTabAnalysis"));
+                Application.DoEvents();
+                analysisScreen.GetType().GetMethod("RefreshAnalysisSummary", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(analysisScreen, null);
+                Require(Find<Label>(form, "AnalysisFanStaticCaption").Text.Contains("external static pressure (ESP)", StringComparison.Ordinal)
+                        && (!form.Visible || Find<Label>(form, "AnalysisFanStaticNote").Visible)
+                        && Find<Label>(form, "AnalysisFanStaticNote").Text.Contains("total static", StringComparison.Ordinal),
+                    $"The Analysis tile should show the AHU's ESP with its internal and total static pressure. Caption={Find<Label>(form, "AnalysisFanStaticCaption").Text}, note={Find<Label>(form, "AnalysisFanStaticNote").Text} ({Find<Label>(form, "AnalysisFanStaticNote").Visible}; chain {string.Join(" < ", Ancestors(Find<Label>(form, "AnalysisFanStaticNote")))}), value={Find<Label>(form, "AnalysisFanStaticValue").Text}.");
+                var ahuSheet = analysisScreen.GetType().GetMethod("BuildEquipmentPdfCalculations", BindingFlags.Static | BindingFlags.NonPublic)!
+                    .Invoke(null, new object[] { ahu, (0.0, ahu.FanStaticPressurePa) }) as IReadOnlyList<DuctSystemPdfCalculationSection>;
+                Require(ahuSheet is not null && ahuSheet.SelectMany(section => section.Lines)
+                            .Any(line => line.Formula == "TSP = ESP + ISP" && line.InputSubstitution.StartsWith("ESP = 1; ISP = 1.5", StringComparison.Ordinal) && line.HighlightValue.StartsWith("2.5 ", StringComparison.Ordinal)),
+                    "The AHU worksheet should add the internal static pressure to the ESP.");
+                using (var ahuIcon = new Bitmap(48, 48))
+                using (var ahuIconGraphics = Graphics.FromImage(ahuIcon))
+                {
+                    ahuIconGraphics.Clear(Color.White);
+                    typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutIconPainter")!
+                        .GetMethod("Draw", BindingFlags.Static | BindingFlags.NonPublic)!
+                        .Invoke(null, new object?[] { ahuIconGraphics, LayoutNodeType.Fan, new Rectangle(4, 4, 40, 40), Color.FromArgb(10, 88, 187), LayoutFanData.AirHandlingUnitTool });
+                    var inked = 0;
+                    for (var x = 0; x < 48; x++)
+                        for (var y = 0; y < 48; y++)
+                            if (ahuIcon.GetPixel(x, y).GetBrightness() < 0.9F)
+                                inked++;
+                    Require(inked > 150, $"The AHU symbol should be drawn (cabinet, filter, fan, coil); {inked} inked pixels.");
+                }
+                analysisScreen._ductSystem.LayoutNodes.Remove(ahu);
+                analysisScreen._ductSystem.LayoutNodes.Insert(fanIndex, existingFan);
+                analysisScreen.SaveDuctSystem();
+                analysisScreen.RefreshDuctSystemGrid();
+                analysisScreen.GetType().GetMethod("RefreshAnalysisSummary", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(analysisScreen, null);
+                Require(Find<Label>(form, "AnalysisFanStaticCaption").Text == "Fan static pressure"
+                        && Find<Label>(form, "AnalysisFanStaticNote").Text.Length == 0,
+                    "With a fan again the tile should read Fan static pressure.");
+            }
             // SMACNA pressure class, seal class and leakage; donut; whole-page scroll with the full-height table.
             var leakageSummary = analysisScreen.BuildLeakageSummary();
             var leakageResult = SmacnaLeakage.Analyze(analysisScreen._ductSystem);
@@ -4291,6 +4407,12 @@ internal static class Program
         document.Ducts.Add(duct);
         downstream.ConnectionDuctSequence = duct.Sequence;
         return duct;
+    }
+
+    private static IEnumerable<string> Ancestors(Control control)
+    {
+        for (Control? current = control; current is not null; current = current.Parent)
+            yield return $"{current.GetType().Name}:{current.Name}:{current.Visible}";
     }
 
     private static T Find<T>(Control root, string name) where T : Control

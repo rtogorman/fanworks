@@ -239,6 +239,41 @@ internal static class WindowLook
     }
 
     private static int ToColorRef(Color color) => color.R | color.G << 8 | color.B << 16;
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NonClientThemeOptions
+    {
+        public uint Flags;
+        public uint Mask;
+    }
+
+    [System.Runtime.InteropServices.DllImport("uxtheme.dll")]
+    private static extern int SetWindowThemeAttribute(IntPtr window, int attribute, ref NonClientThemeOptions options, uint size);
+
+    private const int NonClientAttribute = 1;      // WTA_NONCLIENT
+    private const uint NoDrawCaption = 0x1;         // WTNCA_NODRAWCAPTION
+    private const uint NoDrawIcon = 0x2;            // WTNCA_NODRAWICON
+
+    /// <summary>
+    /// Main window: the title bar shows neither the small icon nor the caption text (the ribbon carries the large
+    /// icon and the wordmark). The window keeps its icon and text, so the taskbar, Alt+Tab and the system menu still
+    /// show "FanWorks — project". No effect where Windows does not support it.
+    /// </summary>
+    internal static void HideTitleBarIconAndText(Form form)
+    {
+        if (!OperatingSystem.IsWindows() || !form.IsHandleCreated)
+            return;
+        try
+        {
+            var options = new NonClientThemeOptions { Flags = NoDrawCaption | NoDrawIcon, Mask = NoDrawCaption | NoDrawIcon };
+            SetWindowThemeAttribute(form.Handle, NonClientAttribute, ref options,
+                (uint)System.Runtime.InteropServices.Marshal.SizeOf<NonClientThemeOptions>());
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            // Without visual styles the standard title bar stays.
+        }
+    }
 }
 
 /// <summary>
@@ -249,6 +284,9 @@ internal static class BrandFonts
 {
     private static System.Drawing.Text.PrivateFontCollection? _collection;
     private static bool _attempted;
+
+    /// <summary>The brand typeface family, or null when it could not be loaded.</summary>
+    internal static FontFamily? Family => BrandFamily();
 
     internal static Font Wordmark(float size)
     {

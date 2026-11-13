@@ -247,7 +247,11 @@ public static class SmacnaLeakage
                 ? UnitConversions.PaToInchesWater(fans[0].FanStaticPressurePa)
                 : 0.0;
             design = Math.Max(criticalInWc, fanInWc);
-            basis = fanInWc > criticalInWc ? "fan static pressure" : "critical-path pressure loss";
+            // The ductwork sees the fan's static pressure rise (an air handling unit's external static pressure); an
+            // air handling unit's internal static pressure is used inside the unit and is not duct pressure.
+            basis = fanInWc > criticalInWc
+                ? fans[0].IsAirHandlingUnit ? "air handling unit external static pressure" : "fan static pressure"
+                : "critical-path pressure loss";
         }
         else
             pressureProblem = "The critical path is not complete, so the system pressure is not known.";

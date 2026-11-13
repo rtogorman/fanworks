@@ -87,7 +87,7 @@ The window edits this model and redraws from it; nothing is inferred from drawin
 | Logs | `%LOCALAPPDATA%\FanWorks\logs` | daily log and crash reports, 30-day retention |
 
 `DuctSystemStore.Save` writes to a temporary file, keeps the previous file as `.bak`, then replaces it, so an
-interrupted save cannot destroy the last good file. Files carry `SchemaVersion` (currently 17) and
+interrupted save cannot destroy the last good file. Files carry `SchemaVersion` (currently 18) and
 `DuctSystemStore.Load` upgrades older versions step by step; a file from a newer FanWorks is refused with an update
 message. Changing the saved format means: increment the version, add an upgrade step, add a round-trip check.
 
@@ -204,3 +204,27 @@ the first starts a secondary calculation drawn after the assumptions with a divi
 - **Brand**: report header mark is an RGB JPEG with an 8-bit soft mask (`Core/Brand/`); the app's top bar uses the
   same mark and Nunito ExtraBold through `BrandFonts` (private font collection).
 
+
+## Numbered paths, air handling units and named coefficient factors (v0.102)
+
+- **Path numbers** (`SystemPathProfiles.Build`): Path 1 is the critical path; then complete paths before incomplete,
+  by decreasing total (ties in visiting order). `SystemPathProfile.Name` is "Path n"; `Route` ("L-013 → L-010") is a
+  description only. The Analysis graph (`PressureProfileChart`) can isolate one path (`IsolatedSeries`), pick a point
+  on it (`SelectedPoint`, raised by `SelectionChanged`) and ring an item chosen in a table (`HighlightItemId`).
+- **Air handling unit** (schema 18): a `LayoutNodeType.Fan` component whose `LayoutFanData.IsAirHandlingUnit` is set
+  when it is placed (the AHU tool); its ID is `AHU-nnn`, so the flag never changes afterwards. `StaticPressurePa` is
+  its external static pressure (ESP) — the rise the duct system sees, set by Auto-size to the critical-path loss —
+  and `InternalStaticPressurePa` (ISP, an input from the manufacturer) is the drop across its own filters and coils.
+  `SavedLayoutNode.FanTotalStaticPressurePa` = ESP + ISP is used only for motor power; the solver, the critical path
+  and the SMACNA pressure class use ESP. One fan or AHU per system. Older files open with plain fans.
+- **Named coefficient factors** (`TableRangeLog.Named`, `CoefficientFactor`): a coefficient that is a product of
+  factors (elbows: C = Kθ × C'o, C = K_Re × C'o, C = Kθ × K_Re × C'o) evaluates each factor through `Named`, so each
+  table look-up carries the symbol of the value it gives and `FittingCalculationResult.CoefficientFactors` lists the
+  factors (kept only when their product is the coefficient). Worksheets show each look-up as "C'o = y1 + …" and the
+  combining equation with the factors substituted; fitting sheets also show the reference size (D, or W and H) and an
+  elbow's centerline radius R = (R/D) × D.
+- **Item sheets**: the left column is QA/QC quick check (navy band), then inputs, then calculated outputs. Given values
+  in a worksheet are math lines (`IsEquation` + `HighlightAsInput`), so a symbol and its value share one line.
+- **Main window title bar**: `WindowLook.HideTitleBarIconAndText` (uxtheme `SetWindowThemeAttribute`,
+  WTNCA_NODRAWCAPTION | WTNCA_NODRAWICON) hides the small icon and caption; the window text is kept for the taskbar.
+  The top-bar wordmark is `BrandWordmarkLabel`: glyph outlines scaled to the icon's height.

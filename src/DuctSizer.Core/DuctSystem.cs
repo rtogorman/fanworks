@@ -78,7 +78,7 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 17;
+    public const int CurrentSchemaVersion = 18;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -297,14 +297,38 @@ public enum LayoutViewMode
     TopDown
 }
 
-/// <summary>Fan-only data of a layout component (schema 14).</summary>
+/// <summary>
+/// Fan-only data of a layout component (schema 14). From schema 18 the same block also describes an air handling
+/// unit (AHU): a fan inside a cabinet with its own filters, coils and other internal components.
+/// </summary>
 public sealed class LayoutFanData
 {
-    /// <summary>Fan static pressure rise (Pa), 0 or more.</summary>
+    /// <summary>Toolbox tag that places a fan component as an air handling unit.</summary>
+    public const string AirHandlingUnitTool = "Air Handling Unit";
+
+    /// <summary>
+    /// Static pressure the fan adds to the duct system (Pa), 0 or more. For an air handling unit this is the
+    /// external static pressure (ESP): the pressure available to the ductwork outside the unit. Auto-size sets it
+    /// to the critical-path pressure loss.
+    /// </summary>
     public double StaticPressurePa { get; set; }
 
     /// <summary>Fan total efficiency (%), above 0 and at most 100.</summary>
     public double EfficiencyPercent { get; set; } = 70.0;
+
+    /// <summary>
+    /// True when the component is an air handling unit rather than a bare fan (schema 18). Set when the component is
+    /// placed and not changed afterwards, because the component ID ("AHU-" or "Fan-") depends on it.
+    /// </summary>
+    public bool IsAirHandlingUnit { get; set; }
+
+    /// <summary>
+    /// Air handling unit only: internal static pressure (Pa), 0 or more. The pressure drop across the unit's own
+    /// filters, coils and other internal components, as an input from the manufacturer's data (schema 18).
+    /// It is not part of the duct system pressure; it is added to the external static pressure to give the fan's
+    /// total static pressure.
+    /// </summary>
+    public double InternalStaticPressurePa { get; set; }
 }
 
 /// <summary>Grille, register, diffuser or VAV terminal data of a layout component (schema 14).</summary>
@@ -405,6 +429,23 @@ public sealed class SavedLayoutNode
     public double PressureDropPa { get; set; }
     [JsonIgnore] public double FanStaticPressurePa { get => _fan.StaticPressurePa; set => _fan.StaticPressurePa = value; }
     [JsonIgnore] public double FanEfficiencyPercent { get => _fan.EfficiencyPercent; set => _fan.EfficiencyPercent = value; }
+    /// <summary>True for an air handling unit (a fan component placed with the AHU tool). See <see cref="LayoutFanData.IsAirHandlingUnit"/>.</summary>
+    [JsonIgnore] public bool IsAirHandlingUnit { get => Type == LayoutNodeType.Fan && _fan.IsAirHandlingUnit; set => _fan.IsAirHandlingUnit = value; }
+    /// <summary>Air handling unit internal static pressure (Pa); see <see cref="LayoutFanData.InternalStaticPressurePa"/>.</summary>
+    [JsonIgnore] public double AhuInternalStaticPressurePa { get => _fan.InternalStaticPressurePa; set => _fan.InternalStaticPressurePa = value; }
+
+    /// <summary>
+    /// Total static pressure the fan must develop (Pa): the static pressure it adds to the duct system
+    /// (<see cref="FanStaticPressurePa"/>; the external static pressure of an air handling unit) plus, for an air
+    /// handling unit, its internal static pressure. Brake horsepower is based on this value.
+    /// </summary>
+    [JsonIgnore]
+    public double FanTotalStaticPressurePa => FanStaticPressurePa + (IsAirHandlingUnit ? AhuInternalStaticPressurePa : 0.0);
+
+    /// <summary>"Air Handling Unit" or "System Fan" for fans; empty for other components.</summary>
+    [JsonIgnore]
+    public string FanEquipmentName => Type != LayoutNodeType.Fan ? string.Empty
+        : IsAirHandlingUnit ? "Air Handling Unit" : "System Fan";
     public double PressurePa { get; set; }
     public double VelocityMPerS { get; set; }
     [JsonIgnore] public string GrdType { get => _grd.Type; set => _grd.Type = value; }
@@ -476,6 +517,7 @@ public sealed class SavedLayoutNode
         LayoutNodeType.Grd => "T",
         LayoutNodeType.CalculationPoint => "S",
         LayoutNodeType.Reservoir => "L",
+        LayoutNodeType.Fan when _fan.IsAirHandlingUnit => "AHU",
         LayoutNodeType.Fan => "Fan",
         _ => "C"
     };
@@ -864,6 +906,10 @@ public static class DuctSystemStore
         // (LayoutLabelPlacements); both empty when absent.
         if (document.SchemaVersion == 16)
             document.SchemaVersion = 17;
+        // Version 18: air handling units (Fan block IsAirHandlingUnit and InternalStaticPressurePa); a fan without
+        // them is a plain fan with no internal static pressure, exactly as before.
+        if (document.SchemaVersion == 17)
+            document.SchemaVersion = 18;
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."
@@ -952,6 +998,7 @@ public static class DuctSystemStore
                                         && node.FanEfficiencyPercent > 0.0
                 ? Math.Clamp(node.FanEfficiencyPercent, 0.1, 100.0)
                 : 70.0;
+            node.AhuInternalStaticPressurePa = Math.Max(0.0, FiniteOrZero(node.AhuInternalStaticPressurePa));
             node.VelocityMPerS = FiniteOrZero(node.VelocityMPerS);
             node.DeltaXM = FiniteOrZero(node.DeltaXM);
             node.DeltaYM = FiniteOrZero(node.DeltaYM);

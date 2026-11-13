@@ -77,7 +77,11 @@ var tests = new (string Name, Action Run)[]
     ("SMACNA: pressure, seal and leakage classes; F = CL x P^0.65", LeakageTests.PressureSealAndLeakageClassesFollowSmacna),
     ("Surface area of ducts and fittings", LeakageTests.SurfaceAreasOfDuctsAndFittings),
     ("System leakage: class from pressure, F x area", LeakageTests.SystemLeakageIsSumOfFactorTimesArea),
+    ("Air handling unit: total static = external + internal; motor power on total", AirHandlingUnitTests.TotalStaticIsExternalPlusInternalAndSetsMotorPower),
+    ("Air handling unit: duct system sees only the external static pressure", AirHandlingUnitTests.DuctSystemSeesOnlyTheExternalStaticPressure),
+    ("Air handling unit: saved in format 18; format-17 fans open unchanged", AirHandlingUnitTests.AirHandlingUnitRoundTripsAndOlderFilesOpenAsFans),
     ("Table look-ups: interpolation recorded with its table points", TableLookupTests.InterpolationIsRecordedWithItsTablePoints),
+    ("Elbow factors named (Kθ, C'o) and combined as C = Kθ × C'o", TableLookupTests.ElbowFactorsAreNamedAndCombined),
     ("Table look-ups: conservative value between columns", TableLookupTests.BetweenColumnsTheConservativeValueIsUsed),
     ("Junctions read only the selected path's table", TableLookupTests.OnlyTheSelectedJunctionPathIsRead),
     ("Engineering text typeset for display", TableLookupTests.EngineeringTextIsTypeset)

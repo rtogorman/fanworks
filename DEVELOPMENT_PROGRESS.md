@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
+Last updated: 2026-11-12 (round U, v0.102.0); earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
 
 ## Where things live
 
@@ -549,4 +549,21 @@ Checks: engine 78/78 (4 new), interface 24/24 at 100 % and 150 % under Wine.
 Open with Ryan: the brand mark is cut from the concept board image (raster); a vector version would be sharper at
 large sizes. Outlet pressure drops are stored when the outlet is defined; the report now flags a mismatch, but the
 value is not refreshed automatically when the airflow changes (his decision whether it should be).
+
+### Round U (requested 2026-11-12 17:38, after v0.101.0) — v0.102.0
+
+Done: paths numbered (Path 1 = critical, then by decreasing total) with the route as a description; Analysis path
+graph selector (all paths / one path), isolated-path labels (total, below critical, route), point pick (component n of
+N, item ID, drop), table item IDs ring the item on the graph; air handling unit (AHU tool, AHU-nnn, internal static
+pressure input; ESP / internal / total on Analysis, Fan Information, auto-size message and report; motor power on the
+total; ductwork and pressure class on ESP; schema 18); elbow coefficients as named factors (C = Kθ × C'o etc.) with
+named look-ups and the combining equation, reference size and R = (R/D) × D on fitting sheets and in the Fitting
+Calculator; duct step 1 "D = … in round"; QA/QC quick check first in a navy band; fan/AHU/coil sheets as aligned
+equations; Selection Inspector equation, "=" and value on one line; larger top-bar wordmark; main title bar without
+icon and caption (Windows; not visible under Wine).
+Checks: engine 82/82 (4 new: AHU total/motor power, ESP-only ductwork, format 18 round-trip, elbow factors), interface
+24/24 at 100 % and 150 % under Wine (new: path numbering/selector/pick/highlight, AHU placement, tile, information).
+Open with Ryan: outlet stored pressure drops still not refreshed automatically (round T question); the title-bar
+change needs a look on Windows; an AHU's ID depends on how it was placed, so a fan cannot be converted to an AHU
+(delete and place an AHU instead).
 

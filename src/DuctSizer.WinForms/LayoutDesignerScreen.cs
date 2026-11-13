@@ -1137,13 +1137,18 @@ internal sealed partial class LayoutDesignerScreen
     {
         if (type == LayoutNodeType.Duct)
             return;
-        if (type == LayoutNodeType.Fan && _host.DuctSystemScreen._ductSystem.LayoutNodes.Any(x => x.Type == LayoutNodeType.Fan))
+        var airHandlingUnit = type == LayoutNodeType.Fan
+                              && string.Equals(fittingGroup, LayoutFanData.AirHandlingUnitTool, StringComparison.OrdinalIgnoreCase);
+        if (type == LayoutNodeType.Fan
+            && _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x => x.Type == LayoutNodeType.Fan) is { } existingFan)
         {
-            const string message = "Only one fan is allowed in the duct system. Remove the existing fan before adding another.";
+            // One fan or air handling unit per duct system: it is the single pressure source the system is sized to.
+            var message = $"Only one fan or air handling unit is allowed in the duct system. Remove {existingFan.Id} before adding "
+                          + (airHandlingUnit ? "an air handling unit." : "a fan.");
             _layoutStatusLabel.Text = message;
             _layoutStatusLabel.ForeColor = Color.Firebrick;
             if (!AutomatedLayoutVerification)
-                MessageBox.Show(_host, message, "Only One Fan Allowed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(_host, message, "Only One Fan or AHU Allowed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         var historyState = CaptureLayoutHistoryState();
@@ -1212,6 +1217,8 @@ internal sealed partial class LayoutDesignerScreen
                 : UnitConversions.FahrenheitToCelsius(70),
             IsDefined = type == LayoutNodeType.CalculationPoint
         };
+        // Set before the ID is used anywhere: an air handling unit's ID is "AHU-nnn".
+        node.IsAirHandlingUnit = airHandlingUnit;
         if (sourceBoundary)
             node.BranchId = "Main";
         if (!firstComponent && type != LayoutNodeType.CalculationPoint)

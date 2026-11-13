@@ -6,8 +6,10 @@ namespace DuctSizer.WinForms;
 
 /// <summary>
 /// Line graph of the running pressure loss along every route (Analysis tab): x is the component number along the
-/// route (1, 2, 3 …), y the pressure loss from the start of the route. The critical path is drawn on top in amber;
-/// other routes in a muted blue. Hovering a point names the route, the component and the value.
+/// route (1, 2, 3 …), y the pressure loss from the start of the route. Path 1 (the critical path) is drawn on top in
+/// amber; the other paths in a muted blue. One path can be isolated (<see cref="IsolatedSeries"/>); clicking a point
+/// of the isolated path selects that component (<see cref="SelectedPoint"/>). An item chosen elsewhere
+/// (<see cref="HighlightItemId"/>) is ringed wherever it appears on the paths shown. Hovering names the point.
 /// </summary>
 internal sealed class PressureProfileChart : Control
 {
@@ -23,6 +25,12 @@ internal sealed class PressureProfileChart : Control
     private double _yMax = 1;
     private int _xMax = 1;
     private string _hoverText = string.Empty;
+    private int? _isolated;
+    private string? _highlightItemId;
+    private (int Series, int Index)? _selected;
+
+    /// <summary>Raised when the selected component (click on the isolated path) changes.</summary>
+    internal event EventHandler? SelectionChanged;
 
     internal PressureProfileChart()
     {
@@ -40,9 +48,68 @@ internal sealed class PressureProfileChart : Control
         set
         {
             _profile = value;
+            if (_isolated is int index && (value is null || index >= value.Series.Count))
+                _isolated = null;
+            _selected = null;
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
             Invalidate();
         }
     }
+
+    /// <summary>Index into the profile's series of the one path shown alone; null shows every path.</summary>
+    internal int? IsolatedSeries
+    {
+        get => _isolated;
+        set
+        {
+            var valid = value is int index && _profile is not null && index >= 0 && index < _profile.Series.Count ? value : null;
+            if (valid == _isolated)
+                return;
+            _isolated = valid;
+            _selected = null;
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+            Invalidate();
+        }
+    }
+
+    /// <summary>An item ID to ring on the paths shown (chosen in a table); null for none.</summary>
+    internal string? HighlightItemId
+    {
+        get => _highlightItemId;
+        set
+        {
+            if (string.Equals(value, _highlightItemId, StringComparison.OrdinalIgnoreCase))
+                return;
+            _highlightItemId = value;
+            Invalidate();
+        }
+    }
+
+    /// <summary>The component picked on the isolated path (series index, 0-based position); null for none.</summary>
+    internal (int Series, int Index)? SelectedPoint
+    {
+        get => _selected;
+        set
+        {
+            _selected = value;
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+            Invalidate();
+        }
+    }
+
+    /// <summary>The series drawn: the isolated one, or all.</summary>
+    private IEnumerable<(DuctSystemPdfProfileSeries Line, int Index)> ShownSeries()
+    {
+        if (_profile is null)
+            yield break;
+        for (var index = 0; index < _profile.Series.Count; index++)
+            if (_isolated is null || _isolated == index)
+                yield return (_profile.Series[index], index);
+    }
+
+    /// <summary>True when <paramref name="itemId"/> lies on a path shown.</summary>
+    internal bool ShowsItem(string itemId) =>
+        ShownSeries().Any(item => item.Line.ItemIds?.Any(id => string.Equals(id, itemId, StringComparison.OrdinalIgnoreCase)) == true);
 
     internal string EmptyMessage
     {
@@ -69,8 +136,9 @@ internal sealed class PressureProfileChart : Control
         }
 
         var unit = _profile!.UnitLabel;
-        _xMax = Math.Max(2, series.Max(x => x.Values.Count));
-        var dataMax = series.SelectMany(x => x.Values).DefaultIfEmpty(0).Max();
+        var shown = ShownSeries().Select(item => item.Line).ToArray();
+        _xMax = Math.Max(2, shown.Max(x => x.Values.Count));
+        var dataMax = shown.SelectMany(x => x.Values).DefaultIfEmpty(0).Max();
         var lineHeight = TextRenderer.MeasureText("0", Font).Height;
         var legendHeight = lineHeight + DpiScaling.Scale(6);
         var top = legendHeight + DpiScaling.Scale(6);
@@ -125,23 +193,65 @@ internal sealed class PressureProfileChart : Control
         graphics.Restore(state);
 
         using var pathPen = new Pen(Color.FromArgb(150, PathColor), DpiScaling.Scale(1.6f)) { LineJoin = LineJoin.Round };
+        using var isolatedPen = new Pen(PathColor, DpiScaling.Scale(2.6f)) { LineJoin = LineJoin.Round };
         using var criticalPen = new Pen(CriticalColor, DpiScaling.Scale(2.6f)) { LineJoin = LineJoin.Round };
         using var pathDot = new SolidBrush(PathColor);
         using var criticalDot = new SolidBrush(CriticalColor);
-        foreach (var line in series.Where(x => !x.IsCritical))
-            DrawSeries(graphics, line, pathPen, pathDot, DpiScaling.Scale(2.4f));
-        foreach (var line in series.Where(x => x.IsCritical))
+        var visible = ShownSeries().ToArray();
+        foreach (var (line, _) in visible.Where(x => !x.Line.IsCritical))
+            DrawSeries(graphics, line, _isolated is null ? pathPen : isolatedPen, pathDot,
+                DpiScaling.Scale(_isolated is null ? 2.4f : 3.2f));
+        foreach (var (line, _) in visible.Where(x => x.Line.IsCritical))
             DrawSeries(graphics, line, criticalPen, criticalDot, DpiScaling.Scale(3.2f));
 
-        // Legend (top left of the plot).
-        var critical = series.FirstOrDefault(x => x.IsCritical);
-        var others = series.Count(x => !x.IsCritical);
+        // An item chosen in a table: a ring wherever it lies on a path shown.
+        if (!string.IsNullOrWhiteSpace(_highlightItemId))
+        {
+            using var ring = new Pen(Color.FromArgb(14, 111, 230), DpiScaling.Scale(2.2f));
+            using var halo = new SolidBrush(Color.FromArgb(70, 14, 111, 230));
+            var r = DpiScaling.Scale(7f);
+            foreach (var (line, _) in visible)
+                for (var index = 0; index < line.Values.Count; index++)
+                    if (line.ItemIds is { } ids && index < ids.Count
+                        && string.Equals(ids[index], _highlightItemId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var point = new PointF(X(index + 1), Y(line.Values[index]));
+                        graphics.FillEllipse(halo, point.X - r, point.Y - r, r * 2, r * 2);
+                        graphics.DrawEllipse(ring, point.X - r, point.Y - r, r * 2, r * 2);
+                    }
+        }
+        // The component picked on the isolated path.
+        if (_selected is { } picked && _profile.Series.Count > picked.Series && picked.Index < _profile.Series[picked.Series].Values.Count)
+        {
+            var line = _profile.Series[picked.Series];
+            var point = new PointF(X(picked.Index + 1), Y(line.Values[picked.Index]));
+            var r = DpiScaling.Scale(6f);
+            using var fill = new SolidBrush(Color.White);
+            using var edge = new Pen(Color.FromArgb(11, 31, 59), DpiScaling.Scale(2.4f));
+            graphics.FillEllipse(fill, point.X - r, point.Y - r, r * 2, r * 2);
+            graphics.DrawEllipse(edge, point.X - r, point.Y - r, r * 2, r * 2);
+            using var guide = new Pen(Color.FromArgb(120, 11, 31, 59), 1f) { DashStyle = DashStyle.Dash };
+            graphics.DrawLine(guide, point.X, point.Y + r, point.X, _plot.Bottom);
+        }
+
+        // Legend (top left of the plot): Path 1 is the critical path.
         var legendX = _plot.Left;
         var legendY = DpiScaling.Scale(2) + lineHeight / 2;
+        if (_isolated is int only)
+        {
+            var line = _profile.Series[only];
+            legendX = LegendEntry(graphics, legendX, legendY, line.IsCritical ? criticalPen : isolatedPen,
+                $"{line.Label}{(line.IsCritical ? " (critical)" : string.Empty)}: {line.Route}");
+            return;
+        }
+        var critical = series.FirstOrDefault(x => x.IsCritical);
+        var others = series.Count(x => !x.IsCritical);
         if (critical is not null)
-            legendX = LegendEntry(graphics, legendX, legendY, criticalPen, $"Critical path ({critical.Label})");
+            legendX = LegendEntry(graphics, legendX, legendY, criticalPen, $"{critical.Label} (critical)");
         if (others > 0)
-            LegendEntry(graphics, legendX, legendY, pathPen, others == 1 ? "Other path" : $"Other paths ({others})");
+            LegendEntry(graphics, legendX, legendY, pathPen, critical is null
+                ? $"Paths ({others})"
+                : others == 1 ? "Path 2" : $"Paths 2 to {others + 1}");
     }
 
     private int LegendEntry(Graphics graphics, int x, int y, Pen pen, string text)
@@ -178,6 +288,34 @@ internal sealed class PressureProfileChart : Control
             _toolTip.Show(text, this, e.X + DpiScaling.Scale(14), e.Y + DpiScaling.Scale(14));
     }
 
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        base.OnMouseClick(e);
+        // Only the isolated path's components can be picked (the panel beside the graph describes the pick).
+        if (_isolated is not int only || _profile is null || _plot.Width <= 0)
+            return;
+        var line = _profile.Series[only];
+        var best = double.MaxValue;
+        int? nearest = null;
+        for (var index = 0; index < line.Values.Count; index++)
+        {
+            var dx = X(index + 1) - e.X;
+            var dy = Y(line.Values[index]) - e.Y;
+            var distance = Math.Sqrt(dx * dx + dy * dy);
+            if (distance < best && distance <= DpiScaling.Scale(12))
+            {
+                best = distance;
+                nearest = index;
+            }
+        }
+        if (nearest is int picked)
+            SelectedPoint = (only, picked);
+    }
+
+    /// <summary>For checks: the screen point of a series' component (0-based), in client pixels.</summary>
+    internal PointF PointOf(int series, int index) =>
+        _profile is null ? PointF.Empty : new PointF(X(index + 1), Y(_profile.Series[series].Values[index]));
+
     protected override void OnMouseLeave(EventArgs e)
     {
         base.OnMouseLeave(e);
@@ -193,7 +331,7 @@ internal sealed class PressureProfileChart : Control
         var best = double.MaxValue;
         var text = string.Empty;
         // Critical path first, so it wins where routes share points.
-        foreach (var line in _profile.Series.OrderByDescending(x => x.IsCritical))
+        foreach (var line in ShownSeries().Select(item => item.Line).OrderByDescending(x => x.IsCritical))
             for (var index = 0; index < line.Values.Count; index++)
             {
                 var dx = X(index + 1) - location.X;
@@ -208,8 +346,10 @@ internal sealed class PressureProfileChart : Control
                 var versus = line.IsCritical || critical is null || critical.Values.Count == 0
                     ? string.Empty
                     : $" ({(critical.Values[^1] - total).ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel} below the critical path)";
-                text = $"{(line.IsCritical ? "Critical path " : "Path ")}{line.Label}\n"
-                       + $"Component {index + 1}{item}: {line.Values[index].ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel}\n"
+                var drop = line.Values[index] - (index == 0 ? 0 : line.Values[index - 1]);
+                text = $"{line.Label}{(line.IsCritical ? " (critical)" : string.Empty)}: {line.Route}\n"
+                       + $"Component {index + 1}{item}: {drop.ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel} drop; "
+                       + $"{line.Values[index].ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel} from the start\n"
                        + $"Path total: {total.ToString("0.####", CultureInfo.CurrentCulture)} {_profile.UnitLabel}{versus}";
             }
         return text;

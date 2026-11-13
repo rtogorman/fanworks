@@ -18,6 +18,8 @@ internal sealed class TableRangeLog : IDisposable
     private readonly TableRangeLog? _outer;
     private readonly List<(double Value, double Minimum, double Maximum)> _events = new();
     private readonly List<TableLookupStep> _lookups = new();
+    private readonly List<CoefficientFactor> _factors = new();
+    [ThreadStatic] private static Stack<(string Symbol, string Meaning)>? _names;
 
     private TableRangeLog(TableRangeLog? outer) => _outer = outer;
 
@@ -45,9 +47,39 @@ internal sealed class TableRangeLog : IDisposable
     /// </summary>
     public static void Lookup(TableLookupStep step)
     {
-        if (_current is not null)
-            _current._lookups.Add(step);
+        if (_current is null)
+            return;
+        if (string.IsNullOrEmpty(step.Symbol) && _names is { Count: > 0 } names)
+            step = step with { Symbol = names.Peek().Symbol, Meaning = names.Peek().Meaning };
+        _current._lookups.Add(step);
     }
+
+    /// <summary>
+    /// Evaluates one named factor of a fitting coefficient (for example the base coefficient C'o or the angle factor
+    /// Kθ of an elbow, where C = Kθ × C'o). Table look-ups made while evaluating it carry its symbol, and the factor
+    /// and its value are recorded so the worksheet can show the combining equation with every factor substituted.
+    /// </summary>
+    /// <param name="symbol">Symbol in worksheet markup, e.g. <c>C'_{o}</c> or <c>K_{\theta}</c>.</param>
+    /// <param name="meaning">What the factor is and where it comes from.</param>
+    public static double Named(string symbol, string meaning, Func<double> evaluate)
+    {
+        _names ??= new Stack<(string, string)>();
+        _names.Push((symbol, meaning));
+        double value;
+        try
+        {
+            value = evaluate();
+        }
+        finally
+        {
+            _names.Pop();
+        }
+        _current?._factors.Add(new CoefficientFactor(symbol, meaning, value));
+        return value;
+    }
+
+    /// <summary>The named factors (see <see cref="Named"/>) in calculation order; empty for single-value fittings.</summary>
+    public IReadOnlyList<CoefficientFactor> Factors => _factors.ToArray();
 
     /// <summary>The recorded look-ups in calculation order, with each axis named after the matching input.</summary>
     public IReadOnlyList<TableLookupStep> Lookups(FittingDefinition definition, IReadOnlyDictionary<string, double> inputs) =>
@@ -142,6 +174,15 @@ public sealed record TableLookupAxis(string Name, double Value, double Lower, do
 /// [z(r1,c1), z(r1,c2), z(r2,c1), z(r2,c2)] for axes [row, column]; Trilinear the eight corners in axis order;
 /// Exact and HeldAtEdge [y]; ConservativeColumn [value at the lower column, value at the upper column].
 /// </summary>
+/// <param name="Symbol">The named value this look-up gives (e.g. <c>C'_{o}</c>), or empty when the look-up gives the
+/// coefficient itself.</param>
+/// <param name="Meaning">What <paramref name="Symbol"/> is, for the worksheet.</param>
 public sealed record TableLookupStep(TableLookupKind Kind, IReadOnlyList<TableLookupAxis> Axes,
-    IReadOnlyList<double> Values, double Result, string? Note = null);
+    IReadOnlyList<double> Values, double Result, string? Note = null, string Symbol = "", string Meaning = "");
+
+/// <summary>One factor of a coefficient that is a product of factors (C = K1 × K2 × ...).</summary>
+/// <param name="Symbol">Symbol in worksheet markup.</param>
+/// <param name="Meaning">What the factor is and where it comes from.</param>
+/// <param name="Value">The factor's value.</param>
+public sealed record CoefficientFactor(string Symbol, string Meaning, double Value);
 

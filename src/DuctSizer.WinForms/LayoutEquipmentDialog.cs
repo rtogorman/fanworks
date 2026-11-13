@@ -17,6 +17,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
     private readonly TextBox _temperature = new();
     private readonly TextBox _pressureDrop = new();
     private readonly TextBox _fanEfficiency = new();
+    private readonly TextBox _ahuInternalStatic = new();
     private readonly TextBox _deltaX = new();
     private readonly TextBox _deltaY = new();
     private readonly TextBox _deltaZ = new();
@@ -80,6 +81,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
         _editableAxes = editableAxes;
         var reservoir = node.Type == LayoutNodeType.Reservoir;
         var fan = node.Type == LayoutNodeType.Fan;
+        var airHandlingUnit = node.IsAirHandlingUnit;
         var filter = node.Type == LayoutNodeType.Filter;
         var grd = node.Type == LayoutNodeType.Grd;
         var calculationPoint = node.Type == LayoutNodeType.CalculationPoint;
@@ -89,6 +91,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
         Text = reservoir ? $"{(sourceSpace ? "Space Source" : "Space Sink")} Inputs"
             : calculationPoint ? $"{node.CalculationPointType} Calculation Point"
             : custom ? "Custom Component Inputs"
+            : airHandlingUnit ? "Air Handling Unit Inputs"
             : fan ? "System Fan Inputs" : filter ? "Filter Inputs" : grd ? "GRD Inputs" : "Coil Inputs";
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -109,6 +112,9 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
         _componentDescription.Text = string.IsNullOrWhiteSpace(node.Description) ? "Custom Component" : node.Description;
         _fanEfficiency.Name = "LayoutFanEfficiencyText";
         _fanEfficiency.Text = node.FanEfficiencyPercent.ToString("0.##", CultureInfo.CurrentCulture);
+        _ahuInternalStatic.Name = "LayoutAhuInternalStaticText";
+        _ahuInternalStatic.Text = UnitConversions.PaToInchesWater(node.AhuInternalStaticPressurePa)
+            .ToString("0.###", CultureInfo.CurrentCulture);
         _deltaX.Name = "LayoutEquipmentDeltaXText";
         _deltaY.Name = "LayoutEquipmentDeltaYText";
         _deltaZ.Name = "LayoutEquipmentDeltaZText";
@@ -190,6 +196,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
         AddRow(table, 0, reservoir ? (sourceSpace ? "Space Source" : "Space Sink")
             : calculationPoint ? $"{node.CalculationPointType} Calculation Point"
             : custom ? "Custom Component"
+            : airHandlingUnit ? "Air Handling Unit"
             : fan ? "System Fan" : filter ? "Air Filter" : grd ? "Grille / Diffuser" : "Cooling / Heating Coil", new Label
         {
             Text = reservoir ? sourceSpace
@@ -197,6 +204,7 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
                     : "Terminal sink with editable design airflow and temperature calculated from the upstream system"
                 : calculationPoint ? "Read-only value calculated at this duct location"
                 : custom ? "Enter the component description and its static pressure drop"
+                : airHandlingUnit ? "Design airflow, air temperature, and external and internal static pressure"
                 : fan ? "Design airflow and entering-air temperature"
                 : filter ? "Enter the filter pressure drop"
                 : grd ? "Select the outlet type and enter its airflow and pressure drop"
@@ -220,6 +228,17 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
                 _temperature.ReadOnly = true;
                 _temperature.BackColor = Color.FromArgb(235, 241, 246);
             }
+        }
+        else if (airHandlingUnit)
+        {
+            // External static pressure (the duct system; set by Auto-size) and internal static pressure (filters,
+            // coils and other internal components, from the manufacturer). Total = external + internal.
+            AddRow(table, row++, "Airflow (cfm)", _airflow);
+            AddRow(table, row++, "Air Temperature (°F)", _temperature);
+            AddRow(table, row++, "External Static Pressure (in. w.c.)", _pressureDrop);
+            AddRow(table, row++, "Internal Static Pressure (in. w.c.)", _ahuInternalStatic);
+            AddRow(table, row++, "Fan Efficiency", LayoutDialogControls.CreateInputWithUnit(_fanEfficiency, "%"));
+            AddRow(table, row++, "Air System Type", _airSystem);
         }
         else if (fan)
         {
@@ -593,7 +612,18 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
             if (!double.TryParse(_pressureDrop.Text, NumberStyles.Float, CultureInfo.CurrentCulture,
                     out var fanStaticPressure) || !double.IsFinite(fanStaticPressure) || fanStaticPressure < 0)
             {
-                ShowInputProblem("Enter a nonnegative fan system static pressure in in. w.c.", "Invalid Fan Static Pressure");
+                ShowInputProblem(_node.IsAirHandlingUnit
+                    ? "Enter a nonnegative external static pressure in in. w.c."
+                    : "Enter a nonnegative fan system static pressure in in. w.c.", "Invalid Fan Static Pressure");
+                return false;
+            }
+            var internalStatic = 0.0;
+            if (_node.IsAirHandlingUnit
+                && (!double.TryParse(_ahuInternalStatic.Text, NumberStyles.Float, CultureInfo.CurrentCulture,
+                        out internalStatic) || !double.IsFinite(internalStatic) || internalStatic < 0))
+            {
+                ShowInputProblem("Enter a nonnegative internal static pressure in in. w.c. (the drop across the unit's filters, coils and other internal components, from the manufacturer's data).",
+                    "Invalid Internal Static Pressure");
                 return false;
             }
             _node.FanStaticPressurePa = UnitConversions.InchesWaterToPa(fanStaticPressure);
@@ -605,6 +635,8 @@ internal sealed class LayoutEquipmentDialog : DpiScaledForm, IInlineEditable
                 return false;
             }
             _node.FanEfficiencyPercent = fanEfficiency;
+            if (_node.IsAirHandlingUnit)
+                _node.AhuInternalStaticPressurePa = UnitConversions.InchesWaterToPa(internalStatic);
         }
         else
         {

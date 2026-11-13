@@ -7,9 +7,13 @@ namespace DuctSizer.WinForms;
 
 internal sealed class FanInformationDialog : DpiScaledForm
 {
-    internal FanInformationDialog(string information)
+    internal FanInformationDialog(string information) : this(information, false)
     {
-        Text = "Fan Information";
+    }
+
+    internal FanInformationDialog(string information, bool airHandlingUnit)
+    {
+        Text = airHandlingUnit ? "Fan Information - Air Handling Unit" : "Fan Information";
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -33,7 +37,8 @@ internal sealed class FanInformationDialog : DpiScaledForm
             var side = Math.Max(1, Math.Min(icon.ClientSize.Width, icon.ClientSize.Height) - 28);
             var square = new Rectangle((icon.ClientSize.Width - side) / 2, (icon.ClientSize.Height - side) / 2,
                 side, side);
-            LayoutIconPainter.Draw(args.Graphics, LayoutNodeType.Fan, square, Color.FromArgb(14, 111, 230));
+            LayoutIconPainter.Draw(args.Graphics, LayoutNodeType.Fan, square, Color.FromArgb(14, 111, 230),
+                airHandlingUnit ? LayoutFanData.AirHandlingUnitTool : null);
         };
 
         var details = new Label

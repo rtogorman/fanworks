@@ -146,6 +146,13 @@ internal static class LayoutIconPainter
             graphics.Restore(state);
             return;
         }
+        if (type == LayoutNodeType.Fan
+            && string.Equals(fittingGroup, LayoutFanData.AirHandlingUnitTool, StringComparison.OrdinalIgnoreCase))
+        {
+            DrawAirHandlingUnitIcon(graphics, bounds, color);
+            graphics.Restore(state);
+            return;
+        }
         if (OpenSourceIconCatalog.Draw(graphics, IconKey(type, fittingGroup), bounds, color))
         {
             graphics.Restore(state);
@@ -336,6 +343,67 @@ internal static class LayoutIconPainter
         LayoutNodeType.Duct => "duct",
         _ => "other"
     };
+
+    /// <summary>
+    /// Air handling unit, side view: a cabinet with a filter at the inlet (left), the fan in the middle and a coil
+    /// at the outlet (right). The cabinet outline takes the status colour (blue defined, red undefined, orange
+    /// overridden), the same as the other component symbols.
+    /// </summary>
+    private static void DrawAirHandlingUnitIcon(Graphics graphics, Rectangle bounds, Color color)
+    {
+        var size = Math.Min(bounds.Width, bounds.Height);
+        var stroke = Math.Clamp(size / 16F, 1.3F, 2.6F);
+        var cabinetHeight = size * .70F;
+        var cabinet = new RectangleF(bounds.Left + 1F, bounds.Top + (bounds.Height - cabinetHeight) / 2F,
+            bounds.Width - 2F, cabinetHeight);
+        using (var cabinetFill = new SolidBrush(Color.FromArgb(232, 242, 252)))
+        using (var cabinetPath = RoundedIconRectangle(Rectangle.Round(cabinet), Math.Max(2, size / 12)))
+        using (var cabinetPen = new Pen(color, stroke) { LineJoin = LineJoin.Round })
+        {
+            graphics.FillPath(cabinetFill, cabinetPath);
+            graphics.DrawPath(cabinetPen, cabinetPath);
+        }
+
+        var dark = Color.FromArgb(20, 28, 38);
+        using var componentPen = new Pen(dark, Math.Max(1F, stroke * .7F)) { LineJoin = LineJoin.Round };
+        var sectionWidth = cabinet.Width * .13F;
+        var sectionHeight = cabinet.Height * .66F;
+        var sectionTop = cabinet.Top + (cabinet.Height - sectionHeight) / 2F;
+
+        // Filter (inlet side): white panel with diagonal pleats.
+        var filter = new RectangleF(cabinet.Left + cabinet.Width * .08F, sectionTop, sectionWidth, sectionHeight);
+        graphics.FillRectangle(Brushes.White, filter);
+        var pleats = graphics.Save();
+        graphics.SetClip(filter);
+        for (var y = filter.Top - filter.Width; y < filter.Bottom; y += Math.Max(2.5F, filter.Height / 5F))
+            graphics.DrawLine(componentPen, filter.Left, y + filter.Width, filter.Right, y);
+        graphics.Restore(pleats);
+        graphics.DrawRectangle(componentPen, filter.X, filter.Y, filter.Width, filter.Height);
+
+        // Coil (outlet side): light blue panel with a serpentine tube.
+        var coil = new RectangleF(cabinet.Right - cabinet.Width * .08F - sectionWidth, sectionTop, sectionWidth, sectionHeight);
+        using (var coilFill = new SolidBrush(Color.FromArgb(126, 199, 255)))
+            graphics.FillRectangle(coilFill, coil);
+        // Fins: short horizontal lines in the coil's blue, so the coil reads differently from the pleated filter.
+        using (var finPen = new Pen(Color.FromArgb(10, 88, 187), Math.Max(1F, stroke * .55F)))
+            for (var fin = 1; fin <= 3; fin++)
+            {
+                var y = coil.Top + coil.Height * fin / 4F;
+                graphics.DrawLine(finPen, coil.Left + 1F, y, coil.Right - 1F, y);
+            }
+        graphics.DrawRectangle(componentPen, coil.X, coil.Y, coil.Width, coil.Height);
+
+        // Fan (the standard fan artwork), centred between the filter and the coil.
+        var fanSpace = coil.Left - filter.Right;
+        var fanSize = (int)Math.Round(Math.Min(fanSpace * .92F, cabinet.Height * .92F));
+        var fanBounds = new Rectangle((int)Math.Round(filter.Right + (fanSpace - fanSize) / 2F),
+            (int)Math.Round(cabinet.Top + (cabinet.Height - fanSize) / 2F), fanSize, fanSize);
+        if (!OpenSourceIconCatalog.Draw(graphics, "fan", fanBounds, Color.FromArgb(10, 88, 187)))
+        {
+            using var fanPen = new Pen(dark, Math.Max(1F, stroke * .7F));
+            graphics.DrawEllipse(fanPen, Rectangle.Inflate(fanBounds, -2, -2));
+        }
+    }
 
     private static void DrawPlenumIcon(Graphics graphics, Rectangle bounds, Color color)
     {

@@ -14,6 +14,33 @@ internal static class TableLookupTests
         GeometryCalculator.Round(UnitConversions.InchesToM(12)),
         UnitConversions.FahrenheitToCelsius(70));
 
+    public static void ElbowFactorsAreNamedAndCombined()
+    {
+        // ASHRAE 3-1, r/D 1.25 and 50°, by hand:
+        //   C'o = 0.22 + (1.25 - 1.0)/(1.5 - 1.0) x (0.15 - 0.22) = 0.185      (base coefficient, by R/D)
+        //   Kθ  = 0.60 + (50 - 45)/(60 - 45) x (0.78 - 0.60)     = 0.66       (angle factor, by θ)
+        //   C   = Kθ x C'o = 0.66 x 0.185                       = 0.1221
+        var elbow = Elbow(1.25, 50);
+        Near(elbow.Coefficient, .1221, 1e-12, "3-1 at r/D 1.25, 50°");
+        var factors = elbow.CoefficientFactors;
+        Require(factors.Count == 2 && factors[0].Symbol == "K_{\\theta}" && factors[1].Symbol == "C'_{o}",
+            $"3-1 should record its factors as Kθ then C'o; got {string.Join(", ", factors.Select(x => x.Symbol))}.");
+        Near(factors[0].Value, .66, 1e-12, "Kθ");
+        Near(factors[1].Value, .185, 1e-12, "C'o");
+        Require(elbow.TableLookups.Count == 2
+                && elbow.TableLookups.Any(step => step.Symbol == "C'_{o}" && Math.Abs(step.Result - .185) < 1e-12)
+                && elbow.TableLookups.Any(step => step.Symbol == "K_{\\theta}" && Math.Abs(step.Result - .66) < 1e-12),
+            "Each look-up should carry the symbol of the value it gives.");
+
+        // A single-table fitting has no factors (its one look-up gives C directly).
+        var tee = FittingCalculator.Calculate(FittingCatalog.Find("3-4"),
+            new Dictionary<string, double> { ["ld"] = 1.2 }, UnitConversions.CfmToM3PerS(1000),
+            GeometryCalculator.Round(UnitConversions.InchesToM(12)),
+            UnitConversions.FahrenheitToCelsius(70));
+        Require(tee.CoefficientFactors.Count == 0 && tee.TableLookups.All(step => step.Symbol.Length == 0),
+            "A fitting read from one table has no named factors.");
+    }
+
     public static void InterpolationIsRecordedWithItsTablePoints()
     {
         // ASHRAE 3-1: C'o at r/D 1.0 = 0.22 and 1.5 = 0.15; r/D = 1.25 is halfway: 0.22 + 0.5 (0.15 - 0.22) = 0.185.

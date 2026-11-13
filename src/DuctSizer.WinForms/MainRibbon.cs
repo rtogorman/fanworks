@@ -155,6 +155,8 @@ internal sealed class MainRibbon
         AddComponentGroup(page, "RibbonEquipmentGroup", "Equipment", new (LayoutNodeType, string, string, string?)[]
         {
             (LayoutNodeType.Fan, "Fan", "Airflow, temperature, air system", null),
+            (LayoutNodeType.Fan, "AHU", "Air handling unit: fan with filters and coils; internal and external static pressure",
+                LayoutFanData.AirHandlingUnitTool),
             (LayoutNodeType.Coil, "Coil", "Temperature and pressure drop", null),
             (LayoutNodeType.Filter, "Filter", "Pressure-drop input", null),
             (LayoutNodeType.Fitting, "VAV", "Titus DESV VAV with or without hot-water reheat", FittingCatalog.VavSelectionGroup),

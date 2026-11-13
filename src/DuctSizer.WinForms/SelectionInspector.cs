@@ -420,7 +420,7 @@ internal sealed class SelectionInspector : Panel
         {
             var selectedNode = _node!;
             iconType = selectedNode.Type;
-            iconGroup = selectedNode.FittingGroup;
+            iconGroup = selectedNode.IsAirHandlingUnit ? LayoutFanData.AirHandlingUnitTool : selectedNode.FittingGroup;
             notesKey = DuctSystemScreen.LayoutKey(selectedNode.Sequence);
             if (selectedNode.Type == LayoutNodeType.Fitting
                 && selectedNode.LinkedFittingSequence is int fittingSequence
@@ -957,42 +957,30 @@ internal sealed class SelectionInspector : Panel
                         line.Kind == DuctSystemPdfLineKind.TableRowSelected ? Color.FromArgb(14, 111, 230) : RibbonPalette.Ink);
                     continue;
                 }
-                // Report lines often end with "=": the value then follows on the same line.
+                // One line per result: "A = πD²/4 = 1.2743 ft²" (the equation, an equals sign and the value on the
+                // same line), with the substituted inputs under it; text lines read "Airflow Q = 1200 cfm".
                 var formula = line.Formula.TrimEnd();
                 var endsWithEquals = formula.EndsWith('=');
+                var valueTone = line.HighlightAsInput ? EngineeringMathRichText.MathTone.Input : EngineeringMathRichText.MathTone.Solved;
                 if (line.IsEquation)
                 {
                     // Equations are written in the worksheet math markup; render them as the calculators do.
                     _calculations.SelectionStart = _calculations.TextLength;
                     var parts = new List<(string Markup, EngineeringMathRichText.MathTone Tone)>
                         { (formula, EngineeringMathRichText.MathTone.Formula) };
-                    if (!string.IsNullOrWhiteSpace(line.HighlightValue) && endsWithEquals)
-                    {
-                        parts.Add((" " + line.HighlightValue, line.HighlightAsInput
-                            ? EngineeringMathRichText.MathTone.Input : EngineeringMathRichText.MathTone.Solved));
-                        EngineeringMathRichText.AppendStyledEquation(_calculations, parts.ToArray());
-                        if (!string.IsNullOrWhiteSpace(line.InputSubstitution))
-                            Write($"    {DisplayUnits(line.InputSubstitution)}\r\n", body, Color.FromArgb(62, 78, 94));
-                        continue;
-                    }
+                    if (!string.IsNullOrWhiteSpace(line.HighlightValue))
+                        parts.Add(((endsWithEquals ? " " : " = ") + DisplayUnits(line.HighlightValue), valueTone));
                     EngineeringMathRichText.AppendStyledEquation(_calculations, parts.ToArray());
                     if (!string.IsNullOrWhiteSpace(line.InputSubstitution))
-                        Write($"    = {DisplayUnits(line.InputSubstitution)}\r\n", body, Color.FromArgb(62, 78, 94));
-                    if (!string.IsNullOrWhiteSpace(line.HighlightValue))
-                        Write($"    = {DisplayUnits(line.HighlightValue)}\r\n", value,
-                            line.HighlightAsInput ? Color.FromArgb(42, 110, 60) : Color.FromArgb(18, 52, 96));
+                        Write($"    with {DisplayUnits(line.InputSubstitution)}\r\n", body, Color.FromArgb(62, 78, 94));
                     continue;
                 }
                 Write(DisplayUnits(formula), body, RibbonPalette.Ink);
-                if (!string.IsNullOrWhiteSpace(line.InputSubstitution))
-                {
-                    Write(endsWithEquals ? $" {DisplayUnits(line.InputSubstitution)}" : $"\r\n    = {DisplayUnits(line.InputSubstitution)}",
-                        body, Color.FromArgb(62, 78, 94));
-                    endsWithEquals = false;
-                }
                 if (!string.IsNullOrWhiteSpace(line.HighlightValue))
-                    Write(endsWithEquals ? $" {DisplayUnits(line.HighlightValue)}" : $"\r\n    = {DisplayUnits(line.HighlightValue)}", value,
+                    Write((endsWithEquals ? " " : " = ") + DisplayUnits(line.HighlightValue), value,
                         line.HighlightAsInput ? Color.FromArgb(42, 110, 60) : Color.FromArgb(18, 52, 96));
+                if (!string.IsNullOrWhiteSpace(line.InputSubstitution))
+                    Write($"\r\n    with {DisplayUnits(line.InputSubstitution)}", body, Color.FromArgb(62, 78, 94));
                 Write("\r\n", body, RibbonPalette.Ink);
             }
             Write("\r\n", body, RibbonPalette.Ink);

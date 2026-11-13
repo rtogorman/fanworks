@@ -27,6 +27,12 @@ public sealed partial class MainForm : DpiScaledForm
         Math.Min(designed.Width, workingArea.Width),
         Math.Min(designed.Height, workingArea.Height));
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        WindowLook.HideTitleBarIconAndText(this);
+    }
+
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
