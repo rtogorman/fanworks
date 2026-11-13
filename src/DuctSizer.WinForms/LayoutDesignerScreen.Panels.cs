@@ -212,9 +212,6 @@ internal sealed partial class LayoutDesignerScreen
                         issues.Add(new ProjectIssue("Warning", "Reference size", fitting.Id,
                             $"The size entered for this fitting differs from the duct it is drawn on ({inlet.Id}). Its velocity and loss use the entered size: add a transition, or tick \"Use the connected duct's size\"."));
                 }
-                if (string.Equals(fitting.FittingCode, VavPerformanceCatalog.WithReheatCode, StringComparison.OrdinalIgnoreCase))
-                    issues.Add(new ProjectIssue("Warning", "VAV basis", fitting.Id,
-                        "Only the reheat coil's airside pressure drop is included; add the terminal's minimum operating pressure from the Titus selection (see its sheet)."));
             }
         }
         foreach (var duct in document.Ducts)

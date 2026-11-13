@@ -65,6 +65,12 @@ public static class VavPerformanceCatalog
             requestedCfm, table, WithoutReheatReference);
     }
 
+    /// <summary>
+    /// Input key of the VAV-with-reheat terminal pressure drop (in. w.c.) entered by the engineer: the terminal's own
+    /// resistance (inlet sensor, body, damper) from the manufacturer's selection, added to the published coil drop.
+    /// </summary>
+    public const string TerminalDropKey = "terminalDropInWg";
+
     public static FittingCalculationResult CalculateFittingResult(FittingDefinition definition,
         IReadOnlyDictionary<string, double> inputs, double airflowM3PerS, double temperatureC,
         double relativeHumidity = 0.50, double atmosphericPressurePa = 101_325.0)
@@ -95,7 +101,13 @@ public static class VavPerformanceCatalog
         var air = AirProperties.Calculate(temperatureC, relativeHumidity, atmosphericPressurePa);
         var velocity = airflowM3PerS / geometry.ActualAreaM2;
         var velocityPressurePa = air.DensityKgPerM3 * velocity * velocity / 2.0;
-        var pressureLossPa = UnitConversions.InchesWaterToPa(selection.PressureDropInWg);
+        var terminalDropInWg = string.Equals(definition.Code, WithReheatCode, StringComparison.OrdinalIgnoreCase)
+            ? inputs.GetValueOrDefault(TerminalDropKey, 0.0)
+            : 0.0;
+        if (!double.IsFinite(terminalDropInWg) || terminalDropInWg < 0)
+            throw new ArgumentOutOfRangeException(nameof(inputs), "The terminal pressure drop must be 0 or more.");
+        // Whole-terminal drop = published coil airside drop + the terminal's own drop entered from the selection.
+        var pressureLossPa = UnitConversions.InchesWaterToPa(selection.PressureDropInWg + terminalDropInWg);
         var coefficient = velocityPressurePa > 0 ? pressureLossPa / velocityPressurePa : 0;
         var resultInputs = new Dictionary<string, double>(inputs, StringComparer.OrdinalIgnoreCase)
         {

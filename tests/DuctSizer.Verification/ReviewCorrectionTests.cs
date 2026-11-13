@@ -189,6 +189,24 @@ internal static class ReviewCorrectionTests
             "A diverging junction linked to a non-junction fitting is reported.");
     }
 
+    /// <summary>A VAV with reheat adds the engineer's terminal pressure drop to the published coil drop (round X).</summary>
+    public static void VavReheatAddsTheEnteredTerminalDrop()
+    {
+        var definition = FittingCatalog.Find(VavPerformanceCatalog.WithReheatCode);
+        var airflow = UnitConversions.CfmToM3PerS(850);
+        var coilOnly = VavPerformanceCatalog.CalculateFittingResult(definition,
+            new Dictionary<string, double> { ["sizeIndex"] = 8, ["rows"] = 1 }, airflow, 13);
+        var withTerminal = VavPerformanceCatalog.CalculateFittingResult(definition,
+            new Dictionary<string, double> { ["sizeIndex"] = 8, ["rows"] = 1, [VavPerformanceCatalog.TerminalDropKey] = 0.10 }, airflow, 13);
+        // Coil only: the published (interpolated) airside drop; with the terminal: that + 0.10 in. w.c.
+        Near(UnitConversions.PaToInchesWater(coilOnly.PressureLossPa), coilOnly.Inputs["selectedPressureDropInWg"], 1e-12, "coil-only drop");
+        Near(UnitConversions.PaToInchesWater(withTerminal.PressureLossPa), coilOnly.Inputs["selectedPressureDropInWg"] + 0.10, 1e-12,
+            "coil + entered terminal drop");
+        Throws(() => VavPerformanceCatalog.CalculateFittingResult(definition,
+            new Dictionary<string, double> { ["sizeIndex"] = 8, ["rows"] = 1, [VavPerformanceCatalog.TerminalDropKey] = -0.1 }, airflow, 13),
+            "a negative terminal drop");
+    }
+
     private static SavedFitting AddFitting(DuctSystemDocument document, SavedLayoutNode node, string code,
         Dictionary<string, double> inputs)
     {
@@ -209,7 +227,7 @@ internal static class ReviewCorrectionTests
         {
             action();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or ArgumentOutOfRangeException)
         {
             return;
         }

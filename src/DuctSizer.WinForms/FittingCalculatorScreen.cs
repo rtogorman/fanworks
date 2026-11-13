@@ -1364,7 +1364,10 @@ internal sealed partial class FittingCalculatorScreen
         _fittingVelocityPressureValue.Text = withReheat
             ? $"{Convert.ToInt32(values["rows"])}-row coil"
             : "Damper full open";
-        _fittingPressureLossValue.Text = $"{_lastVavPerformanceSelection.PressureDropInWg:0.###} in. w.c.";
+        // The whole terminal: published coil drop plus any terminal pressure drop entered (round X).
+        _fittingPressureLossValue.Text = _lastFittingCalculation is { } vavResult
+            ? $"{UnitConversions.PaToInchesWater(vavResult.PressureLossPa):0.###} in. w.c."
+            : $"{_lastVavPerformanceSelection.PressureDropInWg:0.###} in. w.c.";
         UpdateVavPerformanceCalculationDetails(_lastVavPerformanceSelection);
         _fittingStatusLabel.Text = _lastVavPerformanceSelection.WasInterpolated
             ? $"Interpolated between {_lastVavPerformanceSelection.LowerPoint.AirflowCfm:0} and {_lastVavPerformanceSelection.UpperPoint.AirflowCfm:0} cfm published points."
@@ -1714,7 +1717,10 @@ internal sealed partial class FittingCalculatorScreen
             _fittingVelocityPressureValue.Text = withReheat
                 ? _lastVavPerformanceSelection.Configuration.Split(';').ElementAtOrDefault(1)?.Trim() ?? "Reheat coil"
                 : "Damper full open";
-            _fittingPressureLossValue.Text = $"{_lastVavPerformanceSelection.PressureDropInWg:0.###} in. w.c.";
+            // The whole terminal: published coil drop plus any terminal pressure drop entered (round X).
+            _fittingPressureLossValue.Text = _lastFittingCalculation is { } vavResult
+                ? $"{UnitConversions.PaToInchesWater(vavResult.PressureLossPa):0.###} in. w.c."
+                : $"{_lastVavPerformanceSelection.PressureDropInWg:0.###} in. w.c.";
             UpdateVavPerformanceCalculationDetails(_lastVavPerformanceSelection);
             return;
         }

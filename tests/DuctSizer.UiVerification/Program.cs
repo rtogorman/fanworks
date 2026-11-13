@@ -963,6 +963,14 @@ internal static class Program
                     && vavPdfSections.SelectMany(section => section.Lines)
                         .Any(line => line.Formula.Contains("AHRI 410-2001", StringComparison.Ordinal)),
                 "The VAV report calculation should include its manufacturer source, published table, interpolation equation, and solved pressure drop.");
+            // Round X: the reheat VAV's own terminal pressure drop is entered and added to the coil drop.
+            var terminalDrop = Find<TextBox>(form, "FittingInput_" + VavPerformanceCatalog.TerminalDropKey);
+            terminalDrop.Text = "0.1";
+            Find<Button>(form, "CalculateFittingButton").PerformClick();
+            Application.DoEvents();
+            Require(PrivateField<Label>(form, "_fittingPressureLossValue").Text == "0.145 in. w.c.",
+                $"The VAV calculator should add the entered terminal pressure drop to the coil drop. Shown={PrivateField<Label>(form, "_fittingPressureLossValue").Text}.");
+            terminalDrop.Text = "0";
             fittingAirflow.Text = "1000";
             fittingGroup.SelectedItem = "Elbows";
             Application.DoEvents();

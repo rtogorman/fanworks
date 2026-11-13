@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-13 (round X, v0.105.0); round W v0.104.0; round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
+Last updated: 2026-11-13 (round X, v0.105.1); round W v0.104.0; round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
 
 ## Where things live
 
@@ -630,3 +630,8 @@ Hand checks (engine tests in `ReviewCorrectionTests`): Ao/A1 = (11/8.5)² = 1.67
 800 cfm in 10 in → Pv = (1466.8/4005)²(ρ/0.075); 1,000 cfm in 12 in → 1273.2 fpm only with airflow and size given.
 Checks: engine 91/91, interface 24/24 at 100 %, 150 % and 1080p (Wine).
 Results change: routes that end in a bare duct now include its exit loss; fittings on smaller ducts now use them.
+v0.105.1 (Ryan, 11:10): VAV with reheat gets a Terminal Pressure Drop input (`VavPerformanceCatalog.TerminalDropKey`,
+in. w.c., default 0) added to the coil drop; the "VAV basis" warning is removed. Ryan's decisions: coil-only basis is
+acceptable when no terminal drop is entered; fan curve/AMCA basis, pressure-class envelope, operating leakage, QA
+summary page and route ledger are not to be built; "leakage allowance" wording kept.
+Checks: engine 92/92, interface 24/24 (Wine, 100 %).

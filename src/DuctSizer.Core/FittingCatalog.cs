@@ -644,7 +644,11 @@ public static class FittingCatalog
                     VavPerformanceCatalog.WithReheatSizes.Select((size, index) => new FittingInputChoice(size == "24x16" ? "24 x 16 in" : $"{size} in", index)).ToArray()),
                 new FittingInputSpec("rows", "Hot-Water Coil Rows", "rows", 3, 1, 4,
                     "Published coil-row count. Sizes 4 through 12 are available in the supplied table with 3 or 4 rows; sizes 14, 16, and 24 x 16 support 1 through 4 rows.",
-                    VavPerformanceCatalog.CoilRows.Select(rows => new FittingInputChoice($"{rows} row{(rows == 1 ? "" : "s")}", rows)).ToArray())
+                    VavPerformanceCatalog.CoilRows.Select(rows => new FittingInputChoice($"{rows} row{(rows == 1 ? "" : "s")}", rows)).ToArray()),
+                // Round X: the published table gives the reheat coil's airside drop only. The terminal's own resistance
+                // (inlet sensor, body, damper) comes from the manufacturer's selection and is added to it.
+                new FittingInputSpec(VavPerformanceCatalog.TerminalDropKey, "Terminal Pressure Drop", "in. w.c.", 0, 0, 5,
+                    "The terminal's own pressure drop (inlet sensor, body and damper) from the manufacturer's selection, added to the coil pressure drop. 0 counts the coil only.")
             }, _ => 0));
         items.Add(new FittingDefinition(VavPerformanceCatalog.WithoutReheatCode, "VAVs", "VAV without Reheat - Titus DESV", "unit inlet airflow",
             VavPerformanceCatalog.WithoutReheatReference + " Minimum pressure drop is linearly interpolated between published airflow points.", true,

@@ -3873,12 +3873,16 @@ internal sealed partial class DuctSystemScreen
             new DuctSystemPdfCalculationSection("INPUT / INTERPOLATION / SOLVED RESULT", interpolation),
             new DuctSystemPdfCalculationSection("PRESSURE-LOSS RESULT", new[]
             {
-                Solved("\\Delta P_{VAV}", $"{UnitConversions.PaToInchesWater(result.PressureLossPa):0.###} in. w.c."),
-                L(string.Equals(result.Definition.Code, VavPerformanceCatalog.WithReheatCode, StringComparison.OrdinalIgnoreCase)
-                    ? "Airside ΔPs is the selected hot-water coil air pressure drop only. The terminal's own minimum operating "
-                      + "pressure (inlet sensor, body and damper) is NOT included: take it from the Titus selection for this size and "
-                      + "airflow and check it against the VAV inlet static pressure range (Analysis Settings). Until then this VAV's "
-                      + "resistance, and the fan duty, are incomplete."
+                // ΔP_VAV = coil (table) + terminal (entered) for a reheat box; the table value alone otherwise (round X).
+                reheat
+                    ? Solved("\\Delta P_{VAV} = \\Delta P_{coil} + \\Delta P_{terminal}",
+                        $"{UnitConversions.PaToInchesWater(result.PressureLossPa):0.###} in. w.c.",
+                        $"ΔP_coil = {selection.PressureDropInWg:0.###} in. w.c. (table); ΔP_terminal = "
+                        + $"{result.Inputs.GetValueOrDefault(VavPerformanceCatalog.TerminalDropKey, 0.0):0.###} in. w.c. (entered)")
+                    : Solved("\\Delta P_{VAV}", $"{UnitConversions.PaToInchesWater(result.PressureLossPa):0.###} in. w.c."),
+                L(reheat
+                    ? "Airside ΔPs is the selected hot-water coil air pressure drop; ΔP_terminal is the terminal's own drop "
+                      + "(inlet sensor, body and damper) entered from the manufacturer's selection (0 counts the coil only)."
                     : "Min ΔPs is the terminal inlet-to-outlet pressure drop with the primary damper full open."),
                 L("Interpolation is restricted to the supplied published airflow range; no extrapolation is performed.")
             }),

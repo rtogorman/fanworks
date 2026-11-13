@@ -197,6 +197,13 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.105.1
+
+- **VAV with reheat**: a **Terminal Pressure Drop** input (in. w.c.) for the terminal's own resistance (inlet sensor,
+  body and damper) from the manufacturer's selection. It is added to the published coil pressure drop (0 counts the
+  coil only) in the Project tab, the Fitting Calculator, the critical path and the report sheet
+  (ΔP_VAV = ΔP_coil + ΔP_terminal).
+
 ## What changed in 0.105.0
 
 Corrections after an independent engineering review of the report (see DEVELOPMENT_PROGRESS, round X):

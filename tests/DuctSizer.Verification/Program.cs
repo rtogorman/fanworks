@@ -89,6 +89,7 @@ var tests = new (string Name, Action Run)[]
     ("Review: standalone items stay out of system area and leakage", ReviewCorrectionTests.StandaloneItemsStayOutOfSystemTotals),
     ("Review: a fitting with no airflow or size is invalid", ReviewCorrectionTests.FittingWithoutAirflowOrSizeIsInvalid),
     ("Review: a split without a junction fitting is reported", ReviewCorrectionTests.SplitsWithoutAJunctionAreReported),
+    ("VAV with reheat: entered terminal pressure drop is added to the coil drop", ReviewCorrectionTests.VavReheatAddsTheEnteredTerminalDrop),
     ("Table look-ups: interpolation recorded with its table points", TableLookupTests.InterpolationIsRecordedWithItsTablePoints),
     ("Elbow factors named (Kθ, C'o) and combined as C = Kθ × C'o", TableLookupTests.ElbowFactorsAreNamedAndCombined),
     ("Table look-ups: conservative value between columns", TableLookupTests.BetweenColumnsTheConservativeValueIsUsed),
