@@ -19,7 +19,8 @@ internal sealed class FanInformationDialog : DpiScaledForm
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(570, 304);
+        // Room for eight lines: ID, airflow, external, internal and total static pressure, efficiency, motor power.
+        ClientSize = new Size(570, 372);
         BackColor = Color.FromArgb(245, 247, 250);
         Font = new Font("Segoe UI", 9.5F);
         Shown += (_, _) => UiPolish.ApplyDialogSurface(this);
