@@ -255,13 +255,25 @@ public static class SmacnaLeakage
     public static double AllowableLeakageFactor(int leakageClass, double pressureClassInWc) =>
         leakageClass * Math.Pow(pressureClassInWc, PressureExponent);
 
+    /// <summary>
+    /// Surface areas of the ducts and fittings that belong to the drawn system (<see cref="SystemMembership"/>). A
+    /// standalone fitting or duct kept in the project for reference is not ductwork of this system and never changes
+    /// its area or leakage (review P1-11).
+    /// </summary>
+    public static ItemSurfaceArea[] SystemAreas(DuctSystemDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return SystemMembership.Ducts(document).Select(SurfaceAreaCalculator.ForDuct)
+            .Concat(SystemMembership.Fittings(document).Select(SurfaceAreaCalculator.ForFitting)
+                .Where(x => x is not null).Select(x => x!))
+            .ToArray();
+    }
+
     /// <summary>Surface areas, pressure class, seal class and allowable leakage of the whole system.</summary>
     public static SystemLeakageResult Analyze(DuctSystemDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        var areas = document.Ducts.Select(SurfaceAreaCalculator.ForDuct)
-            .Concat(document.Fittings.Select(SurfaceAreaCalculator.ForFitting).Where(x => x is not null).Select(x => x!))
-            .ToArray();
+        var areas = SystemAreas(document);
         if (areas.Length == 0)
             return new SystemLeakageResult(null, string.Empty, null, null, areas, Array.Empty<LeakageByShape>(),
                 "There are no ducts or fittings.");
@@ -311,9 +323,7 @@ public static class SmacnaLeakage
     public static SystemLeakageSides AnalyzeSides(DuctSystemDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        var areas = document.Ducts.Select(SurfaceAreaCalculator.ForDuct)
-            .Concat(document.Fittings.Select(SurfaceAreaCalculator.ForFitting).Where(x => x is not null).Select(x => x!))
-            .ToArray();
+        var areas = SystemAreas(document);
         var profiles = SystemPathProfiles.Build(document);
         var suctionKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var path in profiles.Paths)

@@ -172,7 +172,7 @@ internal sealed partial class DuctSystemScreen
             ("Seal class", _analysisNegativeSealValue, _analysisSealClassValue),
             ("Leakage class", _analysisNegativeLeakageClassValue, _analysisLeakageClassValue),
             ("Leakage factor F", _analysisNegativeFactorValue, _analysisFactorValue),
-            ("Duct leakage", _analysisNegativeLeakageValue, _analysisLeakageValue)
+            ("Leakage allowance", _analysisNegativeLeakageValue, _analysisLeakageValue)
         };
         for (var row = 0; row < classRows.Length; row++)
         {
@@ -409,8 +409,11 @@ internal sealed partial class DuctSystemScreen
                     range = AnalysisRangeCheck.CheckDuct(_ductSystem.AnalysisExpectations, duct);
                 else if (fittings.TryGetValue(step.ItemKey, out var fitting))
                 {
-                    range = AnalysisRangeCheck.CheckFitting(_ductSystem.AnalysisExpectations, fitting,
-                        SystemPressureForFittingPair(fitting.Sequence).Inlet);
+                    // A VAV's inlet range is a static pressure: total pressure in less the inlet duct's velocity pressure.
+                    var fittingNode = _ductSystem.LayoutNodes.FirstOrDefault(node => node.LinkedFittingSequence == fitting.Sequence);
+                    var inletStatic = SystemPressureForFittingPair(fitting.Sequence).Inlet
+                                      - (fittingNode is null ? double.NaN : SystemPressures.InletVelocityPressurePa(_ductSystem, fittingNode));
+                    range = AnalysisRangeCheck.CheckFitting(_ductSystem.AnalysisExpectations, fitting, inletStatic);
                     try
                     {
                         kind = fitting.Calculate().Definition.Category;
@@ -426,6 +429,22 @@ internal sealed partial class DuctSystemScreen
             .OrderByDescending(item => item.Entry.LossPa)
             .ThenBy(item => item.Order)
             .Select(item => item.Entry)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Critical-path items outside the engineer's expected ranges (Analysis tab), each with what was compared, for the
+    /// Project tab's Errors list as soft warnings (round X).
+    /// </summary>
+    internal IReadOnlyList<(string ItemId, string Message)> CriticalPathRangeWarnings()
+    {
+        if (!_ductSystem.AnalysisExpectations.AnySet)
+            return Array.Empty<(string, string)>();
+        return CriticalPathDrops()
+            .Where(entry => entry.Range.Status == RangeCheckStatus.Outside)
+            .Select(entry => (entry.Id, "Outside the expected range on the critical path: "
+                                        + string.Join("; ", RangeToolTip(entry.Range).Split(Environment.NewLine)
+                                            .Where(line => line.EndsWith("(outside)", StringComparison.Ordinal))) + "."))
             .ToArray();
     }
 
@@ -526,8 +545,9 @@ internal sealed partial class DuctSystemScreen
             _analysisNegativeFactorValue, _analysisNegativeLeakageValue);
         Fill(positive, _analysisPressureClassValue, _analysisSealClassValue, _analysisLeakageClassValue,
             _analysisFactorValue, _analysisLeakageValue);
-        _analysisPressureClassNote.Text = "Per SMACNA HVAC Duct Construction Standards and Air Duct Leakage Test Manual; "
-                                          + "F = CL × P^0.65. Override either side with Customize Duct Class.";
+        _analysisPressureClassNote.Text = "Per SMACNA HVAC Duct Construction Standards and Air Duct Leakage Test Manual; F = CL × P^0.65. "
+                                          + "The allowance is at the class pressure, not a predicted operating leakage; design airflows "
+                                          + "exclude it. Override either side with Customize Duct Class.";
         var detail = new List<string>();
         foreach (var (name, side) in new[] { ("Negative (suction)", negative), ("Positive (discharge)", positive) })
         {
@@ -715,7 +735,9 @@ internal sealed partial class DuctSystemScreen
         var result = computed ?? SmacnaLeakage.AnalyzeSides(_ductSystem).Positive;
         var imperial = _host._currentUnits == UnitSystem.Imperial;
         const string criteria = "Per SMACNA HVAC Duct Construction Standards - Metal and Flexible (pressure and seal class) and "
-                                + "SMACNA HVAC Air Duct Leakage Test Manual (leakage class CL); leakage factor F = CL x P^0.65.";
+                                + "SMACNA HVAC Air Duct Leakage Test Manual (leakage class CL); leakage factor F = CL x P^0.65. "
+                                + "The leakage is an allowance at the construction-class pressure, not a predicted operating leakage; "
+                                + "the design airflows exclude it.";
         string Pressure(double inWc) => imperial
             ? $"{inWc.ToString("0.###", CultureInfo.CurrentCulture)} in. w.c."
             : $"{UnitConversions.InchesWaterToPa(inWc).ToString("0", CultureInfo.CurrentCulture)} Pa";

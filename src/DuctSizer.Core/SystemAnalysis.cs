@@ -340,6 +340,8 @@ public static class CriticalPathAnalyzer
                 }
             }
             keys.Add(LayoutKey(node.Sequence));
+            if (SystemPressures.ExitLossApplies(document, node))
+                return Safe(node.Id, () => SystemPressures.ExitLossPa(document, node));
             return node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd
                 or LayoutNodeType.CustomComponent
                 ? node.PressureDropPa
@@ -481,4 +483,45 @@ public static class ProjectFile
             throw new FileNotFoundException("The project file was not found.", path);
         return DuctSystemStore.Load(path);
     }
+}
+
+/// <summary>
+/// Which duct and fitting records are part of the drawn system: those the Layout Designer drawing uses (a connection's
+/// duct, a component's linked duct or fitting). Records that nothing in the drawing uses are standalone (kept in the
+/// project, for example a quick calculation added to it) and are left out of system totals such as surface area and
+/// leakage. A project with no drawing at all is a schedule of items, all of which are the system.
+/// </summary>
+public static class SystemMembership
+{
+    public static IReadOnlyList<SavedDuct> Ducts(DuctSystemDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (document.LayoutNodes.Count == 0)
+            return document.Ducts;
+        var used = new HashSet<int>();
+        foreach (var node in document.LayoutNodes)
+            foreach (var sequence in new[] { node.ConnectionDuctSequence, node.SecondaryConnectionDuctSequence, node.LinkedDuctSequence })
+                if (sequence is int value)
+                    used.Add(value);
+        return document.Ducts.Where(x => used.Contains(x.Sequence)).ToArray();
+    }
+
+    public static IReadOnlyList<SavedFitting> Fittings(DuctSystemDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (document.LayoutNodes.Count == 0)
+            return document.Fittings;
+        var used = document.LayoutNodes.Where(x => x.LinkedFittingSequence is not null)
+            .Select(x => x.LinkedFittingSequence!.Value).ToHashSet();
+        return document.Fittings.Where(x => used.Contains(x.Sequence)).ToArray();
+    }
+
+    /// <summary>True when the fitting record is not used by the drawing (a standalone calculation).</summary>
+    public static bool IsStandalone(DuctSystemDocument document, SavedFitting fitting) =>
+        document.LayoutNodes.Count > 0 && document.LayoutNodes.All(x => x.LinkedFittingSequence != fitting.Sequence);
+
+    /// <summary>True when the duct record is not used by the drawing (a standalone calculation).</summary>
+    public static bool IsStandalone(DuctSystemDocument document, SavedDuct duct) =>
+        document.LayoutNodes.Count > 0 && document.LayoutNodes.All(x => x.ConnectionDuctSequence != duct.Sequence
+            && x.SecondaryConnectionDuctSequence != duct.Sequence && x.LinkedDuctSequence != duct.Sequence);
 }

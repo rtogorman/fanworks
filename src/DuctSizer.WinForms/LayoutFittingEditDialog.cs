@@ -29,6 +29,13 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
     private readonly TextBox _diameter = new();
     private readonly TextBox _width = new();
     private readonly TextBox _height = new();
+    private readonly CheckBox _sizeFromDuct = new()
+    {
+        Name = "LayoutFittingSizeFromDuct",
+        Text = "Use the connected duct's size",
+        AutoSize = true,
+        Dock = DockStyle.Left
+    };
     private readonly TableLayoutPanel _parameters = new();
     private readonly GroupBox _junctionGroup = new();
     private readonly ComboBox _junctionPath = new();
@@ -52,7 +59,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(640, 620);
+        ClientSize = new Size(640, 652);
         MinimumSize = Size;
         Font = new Font("Segoe UI", 9F);
         BackColor = Color.FromArgb(245, 247, 250);
@@ -135,7 +142,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
         var temperatureUnit = units == UnitSystem.Imperial ? "°F" : "°C";
         var sizeUnit = units == UnitSystem.Imperial ? "in" : "mm";
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(14), BackColor = BackColor };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 268));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 300));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
@@ -151,6 +158,11 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
         AddRow(basics, 4, "Reference Duct Shape", _shape, 38);
         var sizePanel = LayoutDialogControls.CreateLocationEditor(_diameter, _width, _height, "Dia", "W", "H");
         AddRow(basics, 5, $"Duct Size ({sizeUnit})", sizePanel, 46);
+        // Elbows, dampers, transitions and exits/entries normally take the size of the duct they are drawn on
+        // (and a transition its area ratio), so a default size can never stand in for the real section (round X).
+        _sizeFromDuct.Checked = !fitting.ReferenceSizeManual;
+        _sizeFromDuct.CheckedChanged += (_, _) => { UpdateShapeInputs(); InvalidateCalculation(); };
+        AddRow(basics, 6, "Size Source", _sizeFromDuct, 32);
         root.Controls.Add(basics, 0, 0);
         _baseInlineRows.AddRange(new[]
         {
@@ -159,7 +171,8 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
             new InlineEditRow($"Airflow ({flowUnit})", _airflow),
             new InlineEditRow($"Air temperature ({temperatureUnit})", _temperature),
             new InlineEditRow("Reference duct shape", _shape),
-            new InlineEditRow($"Duct size ({sizeUnit})", sizePanel)
+            new InlineEditRow($"Duct size ({sizeUnit})", sizePanel),
+            new InlineEditRow("Size source", _sizeFromDuct)
         });
 
         var parameterGroup = new GroupBox { Text = "Fitting Inputs", Dock = DockStyle.Fill, Padding = new Padding(10) };
@@ -250,6 +263,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
             return;
         _description.Text = definition.Description;
         _junctionGroup.Visible = definition.IsJunction;
+        UpdateSizeSourceAvailability(definition);
         var group = FittingCatalog.SelectionGroup(definition);
         var converging = string.Equals(group, "Converging Fittings", StringComparison.OrdinalIgnoreCase);
         _airflow.Enabled = !converging;
@@ -345,9 +359,23 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
     private void UpdateShapeInputs()
     {
         var round = _shape.SelectedItem is DuctShape.Round;
-        _diameter.Enabled = round;
-        _width.Enabled = !round;
-        _height.Enabled = !round;
+        var follows = SizeFollowsDuct;
+        _shape.Enabled = !follows;
+        _diameter.Enabled = round && !follows;
+        _width.Enabled = !round && !follows;
+        _height.Enabled = !round && !follows;
+    }
+
+    /// <summary>True when the selected fitting takes its size from the connected duct (see <see cref="SystemSolver.SyncReferenceSize"/>).</summary>
+    private bool SizeFollowsDuct => _sizeFromDuct.Enabled && _sizeFromDuct.Checked;
+
+    private void UpdateSizeSourceAvailability(FittingDefinition definition)
+    {
+        var group = FittingCatalog.SelectionGroup(definition);
+        _sizeFromDuct.Enabled = !definition.IsJunction
+                                && (group is "Elbows" or "Dampers" or "Transitions"
+                                    || definition.Category is "Entries" or "Exits");
+        UpdateShapeInputs();
     }
 
     private void InvalidateCalculation()
@@ -517,6 +545,7 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
             DiameterM = geometry.DiameterM,
             WidthM = geometry.WidthM,
             HeightM = geometry.HeightM,
+            ReferenceSizeManual = !SizeFollowsDuct,
             TemperatureC = temperature,
             RelativeHumidity = _original.RelativeHumidity,
             AtmosphericPressurePa = _original.AtmosphericPressurePa,

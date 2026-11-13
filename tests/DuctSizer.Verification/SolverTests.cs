@@ -37,8 +37,9 @@ internal static class SolverTests
             throw new Exception("The solver must report the junction's inlet pressure.");
         AssertNear(splitterInlet, sourcePressure - common, 1e-9);
         AssertNear(system.Splitter.PressurePa, splitterInlet - straightPath, 1e-9);
-        AssertNear(system.MainSink.PressurePa, splitterInlet - straightPath - main, 1e-9);
-        AssertNear(system.BranchSink.PressurePa, splitterInlet - branchPath - branch, 1e-9);
+        // Each bare duct discharging into its space also loses its velocity pressure (exit, C = 1.0; review P1-09).
+        AssertNear(system.MainSink.PressurePa, splitterInlet - straightPath - main - VelocityPressure(system.MainDuct), 1e-9);
+        AssertNear(system.BranchSink.PressurePa, splitterInlet - branchPath - branch - VelocityPressure(system.BranchDuct), 1e-9);
     }
 
     public static void FanAddsStaticPressureAndLossesCloseToZero()
@@ -51,10 +52,18 @@ internal static class SolverTests
         var sink = SystemTests.AddNode(document, LayoutNodeType.Reservoir, fan, duct);
         sink.SpaceRole = "Space Sink";
         SystemSolver.Solve(document);
-        fan.FanStaticPressurePa = duct.Calculate().TotalPressureLossUpperPa;
+        // Friction plus the exit loss of the bare duct into the space (one velocity pressure).
+        fan.FanStaticPressurePa = duct.Calculate().TotalPressureLossUpperPa + VelocityPressure(duct);
         SystemSolver.Solve(document);
         AssertNear(fan.PressurePa, fan.FanStaticPressurePa, 1e-12);
         AssertNear(sink.PressurePa, 0.0, 1e-9);
+    }
+
+    /// <summary>ρV²/2 in the duct's actual section, from its own calculation result.</summary>
+    internal static double VelocityPressure(SavedDuct duct)
+    {
+        var result = duct.Calculate();
+        return 0.5 * result.Air.DensityKgPerM3 * result.ActualVelocityMPerS * result.ActualVelocityMPerS;
     }
 
     public static void LockedOutletOverflowIsFlagged()

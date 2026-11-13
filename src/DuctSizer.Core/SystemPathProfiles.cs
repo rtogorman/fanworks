@@ -79,6 +79,9 @@ public static class SystemPathProfiles
     /// <summary>Upper limit on the routes listed, so a very large system cannot stall the interface.</summary>
     public const int MaximumPaths = 500;
 
+    /// <summary>Step kind of a sink space fed straight from a duct: it carries the exit loss (one velocity pressure).</summary>
+    public const string ExitKind = "Space (exit loss)";
+
     public static SystemPathProfileResult Build(DuctSystemDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -179,6 +182,9 @@ public static class SystemPathProfiles
                 && document.Ducts.FirstOrDefault(x => x.Sequence == ductSequence) is { } duct)
                 return Step(CriticalPathAnalyzer.DuctKey(ductSequence), duct.Id, "Duct",
                     () => duct.Calculate().TotalPressureLossUpperPa);
+            if (SystemPressures.ExitLossApplies(document, node))
+                return Step(CriticalPathAnalyzer.LayoutKey(node.Sequence), node.Id, ExitKind,
+                    () => SystemPressures.ExitLossPa(document, node));
             var loss = node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd
                 or LayoutNodeType.CustomComponent
                 ? node.PressureDropPa

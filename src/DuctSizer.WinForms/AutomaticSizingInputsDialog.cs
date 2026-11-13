@@ -27,7 +27,12 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
             ["Terminal"] = FittingCatalog.TerminalSelectionGroup
         };
 
+    /// <summary>The two project-wide pages (round X): moved here from the ribbon's rounding menu and Project Settings.</summary>
+    internal const string RoundingPage = "Duct Size Rounding";
+    internal const string CalculationMethodPage = "Calculation Method";
+
     private readonly UnitSystem _units;
+    private readonly ProjectSizingSettings? _project;
     private readonly ListBox _selector = new();
     private readonly Panel _editorHost = new();
     private readonly Dictionary<string, Control> _controls = new(StringComparer.OrdinalIgnoreCase);
@@ -38,9 +43,23 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
 
     internal AutomaticSizingSettings Settings { get; }
 
+    /// <summary>The project-wide rounding and calculation settings as saved (null when the window was opened without them).</summary>
+    internal ProjectSizingSettings? ProjectSettings { get; private set; }
+
     internal AutomaticSizingInputsDialog(AutomaticSizingSettings settings, UnitSystem units)
+        : this(settings, units, null)
+    {
+    }
+
+    /// <summary>
+    /// Auto Sizing Criteria: the project-wide duct size rounding and calculation method (when
+    /// <paramref name="project"/> is given) and the defaults Auto Size uses for each kind of component.
+    /// </summary>
+    internal AutomaticSizingInputsDialog(AutomaticSizingSettings settings, UnitSystem units, ProjectSizingSettings? project)
     {
         _units = units;
+        _project = project;
+        ProjectSettings = project;
         var jsonOptions = new JsonSerializerOptions
         {
             Converters = { new JsonStringEnumConverter() }
@@ -49,7 +68,7 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
                        JsonSerializer.Serialize(settings ?? new AutomaticSizingSettings(), jsonOptions), jsonOptions)
                    ?? new AutomaticSizingSettings();
 
-        Text = "Sizing Criteria";
+        Text = "Auto Sizing Criteria";
         Name = "AutomaticSizingInputsDialog";
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
@@ -72,7 +91,10 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
-        var heading = FormKit.Header("Sizing Criteria", "Defaults used by Auto Size for ducts and supported components.");
+        var heading = FormKit.Header("Auto Sizing Criteria",
+            project is null
+                ? "Defaults used by Auto Size for ducts and supported components."
+                : "Project-wide rounding and calculation method, and the defaults Auto Size uses for each component.");
         root.Controls.Add(heading, 0, 0);
         root.SetColumnSpan(heading, 2);
 
@@ -81,8 +103,15 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         _selector.IntegralHeight = false;
         _selector.Font = new Font("Segoe UI", 9.5F);
         FormKit.NavigationList(_selector);
+        if (project is not null)
+        {
+            _selector.Items.Add(new FormKit.NavigationHeader("Project-wide"));
+            _selector.Items.Add(RoundingPage);
+            _selector.Items.Add(CalculationMethodPage);
+            _selector.Items.Add(new FormKit.NavigationHeader("Component defaults"));
+        }
         _selector.Items.AddRange(Items.Cast<object>().ToArray());
-        _selector.SelectedIndex = 0;
+        _selector.SelectedItem = "Duct";
         _selector.SelectedIndexChanged += (_, _) => ChangePage();
         var navigationCard = FormKit.Card(_selector, new Padding(6, 8, 6, 8));
         navigationCard.Margin = new Padding(0, 6, 12, 6);
@@ -127,8 +156,21 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         UiPolish.ApplyDialogSurface(this);
     }
 
+    /// <summary>Opens on the named page (for example <see cref="RoundingPage"/>).</summary>
+    internal void ShowPageNamed(string page)
+    {
+        if (_selector.Items.Contains(page))
+            _selector.SelectedItem = page;
+    }
+
     private void ChangePage()
     {
+        if (_selector.SelectedItem is FormKit.NavigationHeader)
+        {
+            // A section heading is not a page: move to the first page under it.
+            _selector.SelectedIndex = Math.Min(_selector.Items.Count - 1, _selector.SelectedIndex + 1);
+            return;
+        }
         if (_selector.SelectedItem is not string next || string.Equals(next, _currentItem, StringComparison.OrdinalIgnoreCase))
             return;
         SaveCurrent(showErrors: false);
@@ -147,6 +189,8 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         {
             Control page = item switch
             {
+                RoundingPage => BuildRoundingPage(),
+                CalculationMethodPage => BuildCalculationMethodPage(),
                 "Duct" => BuildDuctPage(),
                 "Coil" => BuildEquipmentPage("Coil", Settings.Coil, includeTemperature: true),
                 "Filter" => BuildEquipmentPage("Filter", Settings.Filter, includeTemperature: false),
@@ -161,6 +205,83 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         {
             _loading = false;
         }
+    }
+
+    private Control BuildRoundingPage()
+    {
+        var project = ProjectSettings ?? throw new InvalidOperationException("No project settings.");
+        var table = EditorTable("Duct Size Rounding",
+            "Auto Size rounds the calculated duct sizes of the whole project to this increment (0 keeps the exact size). "
+            + "Rounding can give a size a little smaller than exact, so the result is checked against the target.");
+        var imperial = _units == UnitSystem.Imperial;
+        var increment = new ComboBox { Name = "SizingRoundingIncrement", DropDownStyle = ComboBoxStyle.DropDown };
+        increment.Items.AddRange(imperial ? new object[] { "0.5", "1", "2" } : new object[] { "10", "25", "50" });
+        increment.Text = (imperial ? UnitConversions.MToInches(project.IncrementM) : UnitConversions.MToMillimeters(project.IncrementM))
+            .ToString("0.####", CultureInfo.CurrentCulture);
+        var direction = Combo("SizingRoundingDirection", new object[]
+        {
+            new SizingChoice<SizeRoundingDirection>("Automatic (.5 rounds up)", SizeRoundingDirection.Automatic),
+            new SizingChoice<SizeRoundingDirection>("Round Down", SizeRoundingDirection.Down)
+        }, project.RoundingDirection);
+        direction.SelectedItem = direction.Items.Cast<SizingChoice<SizeRoundingDirection>>().First(x => x.Value == project.RoundingDirection);
+        AddRow(table, SizeLabel("Round to the Nearest"), increment);
+        AddRow(table, "Rounding", direction);
+        _controls["increment"] = increment;
+        _controls["direction"] = direction;
+        return table;
+    }
+
+    private Control BuildCalculationMethodPage()
+    {
+        var project = ProjectSettings ?? throw new InvalidOperationException("No project settings.");
+        var table = EditorTable("Calculation Method",
+            "How the friction loss of rectangular ducts is calculated for the whole project (formerly in Project Settings).");
+        var equivalent = Combo("SizingEquivalentMethod", new object[]
+        {
+            new SizingChoice<EquivalentDiameterMethod>("Huebscher", EquivalentDiameterMethod.Huebscher),
+            new SizingChoice<EquivalentDiameterMethod>("Hydraulic Diameter", EquivalentDiameterMethod.HydraulicDiameter)
+        }, project.EquivalentDiameterMethod);
+        equivalent.SelectedItem = equivalent.Items.Cast<SizingChoice<EquivalentDiameterMethod>>().First(x => x.Value == project.EquivalentDiameterMethod);
+        var basis = Combo("SizingPressureBasis", new object[]
+        {
+            new SizingChoice<PressureLossBasis>("Equivalent Round Area", PressureLossBasis.EquivalentRoundArea),
+            new SizingChoice<PressureLossBasis>("Actual Duct Area", PressureLossBasis.ActualDuctArea)
+        }, project.PressureLossBasis);
+        basis.SelectedItem = basis.Items.Cast<SizingChoice<PressureLossBasis>>().First(x => x.Value == project.PressureLossBasis);
+        AddRow(table, "Equivalent Diameter Method", equivalent);
+        AddRow(table, "Duct Area Calculation Method", basis);
+        _controls["equivalent"] = equivalent;
+        _controls["basis"] = basis;
+        return table;
+    }
+
+    private void SaveRounding()
+    {
+        var project = ProjectSettings ?? throw new InvalidOperationException("No project settings.");
+        var text = _controls["increment"].Text;
+        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var displayed)
+            && !double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out displayed))
+            throw new ArgumentException("Enter the rounding increment as a number (0 for no rounding).");
+        var incrementM = _units == UnitSystem.Imperial ? UnitConversions.InchesToM(displayed) : UnitConversions.MillimetersToM(displayed);
+        if (!double.IsFinite(displayed) || displayed < 0 || incrementM > UnitConversions.InchesToM(12) + 1e-12)
+            throw new ArgumentException(_units == UnitSystem.Imperial
+                ? "Enter a rounding increment from 0 to 12 in."
+                : "Enter a rounding increment from 0 to 305 mm.");
+        ProjectSettings = project with
+        {
+            IncrementM = incrementM,
+            RoundingDirection = SelectedChoice((ComboBox)_controls["direction"], SizeRoundingDirection.Automatic)
+        };
+    }
+
+    private void SaveCalculationMethod()
+    {
+        var project = ProjectSettings ?? throw new InvalidOperationException("No project settings.");
+        ProjectSettings = project with
+        {
+            EquivalentDiameterMethod = SelectedChoice((ComboBox)_controls["equivalent"], EquivalentDiameterMethod.Huebscher),
+            PressureLossBasis = SelectedChoice((ComboBox)_controls["basis"], PressureLossBasis.EquivalentRoundArea)
+        };
     }
 
     private Control BuildDuctPage()
@@ -423,6 +544,8 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         {
             switch (_currentItem)
             {
+                case RoundingPage: SaveRounding(); break;
+                case CalculationMethodPage: SaveCalculationMethod(); break;
                 case "Duct": SaveDuct(); break;
                 case "Coil": SaveEquipment(Settings.Coil, includeTemperature: true); break;
                 case "Filter": SaveEquipment(Settings.Filter, includeTemperature: false); break;
@@ -655,3 +778,7 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
     private double StoredTemperature(double value) => _units == UnitSystem.Imperial
         ? UnitConversions.FahrenheitToCelsius(value) : value;
 }
+
+/// <summary>The project-wide sizing settings edited on the Auto Sizing Criteria window's Project-wide pages.</summary>
+internal sealed record ProjectSizingSettings(double IncrementM, SizeRoundingDirection RoundingDirection,
+    EquivalentDiameterMethod EquivalentDiameterMethod, PressureLossBasis PressureLossBasis);

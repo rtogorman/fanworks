@@ -197,6 +197,34 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.105.0
+
+Corrections after an independent engineering review of the report (see DEVELOPMENT_PROGRESS, round X):
+
+- **Total and static pressure**: the system pressures are total pressures (every loss is a total-pressure loss).
+  Schedules and item sheets show **total pressure in/out** and **static pressure out** (total less the velocity
+  pressure of the section there), so static pressure drops through a contraction and is regained in an expansion.
+  The drawing's pressure labels show static pressure.
+- **Exit loss**: a bare duct discharging into a space loses one velocity pressure (ASHRAE 2-1, C = 1). An air
+  terminal's catalog total pressure already includes discharge, so a GRD or exit fitting gets none.
+- **Fittings take the connected duct's size**: elbows, dampers, transitions and entries/exits drawn in the system
+  use the duct they are on (no more default 12 in), and a transition's area ratio Ao/A1 comes from its two ducts.
+  Tick off "Use the connected duct's size" to enter a size; a mismatch is listed. File format 21.
+- **One value everywhere**: the schedule's fitting velocity is the calculated one; a fitting with no airflow or size
+  is "not available" (never an old velocity); a linked fitting is named by its drawing ID.
+- **Leakage** counts only the drawn system (standalone items left out) and is labelled an allowance at the class
+  pressure. A split that is not a tee or wye, or a tee calculated as an elbow, is an error.
+- **Sheets**: VAV and grille sizes by their manufacturer labels; diffuser static pressure derived (TP − neck VP)
+  instead of 0; Price SCD application notes; VAV-with-reheat basis (coil only) stated; AMCA fan static pressure.
+- **Project tab**: Errors lists red errors (undefined items, airflows that do not add up, calculation failures) and
+  yellow warnings (critical-path items outside the expected ranges, standalone items, entered fitting sizes, VAV basis).
+  **Net Path Static Pressure** replaces Validation: gauge static pressure along every path, from 0 at the start, with
+  a Show list (all paths, or one path in blue with its total pressure dashed).
+- **Drawing labels** stack one item per line (ID, size, airflow, pressure). Report views no longer draw sized ducts red.
+- **Ribbon**: Project (New, Open, Save, Save As, Project Settings) · Auto Size (Auto Sizing Criteria, Auto Size) · … ·
+  Calculate (Calculate, Highlight Critical Path). Duct size rounding and the calculation method are now pages of
+  Auto Sizing Criteria; the Analysis ribbon's duplicate Calculate is gone.
+
 ## What changed in 0.104.0
 
 - **Duct class for each side of the fan**: the Analysis System Overview has a **Duct construction and leakage

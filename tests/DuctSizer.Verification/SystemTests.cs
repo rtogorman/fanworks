@@ -124,8 +124,11 @@ internal static class SystemTests
             throw new Exception("The test needs different branch and straight coefficients to be meaningful.");
 
         var common = system.CommonDuct.Calculate().TotalPressureLossUpperPa;
-        var mainRoute = common + straight.PressureLossPa + system.MainDuct.Calculate().TotalPressureLossUpperPa;
-        var branchRoute = common + branch.PressureLossPa + system.BranchDuct.Calculate().TotalPressureLossUpperPa;
+        // Each route ends with its bare duct discharging into a space: exit loss of one velocity pressure.
+        var mainRoute = common + straight.PressureLossPa + system.MainDuct.Calculate().TotalPressureLossUpperPa
+                        + SolverTests.VelocityPressure(system.MainDuct);
+        var branchRoute = common + branch.PressureLossPa + system.BranchDuct.Calculate().TotalPressureLossUpperPa
+                          + SolverTests.VelocityPressure(system.BranchDuct);
 
         var result = CriticalPathAnalyzer.Analyze(system.Document);
         if (!result.IsComplete)

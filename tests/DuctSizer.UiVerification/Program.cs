@@ -240,7 +240,7 @@ internal static class Program
             var junctionInputs = Find<TableLayoutPanel>(form, "JunctionInputTable");
             var junctionPath = Find<ComboBox>(form, "JunctionPathCombo");
             var deleteAllSystem = Find<Button>(form, "DeleteAllSystemButton");
-            var autoSizeFan = Find<Button>(form, "RibbonAnalysisCalculateButton");
+            var autoSizeFan = Find<Button>(form, "RibbonCalculateButton");
             var viewFanInformation = Find<Button>(form, "RibbonFanInformationButton");
             var criticalPathFilter = Find<Button>(form, "CriticalPathFilterButton");
             Require(mode.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(new[]
@@ -252,12 +252,18 @@ internal static class Program
                     && ((dynamic)Find<Button>(form, "TopTabProject")).Selected
                     && Find<Control>(form, "RibbonProjectPage").Visible,
                 "FanWorks should open on the Project tab (Layout Designer) with the Project ribbon showing.");
+            // Round X: Project (file commands + Project Settings) | Auto Size (criteria + Auto Size) | … | Calculate.
             Require(settingsButton.Text.Replace("\n", " ", StringComparison.Ordinal) == "Project Settings"
-                    && Find<Button>(form, "RibbonSizingCriteriaButton").Parent?.Parent == settingsButton.Parent?.Parent
-                    && Find<Button>(form, "RibbonRoundSizesButton").Parent?.Parent == settingsButton.Parent?.Parent
+                    && settingsButton.Parent?.Parent?.Name == "RibbonProjectGroup"
+                    && Find<Button>(form, "RibbonSizingCriteriaButton").Parent?.Parent?.Name == "RibbonAutoSizeGroup"
+                    && Find<Button>(form, "RibbonAutoSizeButton").Parent?.Parent?.Name == "RibbonAutoSizeGroup"
+                    && Find<Button>(form, "RibbonCalculateButton").Parent?.Parent?.Name == "RibbonCalculateGroup"
+                    && Find<Button>(form, "RibbonHighlightCriticalPathButton").Parent?.Parent?.Name == "RibbonCalculateGroup"
+                    && form.Controls.Find("RibbonRoundSizesButton", true).Length == 0
+                    && form.Controls.Find("RibbonSettingsGroup", true).Length == 0
                     && form.Controls.Find("SolverSettingsButton", true).Length == 0
                     && form.Controls.Find("SettingsButton", true).Length == 0,
-                "Project Settings, Sizing Criteria and Round Sizes should share the ribbon's Settings group; the old Settings menu is gone.");
+                "The Project ribbon should group Project (with Project Settings), Auto Size (Auto Sizing Criteria, Auto Size) and Calculate (Calculate, Highlight Critical Path).");
             ClickButton(calculatorNavigation);
             Application.DoEvents();
             Require(tabs.SelectedTab?.Name == "CalculatorTab" && Find<Control>(form, "RibbonQuickCalcPage").Visible
@@ -280,10 +286,11 @@ internal static class Program
                     && !Descendants<Button>(form).Any(button => button.Text == "Copy system"),
                 "Save Changes actions should be hidden until an existing duct or fitting is opened for editing.");
             Require(autoSizeFan.Text == "Calculate"
+                    && form.Controls.Find("RibbonAnalysisCalculateButton", true).Length == 0
                     && form.Controls.Find("CalculateLongestRouteButton", true).Length == 0
                     && form.Controls.Find("AutoSizeFanButton", true).Length == 0
                     && form.Controls.Find("ViewFanInformationButton", true).Length == 0,
-                "Fan sizing is the ribbon's Calculate (Project and Analysis tabs); the Analysis page has no separate Auto-size Fan or longest-route button.");
+                "Fan sizing is the Project ribbon's Calculate; the Analysis ribbon has no duplicate Calculate, Auto-size Fan or longest-route button.");
             Require(TextRenderer.MeasureText(criticalPathFilter.Text, criticalPathFilter.Font).Width
                     <= criticalPathFilter.ClientSize.Width - 12,
                 "The Isolate Critical Path label should fit without clipping.");
@@ -308,7 +315,7 @@ internal static class Program
                 DefaultEquivalentDiameterMethod = EquivalentDiameterMethod.HydraulicDiameter,
                 DefaultPressureLossBasis = PressureLossBasis.ActualDuctArea
             };
-            var calculationPage = Enum.Parse(settingsType.GetNestedType("Page", BindingFlags.NonPublic)!, "CalculationSettings");
+            var calculationPage = Enum.Parse(settingsType.GetNestedType("Page", BindingFlags.NonPublic)!, "ProjectInformation");
             using (var settingsDialog = (Form?)Activator.CreateInstance(
                        settingsType,
                        BindingFlags.Instance | BindingFlags.NonPublic,
@@ -319,22 +326,14 @@ internal static class Program
             {
                 var pages = Find<TabControl>(settingsDialog, "ProjectSettingsPages");
                 var logoPreview = Find<PictureBox>(settingsDialog, "SettingsCompanyLogoPreview");
-                var increment = Find<TextBox>(settingsDialog, "SettingsSizingIncrementText");
-                var roundingMethod = Find<ComboBox>(settingsDialog, "SettingsRoundingMethodCombo");
-                var method = Find<ComboBox>(settingsDialog, "SettingsEquivalentMethodCombo");
-                var basis = Find<ComboBox>(settingsDialog, "SettingsPressureBasisCombo");
                 Require(pages.TabPages.Cast<TabPage>().Select(page => page.Text)
-                            .SequenceEqual(new[] { "Project Information", "Units", "Calculation Settings" })
-                        && pages.SelectedTab?.Name == "CalculationSettingsPage"
+                            .SequenceEqual(new[] { "Project Information", "Units" })
+                        && pages.SelectedTab?.Name == "ProjectInformationPage"
                         && logoPreview.Image is not null
                         && Find<RadioButton>(settingsDialog, "SettingsImperialUnitsRadio").Checked
-                        && !Find<RadioButton>(settingsDialog, "SettingsMetricUnitsRadio").Checked,
-                    "Project Settings should combine project information, units and calculation settings in one form.");
-                Require(increment.Text == "0.5" && roundingMethod.SelectedItem?.ToString() == "Round Down"
-                        && method.SelectedItem?.ToString() == "Hydraulic Diameter"
-                        && basis.SelectedItem?.ToString() == "Actual Duct Area"
-                        && Descendants<Label>(settingsDialog).Any(label => label.Text == "Duct Area Calculation Method"),
-                    "Calculation Settings should own and restore the autosize increment, rounding, equivalent-diameter and duct-area methods.");
+                        && !Find<RadioButton>(settingsDialog, "SettingsMetricUnitsRadio").Checked
+                        && settingsDialog.Controls.Find("SettingsSizingIncrementText", true).Length == 0,
+                    "Project Settings should hold project information and units; calculation settings moved to Auto Sizing Criteria.");
                 var settingsCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_SETTINGS_CAPTURE_PATH");
                 if (!string.IsNullOrWhiteSpace(settingsCapturePath))
                 {
@@ -561,9 +560,10 @@ internal static class Program
                 "The System Overview (former quick view) should sit in the bottom panel under the drawing.");
             Require(new[] { "LayoutOverviewTab", "LayoutErrorsTab", "LayoutValidationTab" }
                         .Select(name => Find<Button>(form, name).Text.Split(' ')[0])
-                        .SequenceEqual(new[] { "System", "Errors", "Validation" })
+                        .SequenceEqual(new[] { "System", "Errors", "Net" })
+                    && Find<Button>(form, "LayoutValidationTab").Text == "Net Path Static Pressure"
                     && form.Controls.Find("LayoutSchedulesTab", true).Length == 0,
-                "The bottom panel should have System Overview, Errors and Validation tabs (no Schedules).");
+                "The bottom panel should have System Overview, Errors and Net Path Static Pressure tabs (no Schedules).");
             ClickButton(layoutSummaryCollapse);
             Application.DoEvents();
             Require(layoutSummarySplitter.Panel2Collapsed && layoutSummaryReopen.Visible,
@@ -713,9 +713,9 @@ internal static class Program
                 "Project export and import should be removed from the Duct System action row.");
             Require(new[] { "RibbonNewProjectButton", "RibbonOpenButton", "RibbonSaveButton", "RibbonSaveAsButton" }
                         .All(name => Find<Button>(form, name).Parent?.Parent?.Name == "RibbonProjectGroup")
-                    && Find<Button>(form, "RibbonSizingCriteriaButton").Text.Replace("\n", " ", StringComparison.Ordinal) == "Sizing Criteria"
+                    && Find<Button>(form, "RibbonSizingCriteriaButton").Text.Replace("\n", " ", StringComparison.Ordinal) == "Auto Sizing Criteria"
                     && UiMember.Field("_settingsMenu", BindingFlags.Instance | BindingFlags.NonPublic) is null,
-                "The Project ribbon should expose New Project, Open, Save, Save As and Sizing Criteria in place of the Settings menu.");
+                "The Project ribbon should expose New Project, Open, Save, Save As and Auto Sizing Criteria in place of the Settings menu.");
             Require(form.Controls.Find("EditDuctButton", true).Length == 0
                     && form.Controls.Find("RemoveDuctButton", true).Length == 0
                     && editSystemItem.Text == "Edit item"
@@ -1394,15 +1394,30 @@ internal static class Program
             viewOffsetField.SetValue(layoutCanvas, savedViewOffset);
             layoutCanvas.Invalidate();
             Application.DoEvents();
-            var validationGrid = Find<DataGridView>(form, "LayoutValidationGrid");
             var errorsGrid = Find<DataGridView>(form, "LayoutErrorsGrid");
             var validationModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
             ClickButton(Find<Button>(form, "LayoutValidationTab"));
             Application.DoEvents();
-            Require(validationGrid.Visible && validationGrid.Rows.Count == validationModel.Ducts.Count + validationModel.Fittings.Count
-                    && validationGrid.Columns.Cast<DataGridViewColumn>().Select(column => column.Name)
-                        .SequenceEqual(new[] { "Item", "Kind", "Size", "Airflow", "Velocity", "Rate", "Coefficient", "Loss", "Status" }),
-                "Validation should list every duct (velocity, static-pressure rate, loss) and fitting (coefficient, loss).");
+            // Round X: the former Validation list is a graph of gauge static pressure along each path.
+            var netStaticChart = Find<Control>(form, "NetStaticPressureChart");
+            var netStaticCombo = Find<ComboBox>(form, "NetStaticPathCombo");
+            var expectedPaths = PathPressureProfiles.Build(validationModel);
+            var chartPaths = (System.Collections.IList)netStaticChart.GetType().GetProperty("Paths", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(netStaticChart)!;
+            Require((!form.Visible || netStaticChart.Visible) && form.Controls.Find("LayoutValidationGrid", true).Length == 0
+                    && chartPaths.Count == expectedPaths.Count
+                    && netStaticCombo.Items.Count == expectedPaths.Count + 1
+                    && Convert.ToString(netStaticCombo.Items[0])!.StartsWith("All paths", StringComparison.Ordinal),
+                $"The Net Path Static Pressure tab should graph every path, with All paths and each path in its Show list. Paths={chartPaths.Count}/{expectedPaths.Count}, items={netStaticCombo.Items.Count}.");
+            if (netStaticCombo.Items.Count > 1)
+            {
+                netStaticCombo.SelectedIndex = 1;
+                Application.DoEvents();
+                Require((int?)netStaticChart.GetType().GetProperty("SelectedPath", BindingFlags.Instance | BindingFlags.NonPublic)!
+                            .GetValue(netStaticChart) == 0,
+                    "Choosing a path in the Show list should highlight that path (in blue).");
+                netStaticCombo.SelectedIndex = 0;
+            }
             UiMember.Method("RefreshLayoutBottomPanel", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             var issues = (System.Collections.IList)UiMember.Method("BuildProjectIssues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null)!;
@@ -1588,12 +1603,14 @@ internal static class Program
                     && !grid.Columns["DeltaZ"].ReadOnly,
                 "Global settings, editable airflow/air-system fields, and X/Y/Z delta columns should be available.");
             Require(grid.Columns.Cast<DataGridViewColumn>().Where(column => column.Visible)
-                        .OrderBy(column => column.DisplayIndex).Take(11).Select(column => column.Name)
+                        .OrderBy(column => column.DisplayIndex).Take(12).Select(column => column.Name)
                         .SequenceEqual(new[]
                         {
-                            "Id", "Description", "Airflow", "PressureIn", "PressureOut", "AirSystem",
+                            "Id", "Description", "Airflow", "PressureIn", "PressureOut", "StaticOut", "AirSystem",
                             "Temperature", "PressureRate", "Velocity", "Length", "Size"
                         })
+                    && grid.Columns["PressureIn"].HeaderText.StartsWith("Total pressure in", StringComparison.Ordinal)
+                    && grid.Columns["StaticOut"].HeaderText.StartsWith("Static pressure out", StringComparison.Ordinal)
                     && grid.Columns["AirSystem"].HeaderText == "Air type",
                 "The Duct System schedule should lead with the requested operating-data column order.");
             var formattedNegativeZero = (string)UiMember.Method("FormatSystemPressureValue", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -1818,8 +1835,12 @@ internal static class Program
                 .Select(node => SizeConnection(document, node, document.Ducts.First())).ToArray();
             UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
-            pressureFan.FanStaticPressurePa = synchronizedLoss
-                + pressureDucts.Sum(duct => duct.Calculate().TotalPressureLossUpperPa);
+            // Round X: the drawn elbow takes the connected duct's size, and the bare duct into the space adds its exit
+            // loss (one velocity pressure); the matching fan pressure closes the loop at zero.
+            var lastDuctResult = pressureDucts[^1].Calculate();
+            pressureFan.FanStaticPressurePa = synchronizedFitting.Calculate().PressureLossPa
+                + pressureDucts.Sum(duct => duct.Calculate().TotalPressureLossUpperPa)
+                + 0.5 * lastDuctResult.Air.DensityKgPerM3 * lastDuctResult.ActualVelocityMPerS * lastDuctResult.ActualVelocityMPerS;
             UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
             Require(Math.Abs(pressureSink.PressurePa) < 1e-8
@@ -2749,7 +2770,10 @@ internal static class Program
             var routeDuctLossPa = new[] { coilNode, filterNode, sinkForPressureBalance }
                 .Select(node => document.Ducts.Single(x => x.Sequence == node.ConnectionDuctSequence))
                 .Sum(duct => duct.Calculate().TotalPressureLossUpperPa);
-            var expectedNetLossPa = routeDuctLossPa + coilNode.PressureDropPa + filterNode.PressureDropPa;
+            // Plus the exit loss of the bare duct into the space (one velocity pressure; round X).
+            var sinkDuctResult = document.Ducts.Single(x => x.Sequence == sinkForPressureBalance.ConnectionDuctSequence).Calculate();
+            var expectedNetLossPa = routeDuctLossPa + coilNode.PressureDropPa + filterNode.PressureDropPa
+                                    + 0.5 * sinkDuctResult.Air.DensityKgPerM3 * sinkDuctResult.ActualVelocityMPerS * sinkDuctResult.ActualVelocityMPerS;
             fanNode.FanStaticPressurePa = expectedNetLossPa;
             UiMember.Method("UpdateCalculatedLayoutValues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null);
@@ -3054,7 +3078,7 @@ internal static class Program
                         }) == true
                         && item.QuickCheck![4].Value.EndsWith("in. w.c./100 ft", StringComparison.Ordinal)
                         && item.Outputs.Any(field => field.Label == "Reynolds number")
-                        && item.Outputs.Any(field => field.Label == "Static pressure in")
+                        && item.Outputs.Any(field => field.Label == "Total pressure in")
                         && item.Outputs.Any(field => field.Label == "Static pressure out")
                         && item.Calculations?.Any(section => section.Heading == "4. DARCY FRICTION FACTOR"
                             && section.Lines.Any(line => line.Formula.Contains("Colebrook", StringComparison.Ordinal))) == true)
@@ -3880,32 +3904,45 @@ internal static class Program
             Require(tabs.SelectedTab?.Name == "LayoutDesignerTab", "The Project tab should show the Layout Designer.");
 
             var ribbonModel = (DuctSystemDocument)UiMember.Field("_ductSystem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
-            var roundSizesMenu = ((dynamic)Find<Button>(form, "RibbonRoundSizesButton")).DropDownMenu as ContextMenuStrip
-                                 ?? throw new InvalidOperationException("Round Sizes should open a menu.");
-            Require(roundSizesMenu.Items.OfType<ToolStripMenuItem>().Where(item => item.Tag is double).Select(item => (double)item.Tag!)
-                        .SequenceEqual(new[] { 1.0, 2.0 })
-                    && roundSizesMenu.Items["RoundSizesCustom"] is ToolStripMenuItem
-                    && Find<Button>(form, "RibbonRoundSizesButton").Text.Replace("\n", " ", StringComparison.Ordinal) == "Auto Duct Size Rounding",
-                "Auto Duct Size Rounding should offer 1 in., 2 in. and Custom.");
-            roundSizesMenu.Items.OfType<ToolStripMenuItem>().Single(item => item.Tag is 2.0).PerformClick();
-            Application.DoEvents();
-            Require(Math.Abs(ribbonModel.DefaultSizingIncrementM - UnitConversions.InchesToM(2)) < 1e-12,
-                "Auto Duct Size Rounding should set the project's autosize increment.");
-            using (var rounding = new RoundingIncrementDialog(ribbonModel.DefaultSizingIncrementM, UnitSystem.Imperial))
+            // Round X: duct size rounding and the calculation method are project-wide pages of Auto Sizing Criteria.
+            var projectSizingType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.ProjectSizingSettings")!;
+            var projectSizing = Activator.CreateInstance(projectSizingType, UnitConversions.InchesToM(0.5), SizeRoundingDirection.Down,
+                EquivalentDiameterMethod.HydraulicDiameter, PressureLossBasis.ActualDuctArea)!;
+            var sizingDialogType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.AutomaticSizingInputsDialog")!;
+            using (var criteria = (Form)Activator.CreateInstance(sizingDialogType, BindingFlags.Instance | BindingFlags.NonPublic, null,
+                       new object[] { new AutomaticSizingSettings(), UnitSystem.Imperial, projectSizing }, null)!)
             {
-                rounding.Show(form);
+                criteria.Show(form);
                 Application.DoEvents();
-                Find<TextBox>(rounding, "RoundingIncrementText").Text = "0.5";
-                ClickButton(Find<Button>(rounding, "RoundingIncrementSaveButton"));
+                var pagesList = Find<ListBox>(criteria, "AutomaticSizingComponentList");
+                Require(pagesList.Items.Cast<object>().Select(item => item.ToString()).Take(5)
+                            .SequenceEqual(new[] { "Project-wide", "Duct Size Rounding", "Calculation Method", "Component defaults", "Duct" })
+                        && criteria.Text == "Auto Sizing Criteria",
+                    "Auto Sizing Criteria should list the project-wide Duct Size Rounding and Calculation Method pages above the component defaults.");
+                pagesList.SelectedItem = "Calculation Method";
                 Application.DoEvents();
-                Require(rounding.DialogResult == DialogResult.OK && Math.Abs(rounding.IncrementM - UnitConversions.InchesToM(0.5)) < 1e-12
-                        && RoundingIncrementDialog.Parse("0", true) is null && RoundingIncrementDialog.Parse("13", true) is null,
-                    "The Custom rounding window should accept 0.5 in. and refuse 0 or more than 12 in.");
-                form.Ribbon.ApplyRounding(rounding.IncrementM);
+                Require(Find<ComboBox>(criteria, "SizingEquivalentMethod").SelectedItem?.ToString() == "Hydraulic Diameter"
+                        && Find<ComboBox>(criteria, "SizingPressureBasis").SelectedItem?.ToString() == "Actual Duct Area",
+                    "The Calculation Method page should restore the project's equivalent-diameter and duct-area methods.");
+                pagesList.SelectedItem = "Duct Size Rounding";
+                Application.DoEvents();
+                var incrementBox = Find<ComboBox>(criteria, "SizingRoundingIncrement");
+                Require(incrementBox.Text == "0.5" && Find<ComboBox>(criteria, "SizingRoundingDirection").SelectedItem?.ToString() == "Round Down",
+                    "The Duct Size Rounding page should restore the project's increment and rounding direction.");
+                incrementBox.Text = "13";
+                var saveSizing = Find<Button>(criteria, "AutomaticSizingSaveButton");
+                var refused = (bool)sizingDialogType.GetMethod("SaveCurrent", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(criteria, new object[] { false })!;
+                Require(!refused, "A rounding increment above 12 in. should be refused.");
+                incrementBox.Text = "2";
+                ClickButton(saveSizing);
+                Application.DoEvents();
+                dynamic savedSizing = sizingDialogType.GetProperty("ProjectSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(criteria)!;
+                Require(criteria.DialogResult == DialogResult.OK
+                        && Math.Abs((double)savedSizing.IncrementM - UnitConversions.InchesToM(2)) < 1e-12
+                        && (EquivalentDiameterMethod)savedSizing.EquivalentDiameterMethod == EquivalentDiameterMethod.HydraulicDiameter,
+                    "Saving Auto Sizing Criteria should return the new rounding increment and keep the calculation method.");
             }
-            Application.DoEvents();
-            Require(Math.Abs(ribbonModel.DefaultSizingIncrementM - UnitConversions.InchesToM(0.5)) < 1e-12,
-                "A custom rounding increment should be saved to the project.");
 
             ClickButton(Find<Button>(form, "RibbonAutoSizeButton"));
             Application.DoEvents();
@@ -4482,7 +4519,6 @@ internal static class Program
                              }).ToArray())),
                              ("ductclass", () => new DuctClassDialog(SmacnaLeakage.AnalyzeSides(captureModel), captureModel.AnalysisExpectations, UnitSystem.Imperial)),
                              ("analysissettings", () => new AnalysisSettingsDialog(captureModel.AnalysisExpectations, UnitSystem.Imperial)),
-                             ("rounding", () => new RoundingIncrementDialog(captureModel.DefaultSizingIncrementM, UnitSystem.Imperial)),
                              ("faninfo2", () => new FanInformationDialog("Fan-001\r\n2,400 cfm at 1.25 in. w.c. total static\r\n0.8 bhp; select a 1 hp motor"))
                          })
                 {
@@ -4522,7 +4558,7 @@ internal static class Program
             Console.WriteLine("PASS  Layout rewiring and delete-all workflows");
             Console.WriteLine("PASS  Main tabs and Project ribbon commands");
             Console.WriteLine("PASS  Selection Inspector: description, calculations, notes");
-            Console.WriteLine("PASS  Project Explorer, Errors and Validation lists");
+            Console.WriteLine("PASS  Project Explorer, Errors list and Net Path Static Pressure graph");
             Console.WriteLine("PASS  Analysis summary, report preview and Print Report");
             Console.WriteLine("PASS  Display scaling, resizable panels and in-place editing in the inspector");
             Console.WriteLine("PASS  Analysis Settings, expected-range column and pressure drop along each path");

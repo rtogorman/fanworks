@@ -581,7 +581,7 @@ public static class DuctSystemPdf
             Text(builder, 112, 354 - index * 10, 8.2, line, bold: index == 0);
         TextColor(builder, 32, 334, 8.2, Fit(total, 150), ink, bold: true);
         TextColor(builder, 32, 323, 7, Fit(
-            "ESP is the critical-path loss outside the unit. Total static = ESP + internal static (entered); it sets the motor power.", 170), muted);
+            "ESP = critical-path total-pressure loss outside the unit, incl. exit to the space. Total = ESP + internal; sets shaft power. Airflows are prescribed design values.", 175), muted);
 
         // Lower area. Left: report contents (compact), duct pressure class and leakage (SMACNA), system summary donut.
         // Right: pressure drop along every path.
@@ -662,7 +662,7 @@ public static class DuctSystemPdf
         var values = new[]
         {
             ("PRESSURE CLASS", leakage.PressureClass), ("SEAL CLASS", leakage.SealClass),
-            ("LEAKAGE CLASS", leakage.LeakageClass), ("DUCT LEAKAGE", leakage.Leakage)
+            ("LEAKAGE CLASS", leakage.LeakageClass), ("LEAKAGE ALLOWANCE", leakage.Leakage)
         };
         const double columnWidth = 98;
         for (var index = 0; index < values.Length; index++)
@@ -677,7 +677,7 @@ public static class DuctSystemPdf
             lines.Add(($"{leakage.PressureBasis}. {leakage.SealDetail}.", false));
         lines.AddRange(leakage.CalculationLines.Select(line => (line, true)));
         if (!string.IsNullOrWhiteSpace(leakage.LeakageDetail))
-            lines.Add(("Duct leakage is " + leakage.LeakageDetail + ".", false));
+            lines.Add(("Leakage allowance is " + leakage.LeakageDetail + ".", false));
         if (!string.IsNullOrWhiteSpace(leakage.Note))
             lines.Add(("Not available: " + leakage.Note, true));
         var y = top - 53;
@@ -710,7 +710,7 @@ public static class DuctSystemPdf
         // 123.4 cfm) fit the half-width title-page panel.
         var usable = width - 28;
         var columns = new[] { ("SIDE", 0.0), ("PRESSURE CLASS", usable * 0.21), ("SEAL CLASS", usable * 0.36),
-            ("LEAKAGE CLASS", usable * 0.50), ("FACTOR F", usable * 0.65), ("DUCT LEAKAGE", usable * 0.83) };
+            ("LEAKAGE CLASS", usable * 0.50), ("FACTOR F", usable * 0.65), ("ALLOWANCE", usable * 0.83) };
         foreach (var (title, offset) in columns)
             TextColor(builder, left + 14 + offset, top - 27, 5.6, title, accent, bold: true);
         var rowY = top - 39;

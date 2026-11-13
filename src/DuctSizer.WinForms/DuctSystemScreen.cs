@@ -276,7 +276,8 @@ internal sealed partial class DuctSystemScreen
         return source.Clone(crop, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
     }
 
-    /// <summary>Opens Project Settings (project information, units, calculation settings) and applies a save.</summary>
+    /// <summary>Opens Project Settings (project information and units) and applies a save. The calculation settings are
+    /// on the Auto Sizing Criteria window (round X).</summary>
     internal void EditProjectSettings(ProjectSettingsDialog.Page firstPage = ProjectSettingsDialog.Page.ProjectInformation)
     {
         using var dialog = new ProjectSettingsDialog(_ductSystem, _host._currentUnits, firstPage);
@@ -287,11 +288,6 @@ internal sealed partial class DuctSystemScreen
         _ductSystem.ProjectNumber = dialog.ProjectNumber;
         _ductSystem.ProjectDate = dialog.ProjectDate;
         _ductSystem.CompanyLogoPngBase64 = dialog.CompanyLogoPngBase64;
-        _ductSystem.DefaultSizingIncrementM = dialog.SizingIncrementM;
-        _ductSystem.DefaultSizeRoundingDirection = dialog.RoundingDirection;
-        _ductSystem.DefaultEquivalentDiameterMethod = dialog.EquivalentDiameterMethod;
-        _ductSystem.DefaultPressureLossBasis = dialog.PressureLossBasis;
-        ApplyProjectCalculationSettings();
         SaveDuctSystem();
         RefreshProjectIdentityHeader();
         if (dialog.SelectedUnits != _host._currentUnits)
@@ -300,25 +296,31 @@ internal sealed partial class DuctSystemScreen
         _host.Ribbon.SynchronizeWithPage();
     }
 
-    /// <summary>Sets the autosize increment (ribbon Auto Duct Size Rounding); same field as Project Settings.</summary>
-    internal void SetSizingIncrement(double incrementM)
+    /// <summary>
+    /// Auto Sizing Criteria: the project-wide duct size rounding and calculation method (round X: formerly the ribbon's
+    /// Auto Duct Size Rounding menu and Project Settings' Calculation Settings page) and the per-component defaults.
+    /// </summary>
+    internal void EditAutomaticSizingInputs(string? firstPage = null)
     {
-        if (!(incrementM > 0) || Math.Abs(_ductSystem.DefaultSizingIncrementM - incrementM) < 1e-12)
-            return;
-        _ductSystem.DefaultSizingIncrementM = incrementM;
-        ApplyProjectCalculationSettings();
-        SaveDuctSystem();
-        _host.CalculatorScreen.CalculateAndDisplay();
-    }
-
-    internal void EditAutomaticSizingInputs()
-    {
-        using var dialog = new AutomaticSizingInputsDialog(_ductSystem.AutomaticSizing, _host._currentUnits);
+        var project = new ProjectSizingSettings(_ductSystem.DefaultSizingIncrementM, _ductSystem.DefaultSizeRoundingDirection,
+            _ductSystem.DefaultEquivalentDiameterMethod, _ductSystem.DefaultPressureLossBasis);
+        using var dialog = new AutomaticSizingInputsDialog(_ductSystem.AutomaticSizing, _host._currentUnits, project);
+        if (firstPage is not null)
+            dialog.ShowPageNamed(firstPage);
         if (dialog.ShowDialog(_host) != DialogResult.OK)
             return;
         _ductSystem.AutomaticSizing = dialog.Settings;
+        if (dialog.ProjectSettings is { } saved)
+        {
+            _ductSystem.DefaultSizingIncrementM = saved.IncrementM;
+            _ductSystem.DefaultSizeRoundingDirection = saved.RoundingDirection;
+            _ductSystem.DefaultEquivalentDiameterMethod = saved.EquivalentDiameterMethod;
+            _ductSystem.DefaultPressureLossBasis = saved.PressureLossBasis;
+            ApplyProjectCalculationSettings();
+        }
         SaveDuctSystem();
-        _host.LayoutScreen._layoutStatusLabel.Text = "Automatic sizing defaults were saved for ducts and supported Designer components.";
+        _host.CalculatorScreen.CalculateAndDisplay();
+        _host.LayoutScreen._layoutStatusLabel.Text = "Auto sizing criteria were saved: rounding, calculation method and component defaults. Use Auto Size to re-size existing ducts.";
         _host.LayoutScreen._layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
@@ -656,9 +658,10 @@ internal sealed partial class DuctSystemScreen
         AddGridColumn("Basis", "Pressure basis", 104, true);
         AddGridColumn("Temperature", "Temperature", 84, true);
         AddGridColumn("SurfaceArea", "Surface area", 84, true);
+        AddGridColumn("StaticOut", "Static pressure out", 108, true);
         var displayOrder = new[]
         {
-            "Id", "Description", "Airflow", "PressureIn", "PressureOut", "AirSystem", "Temperature",
+            "Id", "Description", "Airflow", "PressureIn", "PressureOut", "StaticOut", "AirSystem", "Temperature",
             "PressureRate", "Velocity", "Length", "Size", "SurfaceArea", "StaticDrop", "BranchId", "UpstreamId",
             "DownstreamId", "DeltaX", "DeltaY", "DeltaZ", "AbsoluteX", "AbsoluteY", "AbsoluteZ",
             "Shape", "Area", "Material", "Method", "Basis"
@@ -1277,6 +1280,8 @@ internal sealed partial class DuctSystemScreen
                     duct.PressureLossBasis == PressureLossBasis.EquivalentRoundArea ? "Equivalent round" : "Actual area");
                 _ductGrid.Rows[rowIndex].Tag = new SystemRowTag(false, duct.Sequence);
                 _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = FormatSystemTemperature(duct.TemperatureC);
+                _ductGrid.Rows[rowIndex].Cells["StaticOut"].Value =
+                    FormatSystemPressureValue(ductPressure.Outlet - SystemPressures.DuctVelocityPressurePa(duct));
                 _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = FormatSurfaceArea(SurfaceAreaCalculator.ForDuct(duct));
                 ApplyCriticalRowStyle(_ductGrid.Rows[rowIndex], criticalKey);
                 ApplyAirflowOverrideStyle(_ductGrid.Rows[rowIndex], duct.Sequence, isFitting: false);
@@ -1293,6 +1298,8 @@ internal sealed partial class DuctSystemScreen
                     "—", duct.Shape, "—", "—", "—", "—", "—", ex.Message, "—", "—");
                 _ductGrid.Rows[rowIndex].Tag = new SystemRowTag(false, duct.Sequence);
                 _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = FormatSystemTemperature(duct.TemperatureC);
+                _ductGrid.Rows[rowIndex].Cells["StaticOut"].Value =
+                    FormatSystemPressureValue(ductPressure.Outlet - SystemPressures.DuctVelocityPressurePa(duct));
                 _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = FormatSurfaceArea(SurfaceAreaCalculator.ForDuct(duct));
                 _ductGrid.Rows[rowIndex].DefaultCellStyle.ForeColor = Color.Firebrick;
             }
@@ -1329,13 +1336,15 @@ internal sealed partial class DuctSystemScreen
                     fittingGeometry is null ? fitting.FittingCode : $"{fitting.FittingCode} / {FormatSystemGeometry(fittingGeometry)}",
                     "—",
                     "—",
-                    FormatSystemVelocity(fitting.ReferenceVelocityMPerS),
+                    // The velocity of this calculation, never a stored value from an earlier definition (review P1-06).
+                    FormatSystemVelocity(result.ReferenceVelocityMPerS),
                     "—",
                     result.Definition.Category,
                     result.Definition.IsAutomated ? "Built-in table" : "Entered C",
                     $"{result.Definition.ReferenceVelocity} VP");
                 _ductGrid.Rows[rowIndex].Tag = new SystemRowTag(true, fitting.Sequence);
                 _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = FormatSystemTemperature(fitting.TemperatureC);
+                _ductGrid.Rows[rowIndex].Cells["StaticOut"].Value = FormatSystemPressureValue(StaticOutletPressureForFitting(fitting.Sequence));
                 _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = FormatSurfaceArea(SurfaceAreaCalculator.ForFitting(fitting));
                 ApplyCriticalRowStyle(_ductGrid.Rows[rowIndex], criticalKey);
                 ApplyAirflowOverrideStyle(_ductGrid.Rows[rowIndex], fitting.Sequence, isFitting: true);
@@ -1353,6 +1362,7 @@ internal sealed partial class DuctSystemScreen
                     "—", "—", "—", "—", ex.Message, "—", "—");
                 _ductGrid.Rows[rowIndex].Tag = new SystemRowTag(true, fitting.Sequence);
                 _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = FormatSystemTemperature(fitting.TemperatureC);
+                _ductGrid.Rows[rowIndex].Cells["StaticOut"].Value = FormatSystemPressureValue(StaticOutletPressureForFitting(fitting.Sequence));
                 _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = FormatSurfaceArea(SurfaceAreaCalculator.ForFitting(fitting));
                 _ductGrid.Rows[rowIndex].DefaultCellStyle.ForeColor = Color.Firebrick;
             }
@@ -1416,6 +1426,7 @@ internal sealed partial class DuctSystemScreen
             _ductGrid.Rows[rowIndex].DefaultCellStyle.BackColor = Color.FromArgb(247, 251, 248);
             _ductGrid.Rows[rowIndex].Tag = equipment;
             _ductGrid.Rows[rowIndex].Cells["SurfaceArea"].Value = "—";
+            _ductGrid.Rows[rowIndex].Cells["StaticOut"].Value = FormatSystemPressureValue(StaticOutletPressureForNode(equipment));
             _ductGrid.Rows[rowIndex].Cells["Temperature"].Value = equipment.Type == LayoutNodeType.CalculationPoint
                 && !string.Equals(equipment.CalculationPointType, "Temperature", StringComparison.OrdinalIgnoreCase)
                     ? "—" : FormatSystemTemperature(equipment.TemperatureC);
@@ -1741,10 +1752,31 @@ internal sealed partial class DuctSystemScreen
         return Math.Abs(value) < halfDisplayIncrement ? 0.0 : value;
     }
 
-    /// <summary>The Designer's Pressure label for a duct: static pressure at its inlet, e.g. "SP 0.85 in. w.c.".</summary>
+    /// <summary>Static pressure (Pa) leaving a drawn fitting: its total pressure out less the outlet section's velocity pressure.</summary>
+    private double StaticOutletPressureForFitting(int fittingSequence)
+    {
+        var node = _ductSystem.LayoutNodes.FirstOrDefault(x => x.LinkedFittingSequence == fittingSequence);
+        return node is null ? double.NaN : StaticOutletPressureForNode(node);
+    }
+
+    /// <summary>
+    /// Static pressure (Pa) leaving a component, or measured by a calculation point: total pressure less the velocity
+    /// pressure of the section there (the observed duct for a point; the outlet duct otherwise; 0 in a space).
+    /// </summary>
+    private double StaticOutletPressureForNode(SavedLayoutNode node)
+    {
+        if (node.Type == LayoutNodeType.CalculationPoint)
+            return node.PressurePa - (node.ObservedDuctSequence is int observed
+                ? SystemPressures.DuctVelocityPressurePa(_ductSystem.Ducts.FirstOrDefault(x => x.Sequence == observed))
+                : double.NaN);
+        return SystemPressureForEquipmentPair(node).Outlet - SystemPressures.OutletVelocityPressurePa(_ductSystem, node);
+    }
+
+    /// <summary>The Designer's Pressure label for a duct: static pressure at its inlet (total − velocity pressure), e.g. "SP 0.85 in. w.c.".</summary>
     internal string DuctInletPressureCaption(int ductSequence)
     {
-        var inlet = SystemPressureForDuctPair(ductSequence).Inlet;
+        var inlet = SystemPressureForDuctPair(ductSequence).Inlet
+                    - SystemPressures.DuctVelocityPressurePa(_ductSystem.Ducts.FirstOrDefault(x => x.Sequence == ductSequence));
         if (!double.IsFinite(inlet))
             return string.Empty;
         return _host._currentUnits == UnitSystem.Imperial
@@ -1812,8 +1844,10 @@ internal sealed partial class DuctSystemScreen
             return;
         var imperial = _host._currentUnits == UnitSystem.Imperial;
         _ductGrid.Columns["StaticDrop"].HeaderText = imperial ? "Static drop\n(in. w.c.)" : "Static drop\n(Pa)";
-        _ductGrid.Columns["PressureIn"].HeaderText = imperial ? "Static pressure in\n(in. w.c.)" : "Static pressure in\n(Pa)";
-        _ductGrid.Columns["PressureOut"].HeaderText = imperial ? "Static pressure out\n(in. w.c.)" : "Static pressure out\n(Pa)";
+        // The solver carries total pressure (round X): static = total − velocity pressure of the section leaving the item.
+        _ductGrid.Columns["PressureIn"].HeaderText = imperial ? "Total pressure in\n(in. w.c.)" : "Total pressure in\n(Pa)";
+        _ductGrid.Columns["PressureOut"].HeaderText = imperial ? "Total pressure out\n(in. w.c.)" : "Total pressure out\n(Pa)";
+        _ductGrid.Columns["StaticOut"].HeaderText = imperial ? "Static pressure out\n(in. w.c.)" : "Static pressure out\n(Pa)";
         _ductGrid.Columns["Airflow"].HeaderText = imperial ? "Airflow\n(cfm)" : "Airflow\n(L/s)";
         _ductGrid.Columns["DeltaX"].HeaderText = imperial ? "ΔX\n(ft)" : "ΔX\n(m)";
         _ductGrid.Columns["DeltaY"].HeaderText = imperial ? "ΔY\n(ft)" : "ΔY\n(m)";
@@ -2545,7 +2579,18 @@ internal sealed partial class DuctSystemScreen
         }
         foreach (var fitting in _ductSystem.Fittings.OrderBy(x => x.Sequence))
         {
-            var result = fitting.Calculate();
+            FittingCalculationResult result;
+            try
+            {
+                result = fitting.Calculate();
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException or KeyNotFoundException)
+            {
+                // An invalid or standalone fitting is copied without results rather than stopping the copy.
+                builder.AppendLine(string.Join('\t', fitting.Id, fitting.Description, fitting.AirSystemType, fitting.BranchId,
+                    "—", "—", "—", "—", "—", "—", "Fitting", fitting.FittingCode, "—", "—", "—", "Not available: " + ex.Message));
+                continue;
+            }
             var topology = LayoutTopologyForFitting(fitting.Sequence);
             builder.AppendLine(string.Join('\t', fitting.Id, fitting.Description,
                 fitting.AirSystemType, fitting.BranchId,
@@ -2554,7 +2599,7 @@ internal sealed partial class DuctSystemScreen
                 result.AirflowM3PerS is double fittingAirflow ? FormatSystemAirflow(fittingAirflow) : "—",
                 result.ReferenceGeometry is null ? "Fitting" : $"{result.ReferenceGeometry.Shape} fitting",
                 result.ReferenceGeometry is null ? fitting.FittingCode : $"{fitting.FittingCode} / {FormatSystemGeometry(result.ReferenceGeometry)}",
-                "—", FormatSystemVelocity(fitting.ReferenceVelocityMPerS), "—", FormatSystemFittingDrop(result.PressureLossPa)));
+                "—", FormatSystemVelocity(result.ReferenceVelocityMPerS), "—", FormatSystemFittingDrop(result.PressureLossPa)));
         }
         foreach (var equipment in _ductSystem.LayoutNodes.Where(x => x.IsDefined && (x.Type is LayoutNodeType.Reservoir
                      or LayoutNodeType.Fan or LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd
@@ -2618,7 +2663,8 @@ internal sealed partial class DuctSystemScreen
         var headers = new[]
         {
             _host._currentUnits == UnitSystem.Imperial ? "Airflow (cfm)" : "Airflow (L/s)",
-            _host._currentUnits == UnitSystem.Imperial ? "Static Pressure In (in. w.c.)" : "Static Pressure In (Pa)",
+            _host._currentUnits == UnitSystem.Imperial ? "Total Pressure In (in. w.c.)" : "Total Pressure In (Pa)",
+            _host._currentUnits == UnitSystem.Imperial ? "Total Pressure Out (in. w.c.)" : "Total Pressure Out (Pa)",
             _host._currentUnits == UnitSystem.Imperial ? "Static Pressure Out (in. w.c.)" : "Static Pressure Out (Pa)",
             "Air System", _host._currentUnits == UnitSystem.Imperial ? "Temperature (deg F)" : "Temperature (deg C)",
             _host._currentUnits == UnitSystem.Imperial ? "Pressure Rate (in. w.c./100 ft)" : "Pressure Rate (Pa/m)",
@@ -2630,7 +2676,7 @@ internal sealed partial class DuctSystemScreen
             .Select(row => (IReadOnlyList<string>)new[]
             {
                 Cell(row, "Id"), Cell(row, "Description"), Cell(row, "Airflow"), Cell(row, "PressureIn"),
-                Cell(row, "PressureOut"), Cell(row, "AirSystem"), Cell(row, "Temperature"),
+                Cell(row, "PressureOut"), Cell(row, "StaticOut"), Cell(row, "AirSystem"), Cell(row, "Temperature"),
                 Cell(row, "PressureRate"), Cell(row, "Velocity"), Cell(row, "Length"), Cell(row, "Size")
             }).ToArray();
         var projectDate = DateTime.TryParse(_ductSystem.ProjectDate, CultureInfo.InvariantCulture,
@@ -2853,6 +2899,10 @@ internal sealed partial class DuctSystemScreen
             CoordinateSource = () => LayoutCoordinateResolver.Resolve(_ductSystem),
             CaptionSource = _host.LayoutScreen.LayoutNodeCaption,
             ConnectionCaptionSource = _host.LayoutScreen.LayoutConnectionCaption,
+            // A sized connection is drawn grey, as in the Project tab; without this source every connection in the
+            // report views was drawn red as if unsized (round X).
+            ConnectionSizedSource = connection =>
+                LayoutTopology.DuctForConnection(_ductSystem, connection.Downstream, connection.Secondary) is { RequiresResizing: false },
             ConnectionFlowReversedSource = LayoutDesignerScreen.LayoutConnectionFlowReversed,
             CriticalPathNodeSource = _host.LayoutScreen.IsLayoutNodeInCalculatedCriticalPath,
             CriticalPathConnectionSource = _host.LayoutScreen.IsLayoutConnectionInCalculatedCriticalPath,
@@ -3009,8 +3059,10 @@ internal sealed partial class DuctSystemScreen
                 PdfField("Darcy friction factor", PdfFriction(result.Friction)),
                 PdfField("Pressure-loss rate", PdfPressureRate(result)),
                 PdfField("Total pressure loss", PdfPressure(result.TotalPressureLossUpperPa)),
-                PdfField("Static pressure in", PdfPressure(pressure.Inlet)),
-                PdfField("Static pressure out", PdfPressure(pressure.Outlet)),
+                PdfField("Total pressure in", PdfPressure(pressure.Inlet)),
+                PdfField("Total pressure out", PdfPressure(pressure.Outlet)),
+                PdfField("Velocity pressure", PdfPressure(SystemPressures.DuctVelocityPressurePa(duct))),
+                PdfField("Static pressure out", PdfPressure(pressure.Outlet - SystemPressures.DuctVelocityPressurePa(duct))),
                 PdfField("Calculation basis", result.CalculationBasisDescription)
             });
             calculations.Add(DuctSystemPdfCalculationSection.Title("DUCT SIZING CALCULATION"));
@@ -3050,7 +3102,9 @@ internal sealed partial class DuctSystemScreen
             PdfField("Downstream item", topology.Downstream), PdfField("Fitting number", fitting.FittingCode),
             PdfField("Airflow", fitting.AirflowM3PerS > 0 ? PdfAirflow(fitting.AirflowM3PerS) : "-"),
             PdfField("Air temperature", PdfTemperature(fitting.TemperatureC)),
-            PdfField("Reference duct", SafeFittingSize(fitting)),
+            PdfField("Reference duct", SafeFittingSize(fitting) + (fitting.ReferenceSizeSource is { } source
+                ? $" (size of connected duct {source})"
+                : fitting.ReferenceSizeManual ? " (entered)" : string.Empty)),
             PdfField("Relative delta X", PdfDelta(fitting.DeltaXM)), PdfField("Relative delta Y", PdfDelta(fitting.DeltaYM)),
             PdfField("Relative delta Z", PdfDelta(fitting.DeltaZM))
         };
@@ -3072,7 +3126,12 @@ internal sealed partial class DuctSystemScreen
                     string.Equals(x.Key, pair.Key, StringComparison.OrdinalIgnoreCase));
                 var inputLabel = (definitionInput?.Label ?? pair.Key).Replace(" (ratio)", string.Empty,
                     StringComparison.OrdinalIgnoreCase);
-                inputs.Add(PdfField(inputLabel, $"{pair.Value:0.####}"));
+                // A choice (VAV size, coil rows, nominal grille size) is shown as the manufacturer's label, never as the
+                // list position it is stored as (review P2-19).
+                var choice = definitionInput?.Choices?.OrderBy(item => Math.Abs(item.Value - pair.Value)).FirstOrDefault();
+                inputs.Add(PdfField(inputLabel, choice is not null
+                    ? choice.Label
+                    : $"{pair.Value:0.####}" + (string.IsNullOrWhiteSpace(definitionInput?.Unit) || definitionInput.Unit == "ratio" ? string.Empty : " " + definitionInput.Unit)));
             }
             if (fitting.Junction is JunctionFlowData junction)
             {
@@ -3089,8 +3148,9 @@ internal sealed partial class DuctSystemScreen
                 PdfField("Reference velocity", PdfVelocity(result.ReferenceVelocityMPerS)),
                 PdfField("Velocity pressure", PdfPressure(result.VelocityPressurePa)),
                 PdfField("Fitting pressure loss", PdfPressure(result.PressureLossPa)),
-                PdfField("Static pressure in", PdfPressure(pressure.Inlet)),
-                PdfField("Static pressure out", PdfPressure(pressure.Outlet)),
+                PdfField("Total pressure in", PdfPressure(pressure.Inlet)),
+                PdfField("Total pressure out", PdfPressure(pressure.Outlet)),
+                PdfField("Static pressure out", PdfPressure(StaticOutletPressureForFitting(fitting.Sequence))),
                 PdfField("Air density", $"{result.Air.DensityKgPerM3:0.####} kg/m3"),
                 PdfField("Calculation source", result.Definition.IsAutomated ? "Built-in table/equation" : "Entered coefficient")
             });
@@ -3198,8 +3258,9 @@ internal sealed partial class DuctSystemScreen
         {
             PdfField("Component pressure loss", node.IsDefined && (node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd or LayoutNodeType.CustomComponent)
                 ? PdfPressure(node.PressureDropPa) : node.IsDefined ? "0" : "Not calculated"),
-            PdfField("Static pressure in", node.IsDefined ? PdfPressure(pressure.Inlet) : "Not calculated"),
-            PdfField("Static pressure out", node.IsDefined ? PdfPressure(pressure.Outlet) : "Not calculated")
+            PdfField("Total pressure in", node.IsDefined ? PdfPressure(pressure.Inlet) : "Not calculated"),
+            PdfField("Total pressure out", node.IsDefined ? PdfPressure(pressure.Outlet) : "Not calculated"),
+            PdfField("Static pressure out", node.IsDefined ? PdfPressure(StaticOutletPressureForNode(node)) : "Not calculated")
         };
         if (node.IsDefined && node.Type == LayoutNodeType.CalculationPoint)
             outputs.Add(PdfField("Calculated value", node.CalculationPointType switch
@@ -3219,7 +3280,18 @@ internal sealed partial class DuctSystemScreen
                 outputs.Add(PdfField("Throw (150/100/50 fpm)", $"{node.GrdThrowFt} ft"));
         }
         if (node.IsDefined && node.Type == LayoutNodeType.Fan)
+        {
             outputs.Add(PdfField("Total static pressure", PdfPressure(node.FanTotalStaticPressurePa)));
+            // Pressure basis (review P1-10): the system losses are total-pressure losses, so ESP + internal is the fan's
+            // required total-pressure rise. AMCA fan static pressure is that less the outlet velocity pressure, taken here
+            // at the connected outlet duct (the fan's own outlet area may differ: use the manufacturer's curve basis).
+            var outletPv = SystemPressures.OutletVelocityPressurePa(_ductSystem, node);
+            if (double.IsFinite(outletPv) && outletPv > 0)
+            {
+                outputs.Add(PdfField("Outlet duct velocity pressure", PdfPressure(outletPv)));
+                outputs.Add(PdfField("Fan static pressure (AMCA, at outlet duct)", PdfPressure(node.FanTotalStaticPressurePa - outletPv)));
+            }
+        }
         var reportType = node.Type == LayoutNodeType.CalculationPoint
             ? "CALCULATION POINT"
             : node.IsAirHandlingUnit ? "AIR HANDLING UNIT"
@@ -3394,6 +3466,8 @@ internal sealed partial class DuctSystemScreen
             new DuctSystemPdfCalculationSection("ASSUMPTIONS", new[]
             {
                 L("Steady, fully developed airflow; Darcy friction factor; moist-air properties at the entered temperature, RH, and pressure."),
+                L("Airflow is the prescribed design volume flow at this duct's air temperature (constant-volume convention: it is not "
+                  + "corrected for density changes through coils, and duct leakage is not added to it)."),
                 L($"Calculation basis: {result.CalculationBasisDescription}")
             })
         };
@@ -3801,7 +3875,10 @@ internal sealed partial class DuctSystemScreen
             {
                 Solved("\\Delta P_{VAV}", $"{UnitConversions.PaToInchesWater(result.PressureLossPa):0.###} in. w.c."),
                 L(string.Equals(result.Definition.Code, VavPerformanceCatalog.WithReheatCode, StringComparison.OrdinalIgnoreCase)
-                    ? "Airside ΔPs is the selected hot-water coil air pressure drop."
+                    ? "Airside ΔPs is the selected hot-water coil air pressure drop only. The terminal's own minimum operating "
+                      + "pressure (inlet sensor, body and damper) is NOT included: take it from the Titus selection for this size and "
+                      + "airflow and check it against the VAV inlet static pressure range (Analysis Settings). Until then this VAV's "
+                      + "resistance, and the fan duty, are incomplete."
                     : "Min ΔPs is the terminal inlet-to-outlet pressure drop with the primary damper full open."),
                 L("Interpolation is restricted to the supplied published airflow range; no extrapolation is performed.")
             }),
@@ -3830,13 +3907,31 @@ internal sealed partial class DuctSystemScreen
     /// <summary>The manufacturer's published table as worksheet table rows, with the row used highlighted.</summary>
     private static List<DuctSystemPdfCalculationLine> GrdTableLines(GrdPerformanceSelection selection, bool grille)
     {
+        // A diffuser table that gives total pressure only: the static pressure is never shown as 0 (review P2-14). With
+        // a known neck it is derived at the same catalog point as Ps = TP − VP(neck), VP = (V_neck / 4005)² (standard
+        // air, the catalog's basis), and labelled derived; otherwise it is "not supplied".
+        var neckMatch = System.Text.RegularExpressions.Regex.Match(selection.Configuration, @"(\d+(?:\.\d+)?) in neck");
+        double? neckIn = neckMatch.Success
+            ? double.Parse(neckMatch.Groups[1].Value, CultureInfo.InvariantCulture)
+            : null;
+        var derivedStatic = !grille && selection.PublishedTable.All(point => point.StaticPressureInWg is null) && neckIn is not null;
+        string StaticCell(GrdPerformancePoint point)
+        {
+            if (point.StaticPressureInWg is double published)
+                return $"{published:0.###}";
+            if (!derivedStatic)
+                return "not supplied";
+            var neckVelocity = point.AirflowCfm / (Math.PI * neckIn!.Value * neckIn.Value / 4 / 144);
+            return $"{point.TotalPressureInWg - Math.Pow(neckVelocity / 4005, 2):0.###}";
+        }
         var table = new List<DuctSystemPdfCalculationLine>
         {
             grille
                 ? DuctSystemPdfCalculationLine.Row(DuctSystemPdfLineKind.TableHeader, "Core velocity (fpm)", "Airflow (cfm)",
                     "Velocity pressure (in. w.c.)", "Static pressure (in. w.c.)", "Sound (NC)", "Used")
                 : DuctSystemPdfCalculationLine.Row(DuctSystemPdfLineKind.TableHeader, "Airflow (cfm)", "Total pressure (in. w.c.)",
-                    "Static pressure (in. w.c.)", "Sound (NC)", "Throw (ft to 150/100/50 fpm)", "Used")
+                    derivedStatic ? "Static pressure, derived TP − neck VP (in. w.c.)" : "Static pressure (in. w.c.)",
+                    "Sound (NC)", "Throw (ft to 150/100/50 fpm)", "Used")
         };
         table.AddRange(selection.PublishedTable.Select(point =>
         {
@@ -3846,7 +3941,7 @@ internal sealed partial class DuctSystemScreen
                 ? DuctSystemPdfCalculationLine.Row(kind, $"{point.CoreVelocityFpm:0}", $"{point.AirflowCfm:0}",
                     $"{point.VelocityPressureInWg:0.###}", $"-{point.TotalPressureInWg:0.###}", $"{point.SoundNc}", used ? "← used" : "")
                 : DuctSystemPdfCalculationLine.Row(kind, $"{point.AirflowCfm:0}", $"{point.TotalPressureInWg:0.###}",
-                    $"{(point.StaticPressureInWg ?? 0):0.###}", $"{point.SoundNc}", $"{point.ThrowFt}", used ? "← used" : "");
+                    StaticCell(point), $"{point.SoundNc}", $"{point.ThrowFt}", used ? "← used" : "");
         }));
         return table;
     }
@@ -3943,7 +4038,10 @@ internal sealed partial class DuctSystemScreen
                 L(grille
                     ? "Titus 350R source static pressures are negative; their positive magnitude is used as system pressure loss. Source NC dashes are reported as NC <10. Performance data courtesy of Titus."
                     : selection.Product.StartsWith("Price", StringComparison.OrdinalIgnoreCase)
-                    ? "Price SCD source dashes are reported as NC <15. Throw applies to a ceiling-mounted diffuser; exposed-duct throw uses the manufacturer's 0.70 factor."
+                    ? "Price SCD performance data (v001): throw is isothermal (supply and room air at the same temperature), to 150/100/50 fpm, "
+                      + "for a diffuser tested with a ceiling; multiply throw by 0.70 if mounted on an exposed duct. NC is for one diffuser "
+                      + "at the catalog's room absorption, not total room noise; dashes are NC <15. Pressures are catalog total pressure at "
+                      + "the published airflow (Ptotal = Pstatic + Pvelocity); the static column is derived from it."
                     : "Titus TBD-80 D source dashes are reported as NC <10. Throw is the one-way pattern value listed by the manufacturer. Performance data courtesy of Titus.")
             })
         };

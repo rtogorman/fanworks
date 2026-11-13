@@ -168,7 +168,7 @@ internal static class AirHandlingUnitTests
             DuctSystemStore.Save(saved, document);
             var reloaded = DuctSystemStore.Load(saved).AnalysisExpectations;
             Require(reloaded.SuctionPressureClassOverrideInWc == 2 && reloaded.SuctionSealClassOverride == SmacnaSealClass.A
-                    && reloaded.PressureClassOverrideInWc is null && DuctSystemDocument.CurrentSchemaVersion == 20,
+                    && reloaded.PressureClassOverrideInWc is null && DuctSystemDocument.CurrentSchemaVersion >= 20,
                 "Suction-side overrides are saved (file format 20).");
         }
         finally
@@ -215,7 +215,8 @@ internal static class AirHandlingUnitTests
         var supplyLoss = supplyDuct.Calculate().TotalPressureLossUpperPa;
         Require(critical.FanStepIndex >= 0, "The critical path passes through the AHU.");
         Near(critical.SuctionLossPa!.Value, returnLoss, 1e-9, "negative ESP (suction) = return duct loss");
-        Near(critical.DischargeLossPa!.Value, supplyLoss, 1e-9, "positive ESP (discharge) = supply duct loss");
+        Near(critical.DischargeLossPa!.Value, supplyLoss + SolverTests.VelocityPressure(supplyDuct), 1e-9,
+            "positive ESP (discharge) = supply duct loss + exit into the space (one velocity pressure)");
         Near(critical.SuctionLossPa.Value + critical.DischargeLossPa.Value, critical.TotalLossPa, 1e-9, "suction + discharge = ESP");
 
         // A route that starts at the fan has no suction side.

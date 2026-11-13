@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-12 (round W, v0.104.0); round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
+Last updated: 2026-11-13 (round X, v0.105.0); round W v0.104.0; round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
 
 ## Where things live
 
@@ -595,3 +595,38 @@ F = 12 × 2^0.65 = 18.830; A = 125.66 ft²; 23.662 cfm. Discharge 14 in × 30 ft
 Checks: engine 85/85, interface 24/24 at 100 %, 150 % and 1080p (Wine).
 Note for Ryan: the calculators' worksheets are now the report's inch-pound worksheets (as in the Project tab); the
 earlier calculator-only "required equations" summary was replaced by the report's numbered steps.
+
+### Round X (requested 2026-11-13 09:29, after v0.104.0) — v0.105.0
+
+Engineering review brief (FanWorks-Engineering-Correction-Brief-2026-11-12.md), checked against the code:
+
+| Item | Finding in code | Action |
+|---|---|---|
+| P0-01 static/total | Solver subtracts total-pressure losses but labelled the result static | Relabelled total; static = total − Pv per station (`SystemPressures`); exit loss added |
+| P0-02 VAV basis | Coil APD used as whole VAV drop | Stated on sheet + Errors warning; needs Titus terminal data (Ryan) |
+| P0-03 / P1-05 sizes | New fittings defaulted to 12 in and were never synced | `SyncReferenceSize`, manual option, mismatch warning |
+| P1-04 junctions | A split node linked to an elbow charged no junction loss | Model-check error |
+| P1-06 schedule velocity | Schedule used stored `ReferenceVelocityMPerS` | Uses calculated velocity |
+| P1-07 identities | Layout F-006 vs fitting record F-004 | Linked fitting shown by layout ID |
+| P1-08 design flow | Not stated | Title-page note (prescribed design flows); path gaps already shown on Analysis |
+| P1-09 entry/exit | No exit loss for bare duct into a space | Exit loss (C = 1) unless a GRD / exit fitting delivers the air |
+| P1-10 fan basis | ESP called static | Total-pressure basis stated; AMCA fan static (outlet duct Pv) on fan sheet |
+| P1-11 leakage scope | All records counted | Drawn system only (`SystemMembership`) |
+| P1-12 allowance | Labelled duct leakage | "Leakage allowance at class pressure" |
+| P1-13 class envelope | One duty | Per-side classes (round W); full envelope needs design input |
+| P2-14 diffuser Ps | Shown as 0 | Derived TP − neck VP, labelled; "not supplied" otherwise |
+| P2-15 catalog conditions | Partly | Price SCD notes (isothermal throw, ceiling, ×0.70, NC basis) verified against the catalog |
+| P2-17 flow convention | Not stated | Duct worksheet assumption line |
+| P2-18 invalid results | Fallback to stored velocity | Throws: not available |
+| P2-19 VAV size label | Index shown | Choice label shown |
+| P2-16, P2-20 | Lookup method already stated; QA summary page | Not done (QA summary / route ledger: next) |
+
+Ryan's list: Errors red/yellow with expected-range warnings and airflow-balance errors; Validation tab → Net Path
+Static Pressure graph (all paths / one in blue, total dashed); report views no longer draw sized ducts red (report
+canvas had no sized source); stacked drawing labels; ribbon regrouped (Project incl. Project Settings; Auto Size;
+Calculate incl. Highlight Critical Path); rounding and calculation method moved into Auto Sizing Criteria; Analysis
+ribbon Calculate removed (same command as the Project ribbon's).
+Hand checks (engine tests in `ReviewCorrectionTests`): Ao/A1 = (11/8.5)² = 1.6747; 500 cfm in 8.5 in → 1268.8 fpm;
+800 cfm in 10 in → Pv = (1466.8/4005)²(ρ/0.075); 1,000 cfm in 12 in → 1273.2 fpm only with airflow and size given.
+Checks: engine 91/91, interface 24/24 at 100 %, 150 % and 1080p (Wine).
+Results change: routes that end in a bare duct now include its exit loss; fittings on smaller ducts now use them.

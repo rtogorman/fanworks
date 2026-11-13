@@ -78,7 +78,7 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 20;
+    public const int CurrentSchemaVersion = 21;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -663,8 +663,31 @@ public sealed class SavedFitting
     public double DeltaYM { get; set; }
     public double DeltaZM { get; set; }
 
+    /// <summary>
+    /// True when the user entered the reference size by hand (schema 21). Otherwise a fitting drawn in the system
+    /// takes its reference size, and a transition its area ratio, from the connected ducts each time the system is
+    /// solved (<see cref="SystemSolver"/>), so a default size can never stand in for the real section.
+    /// </summary>
+    public bool ReferenceSizeManual { get; set; }
+
+    /// <summary>
+    /// The ID of the layout component this record is linked to, set by <see cref="SystemSolver.Solve"/>. A linked
+    /// fitting is shown by its layout ID everywhere, so the drawing, tables and report use one name for one item.
+    /// </summary>
     [JsonIgnore]
-    public string Id => string.IsNullOrWhiteSpace(CustomId) ? $"F-{Sequence:000}" : CustomId.Trim();
+    public string? LayoutId { get; set; }
+
+    /// <summary>
+    /// The duct the reference size was taken from (set by the solver), or null when the size is entered by hand or
+    /// the fitting is not drawn in the system.
+    /// </summary>
+    [JsonIgnore]
+    public string? ReferenceSizeSource { get; set; }
+
+    [JsonIgnore]
+    public string Id => !string.IsNullOrWhiteSpace(CustomId) ? CustomId.Trim()
+        : !string.IsNullOrWhiteSpace(LayoutId) ? LayoutId
+        : $"F-{Sequence:000}";
 
     public DuctGeometry? CreateGeometry()
     {
@@ -690,12 +713,14 @@ public sealed class SavedFitting
         if (definition.IsJunction && Junction is not null)
             return FittingCalculator.Calculate(definition, Inputs, Junction, TemperatureC,
                 RelativeHumidity, AtmosphericPressurePa);
-        var geometry = CreateGeometry();
-        return AirflowM3PerS > 0.0 && geometry is not null
-            ? FittingCalculator.Calculate(definition, Inputs, AirflowM3PerS, geometry, TemperatureC,
-                RelativeHumidity, AtmosphericPressurePa)
-            : FittingCalculator.Calculate(definition, Inputs, ReferenceVelocityMPerS, TemperatureC,
-                RelativeHumidity, AtmosphericPressurePa);
+        // A fitting needs its own airflow and reference section. Missing either is an invalid input, never a
+        // reason to reuse a stored velocity from an earlier definition (review P2-18).
+        var geometry = CreateGeometry()
+                       ?? throw new InvalidOperationException($"{Id} has no reference duct size.");
+        if (!(AirflowM3PerS > 0.0) || !double.IsFinite(AirflowM3PerS))
+            throw new InvalidOperationException($"{Id} has no airflow (it is not connected to the system or carries no air).");
+        return FittingCalculator.Calculate(definition, Inputs, AirflowM3PerS, geometry, TemperatureC,
+            RelativeHumidity, AtmosphericPressurePa);
     }
 
     /// <summary>
@@ -930,6 +955,11 @@ public static class DuctSystemStore
         // the fan.
         if (document.SchemaVersion == 19)
             document.SchemaVersion = 20;
+        // Version 21: fittings record whether their reference size was entered by hand (ReferenceSizeManual; false
+        // when absent). Fittings in older files take their size from the connected ducts when the system is solved,
+        // which replaces default sizes that were never matched to the drawing (review P0-03, P1-05).
+        if (document.SchemaVersion == 20)
+            document.SchemaVersion = 21;
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."

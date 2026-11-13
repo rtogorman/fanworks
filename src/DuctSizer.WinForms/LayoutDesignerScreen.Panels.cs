@@ -21,7 +21,16 @@ internal sealed record ProjectIssue(string Severity, string Source, string ItemI
 internal sealed partial class LayoutDesignerScreen
 {
     private readonly DataGridView _layoutErrorsGrid = new();
-    private readonly DataGridView _layoutValidationGrid = new();
+    private readonly Panel _netStaticPanel = new() { Name = "LayoutNetStaticPanel", Dock = DockStyle.Fill, BackColor = Color.White };
+    private readonly NetStaticPressureChart _netStaticChart = new() { Dock = DockStyle.Fill };
+    private readonly ComboBox _netStaticPathCombo = new()
+    {
+        Name = "NetStaticPathCombo",
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Width = 300,
+        Anchor = AnchorStyles.Top | AnchorStyles.Right
+    };
+    private bool _fillingNetStaticCombo;
     private readonly Dictionary<string, InspectorStyleTab> _bottomTabs = new();
     private readonly Panel _bottomContent = new() { Name = "LayoutBottomContent", Dock = DockStyle.Fill, BackColor = Color.White };
     private string _activeBottomTab = "Overview";
@@ -44,7 +53,8 @@ internal sealed partial class LayoutDesignerScreen
         };
         AddBottomTab(strip, "Overview", "LayoutOverviewTab", "System Overview", RibbonIcon.Grid);
         AddBottomTab(strip, "Errors", "LayoutErrorsTab", "Errors (0)", RibbonIcon.Warning);
-        AddBottomTab(strip, "Validation", "LayoutValidationTab", "Validation", RibbonIcon.Check);
+        // The former Validation list (round X): the static pressure along each path, as a graph.
+        AddBottomTab(strip, "Validation", "LayoutValidationTab", "Net Path Static Pressure", RibbonIcon.Analysis);
         var collapse = new Button
         {
             Name = "LayoutSummaryCollapseButton",
@@ -59,7 +69,7 @@ internal sealed partial class LayoutDesignerScreen
         };
         collapse.FlatAppearance.BorderColor = RibbonPalette.RibbonBorder;
         collapse.Click += (_, _) => SetLayoutSummaryCollapsed(true);
-        _layoutToolTips.SetToolTip(collapse, "Hide the System Overview, Errors and Validation panel");
+        _layoutToolTips.SetToolTip(collapse, "Hide the System Overview, Errors and Net Path Static Pressure panel");
         strip.Controls.Add(collapse);
 
         BuildLayoutSystemSummaryPanel();
@@ -80,25 +90,7 @@ internal sealed partial class LayoutDesignerScreen
                 SelectFromListGrid(_layoutErrorsGrid);
         };
         _layoutErrorsGrid.VisibleChanged += (_, _) => _layoutErrorsGrid.ClearSelection();
-        ConfigureListGrid(_layoutValidationGrid, "LayoutValidationGrid", new[]
-        {
-            ("Item", "Item", 80), ("Kind", "Kind", 110), ("Size", "Size", 110), ("Airflow", "Airflow", 80),
-            ("Velocity", "Velocity", 80), ("Rate", "Static pressure rate", 130), ("Coefficient", "Loss coefficient C", 110),
-            ("Loss", "Loss", 90), ("Status", "Status", 200)
-        });
-        _layoutValidationGrid.Columns["Status"]!.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-        // Navigate only on a user's click or arrow key: a grid selects its first row by itself when filled or shown.
-        _layoutValidationGrid.CellClick += (_, args) =>
-        {
-            if (args.RowIndex >= 0)
-                SelectFromListGrid(_layoutValidationGrid);
-        };
-        _layoutValidationGrid.KeyUp += (_, args) =>
-        {
-            if (args.KeyCode is Keys.Up or Keys.Down or Keys.PageUp or Keys.PageDown or Keys.Home or Keys.End)
-                SelectFromListGrid(_layoutValidationGrid);
-        };
-        _layoutValidationGrid.VisibleChanged += (_, _) => _layoutValidationGrid.ClearSelection();
+        BuildNetStaticPanel();
 
         panel.Controls.Add(_bottomContent);
         panel.Controls.Add(strip);
@@ -120,10 +112,10 @@ internal sealed partial class LayoutDesignerScreen
         foreach (var (tabKey, tab) in _bottomTabs)
             tab.Selected = tabKey == key;
         if (_bottomContent.Controls.Count == 0)
-            _bottomContent.Controls.AddRange(new Control[] { _layoutSystemSummaryGrid, _layoutErrorsGrid, _layoutValidationGrid });
+            _bottomContent.Controls.AddRange(new Control[] { _layoutSystemSummaryGrid, _layoutErrorsGrid, _netStaticPanel });
         _layoutSystemSummaryGrid.Visible = key == "Overview";
         _layoutErrorsGrid.Visible = key == "Errors";
-        _layoutValidationGrid.Visible = key == "Validation";
+        _netStaticPanel.Visible = key == "Validation";
         // Lists are rebuilt when shown as well as after each edit, so they can never be out of date when read.
         if (key == "Errors")
             RefreshErrorsList();
@@ -191,9 +183,48 @@ internal sealed partial class LayoutDesignerScreen
             foreach (var node in document.LayoutNodes.Where(node => !node.IsDefined && node.Type != LayoutNodeType.Duct))
                 issues.Add(new ProjectIssue("Error", "Definition", node.Id,
                     "This component is not defined yet. Double-click it, use Edit Inputs, or run Auto Size."));
+            // Airflows that do not add up (round X): a junction accepted out of balance, or outlets whose airflows
+            // were entered by hand and no longer add up to the inlet.
+            foreach (var node in document.LayoutNodes)
+            {
+                if (node.AirflowOverride)
+                    issues.Add(new ProjectIssue("Error", "Airflow balance", node.Id,
+                        "The airflows do not match: this junction's path airflows do not add up to its common airflow (accepted out of balance)."));
+                foreach (var (overridden, parentId) in new[] { (node.ConnectionAirflowOverride, node.ParentNodeId), (node.SecondaryConnectionAirflowOverride, node.SecondaryParentNodeId) })
+                    if (overridden)
+                        issues.Add(new ProjectIssue("Error", "Airflow balance", node.Id,
+                            $"The airflows do not match: the outlet airflows of {parentId} entered by hand do not add up to its inlet airflow."));
+            }
+            // Expected ranges (Analysis Settings) on the critical path: soft warnings.
+            foreach (var (itemId, message) in _host.DuctSystemScreen.CriticalPathRangeWarnings())
+                issues.Add(new ProjectIssue("Warning", "Expected range", itemId, message));
+            foreach (var fitting in SystemMembership.Fittings(document))
+            {
+                if (fitting.ReferenceSizeManual && LayoutTopology.LinkedFitting(document, document.LayoutNodes
+                        .First(node => node.LinkedFittingSequence == fitting.Sequence)) is not null)
+                {
+                    var node = document.LayoutNodes.First(item => item.LinkedFittingSequence == fitting.Sequence);
+                    var inlet = LayoutTopology.DuctForConnection(document, node, false);
+                    if (inlet is not null && (inlet.Shape != fitting.Shape
+                                              || Math.Abs(inlet.DiameterM - fitting.DiameterM) > 1e-4
+                                              || Math.Abs(inlet.WidthM - fitting.WidthM) > 1e-4
+                                              || Math.Abs(inlet.HeightM - fitting.HeightM) > 1e-4))
+                        issues.Add(new ProjectIssue("Warning", "Reference size", fitting.Id,
+                            $"The size entered for this fitting differs from the duct it is drawn on ({inlet.Id}). Its velocity and loss use the entered size: add a transition, or tick \"Use the connected duct's size\"."));
+                }
+                if (string.Equals(fitting.FittingCode, VavPerformanceCatalog.WithReheatCode, StringComparison.OrdinalIgnoreCase))
+                    issues.Add(new ProjectIssue("Warning", "VAV basis", fitting.Id,
+                        "Only the reheat coil's airside pressure drop is included; add the terminal's minimum operating pressure from the Titus selection (see its sheet)."));
+            }
         }
         foreach (var duct in document.Ducts)
         {
+            if (SystemMembership.IsStandalone(document, duct))
+            {
+                issues.Add(new ProjectIssue("Warning", "Standalone item", duct.Id,
+                    "Not part of the drawn system (no connection uses it): left out of the system totals, area and leakage."));
+                continue;
+            }
             try
             {
                 duct.Calculate();
@@ -205,6 +236,12 @@ internal sealed partial class LayoutDesignerScreen
         }
         foreach (var fitting in document.Fittings)
         {
+            if (SystemMembership.IsStandalone(document, fitting))
+            {
+                issues.Add(new ProjectIssue("Warning", "Standalone item", fitting.Id,
+                    "Not part of the drawn system (no component uses it): left out of the system totals, area and leakage."));
+                continue;
+            }
             try
             {
                 fitting.Calculate();
@@ -223,6 +260,9 @@ internal sealed partial class LayoutDesignerScreen
             .ToArray();
     }
 
+    internal static readonly Color HardErrorFill = Color.FromArgb(253, 232, 232);
+    internal static readonly Color SoftWarningFill = Color.FromArgb(255, 248, 214);
+
     private void RefreshErrorsList()
     {
         if (_layoutErrorsGrid.Columns.Count == 0)
@@ -235,9 +275,14 @@ internal sealed partial class LayoutDesignerScreen
             foreach (var issue in issues)
             {
                 var index = _layoutErrorsGrid.Rows.Add(issue.Severity, issue.Source, issue.ItemId, issue.Message);
-                _layoutErrorsGrid.Rows[index].Tag = issue.ItemId;
-                if (issue.Severity == "Error")
-                    _layoutErrorsGrid.Rows[index].Cells["Severity"].Style.ForeColor = Color.Firebrick;
+                var row = _layoutErrorsGrid.Rows[index];
+                row.Tag = issue.ItemId;
+                // Red for an error that blocks or invalidates a result; yellow for a soft warning to review.
+                var hard = issue.Severity == "Error";
+                row.DefaultCellStyle.BackColor = hard ? HardErrorFill : SoftWarningFill;
+                row.DefaultCellStyle.SelectionBackColor = hard ? Color.FromArgb(246, 205, 205) : Color.FromArgb(250, 230, 160);
+                row.Cells["Severity"].Style.ForeColor = hard ? Color.Firebrick : Color.FromArgb(150, 100, 0);
+                row.Cells["Severity"].Style.Font = new Font("Segoe UI Semibold", 8.5F);
             }
             _layoutErrorsGrid.ClearSelection();
         }
@@ -249,80 +294,94 @@ internal sealed partial class LayoutDesignerScreen
             tab.Text = $"Errors ({issues.Count})";
     }
 
+    private void BuildNetStaticPanel()
+    {
+        var header = new TableLayoutPanel
+        {
+            Name = "NetStaticHeader",
+            Dock = DockStyle.Top,
+            Height = 34,
+            ColumnCount = 3,
+            RowCount = 1,
+            BackColor = Color.White,
+            Padding = new Padding(10, 4, 10, 0)
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.Controls.Add(new Label
+        {
+            Name = "NetStaticCaption",
+            Text = "Static pressure along each path (gauge): total pressure less velocity pressure",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.FromArgb(74, 91, 106),
+            AutoEllipsis = true
+        }, 0, 0);
+        header.Controls.Add(new Label
+        {
+            Text = "Show",
+            AutoSize = true,
+            Anchor = AnchorStyles.Right,
+            ForeColor = Color.FromArgb(74, 91, 106),
+            Margin = new Padding(8, 7, 4, 0)
+        }, 1, 0);
+        _netStaticPathCombo.Margin = new Padding(0, 3, 0, 0);
+        _netStaticPathCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (_fillingNetStaticCombo)
+                return;
+            _netStaticChart.SelectedPath = _netStaticPathCombo.SelectedIndex <= 0 ? null : _netStaticPathCombo.SelectedIndex - 1;
+        };
+        header.Controls.Add(_netStaticPathCombo, 2, 0);
+        _netStaticPanel.Controls.Add(_netStaticChart);
+        _netStaticPanel.Controls.Add(header);
+        DialogStyle.AttachFieldInputs(header);
+    }
+
     /// <summary>
-    /// QA/QC list: every duct with its size, airflow, velocity and static-pressure rate, and every fitting with its
-    /// loss coefficient and pressure loss, so a reviewer can scan for values outside the expected range. Values come
-    /// straight from each item's own calculation; nothing is judged or changed here.
+    /// Rebuilds the Net path static pressure graph (round X): gauge static pressure along every path from
+    /// <see cref="PathPressureProfiles"/>, and the Show list (All paths, or one path drawn in blue). The pick is kept
+    /// when the same path still exists.
     /// </summary>
     private void RefreshValidationList()
     {
-        if (_layoutValidationGrid.Columns.Count == 0)
-            return;
         var document = _host.DuctSystemScreen._ductSystem;
-        var imperial = _host._currentUnits == UnitSystem.Imperial;
-        string Airflow(double m3PerS) => imperial
-            ? $"{UnitConversions.M3PerSToCfm(m3PerS):N0} cfm" : $"{UnitConversions.M3PerSToLps(m3PerS):N0} L/s";
-        string Velocity(double mPerS) => imperial
-            ? $"{UnitConversions.MpsToFpm(mPerS):N0} fpm" : $"{mPerS:0.00} m/s";
-        string Pressure(double pa) => imperial
-            ? $"{UnitConversions.PaToInchesWater(pa):0.####} in. w.c." : $"{pa:0.##} Pa";
-        // Same formatting as the Duct System schedule (a transitional-flow duct shows its lower–upper bounds).
-        string Rate(DuctCalculationResult result) =>
-            $"{_host.DuctSystemScreen.FormatSystemPressureRate(result)} {(imperial ? "in. w.c./100 ft" : "Pa/m")}";
-
-        _syncingLayoutSelection = true;
+        IReadOnlyList<PathPressureProfile> paths;
         try
         {
-            _layoutValidationGrid.Rows.Clear();
-            foreach (var duct in document.Ducts.OrderBy(x => x.Sequence))
-            {
-                string size, velocity = "-", rate = "-", loss = "-", status;
-                size = duct.Shape == DuctShape.Round
-                    ? (imperial ? $"{UnitConversions.MToInches(duct.DiameterM):0.##} in. round" : $"{UnitConversions.MToMillimeters(duct.DiameterM):0} mm round")
-                    : (imperial
-                        ? $"{UnitConversions.MToInches(duct.WidthM):0.##} × {UnitConversions.MToInches(duct.HeightM):0.##} in."
-                        : $"{UnitConversions.MToMillimeters(duct.WidthM):0} × {UnitConversions.MToMillimeters(duct.HeightM):0} mm");
-                try
-                {
-                    var result = duct.Calculate();
-                    velocity = Velocity(result.ActualVelocityMPerS);
-                    rate = Rate(result);
-                    loss = Pressure(result.TotalPressureLossUpperPa);
-                    status = duct.RequiresResizing ? "Needs re-sizing" : "Calculated";
-                }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
-                {
-                    status = $"Not calculated: {ex.Message}";
-                }
-                var index = _layoutValidationGrid.Rows.Add(duct.Id, "Duct", size, Airflow(duct.AirflowM3PerS), velocity,
-                    rate, "-", loss, status);
-                _layoutValidationGrid.Rows[index].Tag = duct.Id;
-            }
-            foreach (var fitting in document.Fittings.OrderBy(x => x.Sequence))
-            {
-                string coefficient = "-", loss = "-", status, kind = "Fitting";
-                try
-                {
-                    var result = fitting.Calculate();
-                    kind = result.Definition.Category;
-                    coefficient = result.Coefficient.ToString("0.####", CultureInfo.CurrentCulture);
-                    loss = Pressure(result.PressureLossPa);
-                    status = result.Definition.Description;
-                }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException
-                                               or KeyNotFoundException)
-                {
-                    status = $"Not calculated: {ex.Message}";
-                }
-                var index = _layoutValidationGrid.Rows.Add(fitting.Id, kind, fitting.FittingCode,
-                    fitting.AirflowM3PerS > 0 ? Airflow(fitting.AirflowM3PerS) : "-", "-", "-", coefficient, loss, status);
-                _layoutValidationGrid.Rows[index].Tag = fitting.Id;
-            }
-            _layoutValidationGrid.ClearSelection();
+            paths = document.LayoutNodes.Count == 0 ? Array.Empty<PathPressureProfile>() : PathPressureProfiles.Build(document);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException or KeyNotFoundException)
+        {
+            DiagnosticLog.Error("Net path static pressure could not be built.", ex);
+            paths = Array.Empty<PathPressureProfile>();
+        }
+        var previousRoute = _netStaticChart.SelectedPath is int previous && previous < _netStaticChart.Paths.Count
+            ? _netStaticChart.Paths[previous].Path.Route
+            : null;
+        _netStaticChart.SetPaths(paths, _host._currentUnits == UnitSystem.Imperial);
+        _netStaticChart.EmptyMessage = document.LayoutNodes.Count == 0
+            ? "Draw and connect the system to see the static pressure along each path."
+            : "Connect the system components to see the static pressure along each path.";
+        _fillingNetStaticCombo = true;
+        try
+        {
+            _netStaticPathCombo.BeginUpdate();
+            _netStaticPathCombo.Items.Clear();
+            _netStaticPathCombo.Items.Add(_netStaticChart.Paths.Count == 1 ? "All paths (1)" : $"All paths ({_netStaticChart.Paths.Count})");
+            foreach (var profile in _netStaticChart.Paths)
+                _netStaticPathCombo.Items.Add($"{profile.Path.Name}{(profile.Path.IsCritical ? " (critical)" : string.Empty)}: {profile.Path.Route}"
+                                              + (profile.IsComplete ? string.Empty : " (incomplete)"));
+            _netStaticPathCombo.EndUpdate();
+            var keep = previousRoute is null ? -1 : _netStaticChart.Paths.ToList().FindIndex(x => x.Path.Route == previousRoute);
+            _netStaticPathCombo.SelectedIndex = keep >= 0 ? keep + 1 : 0;
+            _netStaticChart.SelectedPath = keep >= 0 ? keep : null;
+            MainForm.ResizeComboDropDown(_netStaticPathCombo);
         }
         finally
         {
-            _syncingLayoutSelection = false;
+            _fillingNetStaticCombo = false;
         }
     }
 
@@ -477,7 +536,9 @@ internal sealed class InspectorStyleTab : Button
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
         Font = new Font("Segoe UI", 9F);
-        Size = new Size(TextRenderer.MeasureText("System Overview (000)", Font).Width + 34, 29);
+        // Wide enough for the longest caption (and an error count), whichever it is.
+        Size = new Size(Math.Max(TextRenderer.MeasureText("System Overview (000)", Font).Width,
+            TextRenderer.MeasureText(text, Font).Width) + 34, 29);
         Cursor = Cursors.Hand;
         AccessibleRole = AccessibleRole.PageTab;
     }

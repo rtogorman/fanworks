@@ -265,3 +265,24 @@ the first starts a secondary calculation drawn after the assumptions with a divi
 - **Calculator styling**: `SectionTitlePanel` is a rounded brand-navy band with the calculator's icon on a blue tile
   (no line motif, no version badge); `DialogStyle.AttachFieldInputs` gives the calculator inputs the rounded frames of
   the redesigned windows; units sit beside the value (`CreateUnitInputHost`); outputs use sentence-case captions.
+
+## Pressure accounting, reference sizes, review corrections (v0.105)
+
+- **Total pressure** (`SystemPressures`, `PathPressureProfiles`): the solver's running pressure is total pressure,
+  gauge, relative to the still air of the spaces. Static at a station = total − ρV²/2 of the section there (a duct's
+  own; the duct leaving a fitting or component; 0 in a space). `SystemPressures.ExitLossPa` charges one velocity
+  pressure at a sink fed straight from a duct; none after a GRD or an ASHRAE exit fitting. The exit loss is charged in
+  all three walks (`SystemSolver.NodeLoss`, `CriticalPathAnalyzer`, `SystemPathProfiles`; step kind
+  `SystemPathProfiles.ExitKind`).
+- **Reference size** (`SystemSolver.SyncReferenceSize`, schema 21 `SavedFitting.ReferenceSizeManual`): in-line
+  fittings copy the upstream duct's section (entries the downstream one); transitions 4-1 to 4-4 set Ao/A1 = A_up /
+  A_down (ASHRAE section o is upstream: C ≈ 43 at Ao/A1 = 10, 180°, i.e. ≈ 0.5 Pv of the small section).
+  `SavedFitting.LayoutId` (runtime) makes a linked fitting's `Id` its layout ID. `SavedFitting.Calculate` throws when
+  airflow or reference size is missing (no stored-velocity fallback).
+- **Membership** (`SystemMembership`): ducts and fittings used by the drawing; `SmacnaLeakage.SystemAreas` uses it.
+  `LayoutModelCheck` reports splits that are not junction fittings.
+- **Project tab**: `ProjectIssue` severities Error (red) / Warning (yellow); `DuctSystemScreen.CriticalPathRangeWarnings`.
+  `NetStaticPressureChart` on the bottom panel's former Validation tab.
+- **Ribbon / settings**: `AutomaticSizingInputsDialog` takes `ProjectSizingSettings` (increment, rounding, equivalent
+  diameter, area basis) on its Project-wide pages (`FormKit.NavigationHeader` section headings); Project Settings is
+  project information and units only.

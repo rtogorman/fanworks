@@ -180,9 +180,9 @@ internal static class AnalysisTests
 
         var common = system.CommonDuct.Calculate().TotalPressureLossUpperPa;
         var mainRoute = common + system.Fitting.CalculateForPath(JunctionPath.Straight).PressureLossPa
-                        + system.MainDuct.Calculate().TotalPressureLossUpperPa;
+                        + system.MainDuct.Calculate().TotalPressureLossUpperPa + SolverTests.VelocityPressure(system.MainDuct);
         var branchRoute = common + system.Fitting.CalculateForPath(JunctionPath.Branch).PressureLossPa
-                          + system.BranchDuct.Calculate().TotalPressureLossUpperPa;
+                          + system.BranchDuct.Calculate().TotalPressureLossUpperPa + SolverTests.VelocityPressure(system.BranchDuct);
         var main = profiles.Paths.Single(x => x.EndId == system.MainSink.Id);
         var branch = profiles.Paths.Single(x => x.EndId == system.BranchSink.Id);
         Near(main.TotalLossPa, mainRoute, "main route total");

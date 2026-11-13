@@ -1006,16 +1006,20 @@ internal sealed class LayoutDesignerCanvas : Panel
             ? ConnectionCaptionSource(connectionRef).Replace("\r", string.Empty).Split('\n').FirstOrDefault() ?? string.Empty
             : string.Empty;
         var ductSize = ShowDuctSizes ? ConnectionSizeCaptionSource(connectionRef) : string.Empty;
-        var ductLabel = !string.IsNullOrWhiteSpace(ductId) && !string.IsNullOrWhiteSpace(ductSize)
-            ? $"{ductId}  {ductSize}"
-            : !string.IsNullOrWhiteSpace(ductId) ? ductId : ductSize;
-        if (string.IsNullOrWhiteSpace(ductLabel))
+        // Each item shown is its own line, stacked under the ID in the order of the label check boxes (ID, size,
+        // airflow, pressure), so a label is a compact block beside the duct rather than one long line (round X).
+        var labelLines = new[] { ductId }
+            .Concat(ductSize.Replace("\r", string.Empty).Split('\n'))
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0)
+            .ToArray();
+        if (labelLines.Length == 0)
             return;
         using var labelFont = new Font("Segoe UI Semibold", Math.Max(5.5F, 6.8F * ZoomFactor));
-        var ductMeasured = TextRenderer.MeasureText(ductLabel, labelFont, Size.Empty,
-            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
-        var labelWidth = ductMeasured.Width + 8;
-        var labelHeight = ductMeasured.Height + 3;
+        var lineSizes = labelLines.Select(line => TextRenderer.MeasureText(line, labelFont, Size.Empty,
+            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding)).ToArray();
+        var labelWidth = lineSizes.Max(size => size.Width) + 8;
+        var labelHeight = lineSizes.Sum(size => size.Height) + 3;
         var center = AdjacentLabelPoint(path, labelHeight);
         var labelBounds = PlaceLabel(graphics,
             LayoutLabelPlacement.ConnectionKey(connectionRef.Downstream.Sequence, connectionRef.Secondary),
@@ -1023,8 +1027,15 @@ internal sealed class LayoutDesignerCanvas : Panel
             PathMidpoint(path));
         using var labelBackground = new SolidBrush(Color.FromArgb(225, 255, 255, 255));
         graphics.FillRectangle(labelBackground, labelBounds);
-        TextRenderer.DrawText(graphics, ductLabel, labelFont,
-            labelBounds, Color.FromArgb(20, 44, 65), TextFormatFlags.HorizontalCenter | TextFormatFlags.SingleLine);
+        var lineTop = labelBounds.Top + 1;
+        for (var index = 0; index < labelLines.Length; index++)
+        {
+            TextRenderer.DrawText(graphics, labelLines[index], labelFont,
+                new Rectangle(labelBounds.Left, lineTop, labelBounds.Width, lineSizes[index].Height + 1),
+                index == 0 && !string.IsNullOrWhiteSpace(ductId) ? Color.FromArgb(20, 44, 65) : Color.FromArgb(52, 74, 94),
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            lineTop += lineSizes[index].Height;
+        }
     }
 
     /// <summary>

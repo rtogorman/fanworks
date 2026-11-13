@@ -256,6 +256,11 @@ public static class SystemSolver
         }
         if (node.LinkedDuctSequence is int ductSequence)
             return DuctLoss(document, ductSequence);
+        if (SystemPressures.ExitLossApplies(document, node))
+        {
+            try { return SystemPressures.ExitLossPa(document, node); }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException) { return double.NaN; }
+        }
         return node.Type is LayoutNodeType.Coil or LayoutNodeType.Filter or LayoutNodeType.Grd
             or LayoutNodeType.CustomComponent
             ? node.PressureDropPa
@@ -298,10 +303,70 @@ public static class SystemSolver
         if (node.LinkedFittingSequence is not int fittingSequence)
             return;
         var fitting = document.Fittings.FirstOrDefault(x => x.Sequence == fittingSequence);
-        if (fitting is null || node.AirflowOverride)
+        if (fitting is null)
+            return;
+        fitting.LayoutId = node.Id;
+        SyncReferenceSize(document, node, fitting);
+        if (node.AirflowOverride)
             return;
         fitting.AirflowM3PerS = node.AirflowM3PerS;
         fitting.TemperatureC = node.TemperatureC;
+    }
+
+    /// <summary>The ASHRAE transitions whose "area" input is Ao/A1 with section o upstream (round, rectangular, pyramidal).</summary>
+    private static readonly HashSet<string> AreaRatioTransitions = new(StringComparer.OrdinalIgnoreCase) { "4-1", "4-2", "4-3", "4-4" };
+
+    /// <summary>
+    /// Gives an in-line fitting drawn in the system the size of the duct it is connected to (review P0-03, P1-05), unless
+    /// its size was entered by hand (<see cref="SavedFitting.ReferenceSizeManual"/>). Elbows, dampers, transitions and
+    /// exits take the upstream duct (their ASHRAE reference section); entries take the downstream duct. A transition
+    /// also takes its area ratio Ao/A1 from the upstream (o) and downstream (1) ducts: the ASHRAE 4-1 to 4-4 tables are
+    /// referred to the upstream section (Ao/A1 = 10 is a contraction, C ≈ 43 at 180°, i.e. about 0.5 Pv1). Junctions are
+    /// sized by <see cref="JunctionLegBuilder"/>; air terminals, VAV boxes and fan fittings keep their selected size.
+    /// </summary>
+    public static void SyncReferenceSize(DuctSystemDocument document, SavedLayoutNode node, SavedFitting fitting)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(fitting);
+        fitting.ReferenceSizeSource = null;
+        if (fitting.ReferenceSizeManual)
+            return;
+        var definition = FittingCatalog.All.FirstOrDefault(x =>
+            string.Equals(x.Code, fitting.FittingCode, StringComparison.OrdinalIgnoreCase));
+        if (definition is null || definition.IsJunction)
+            return;
+        var group = FittingCatalog.SelectionGroup(definition);
+        var entry = string.Equals(definition.Category, "Entries", StringComparison.OrdinalIgnoreCase);
+        var exit = string.Equals(definition.Category, "Exits", StringComparison.OrdinalIgnoreCase);
+        if (!(group is "Elbows" or "Dampers" or "Transitions") && !entry && !exit)
+            return;
+        var upstream = LayoutTopology.DuctForConnection(document, node, false);
+        var downstream = LayoutTopology.ConnectionsFrom(document, node)
+            .Select(x => LayoutTopology.DuctForConnection(document, x.Downstream, x.Secondary))
+            .FirstOrDefault(x => x is not null);
+        var reference = entry ? downstream ?? upstream : upstream ?? downstream;
+        if (reference is null || !(reference.Shape == DuctShape.Round ? reference.DiameterM > 0 : reference.WidthM > 0 && reference.HeightM > 0))
+            return;
+        fitting.Shape = reference.Shape;
+        fitting.DiameterM = reference.DiameterM;
+        fitting.WidthM = reference.WidthM;
+        fitting.HeightM = reference.HeightM;
+        fitting.ReferenceSizeSource = reference.Id;
+        if (AreaRatioTransitions.Contains(definition.Code) && upstream is not null && downstream is not null)
+        {
+            try
+            {
+                var upstreamArea = upstream.CreateGeometry().ActualAreaM2;
+                var downstreamArea = downstream.CreateGeometry().ActualAreaM2;
+                if (upstreamArea > 0 && downstreamArea > 0)
+                    fitting.Inputs["area"] = upstreamArea / downstreamArea;
+            }
+            catch (ArgumentException)
+            {
+                // An invalid duct size is reported on the duct itself; the transition keeps its entered ratio.
+            }
+        }
     }
 
     private static double ResolveConnectionAirflow(DuctSystemDocument document, SavedLayoutNode upstream,

@@ -67,6 +67,15 @@ internal static class FormKit
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
             using (var clear = new SolidBrush(list.BackColor))
                 graphics.FillRectangle(clear, e.Bounds);
+            if (list.Items[e.Index] is NavigationHeader header)
+            {
+                // A section heading: small capitals, muted, sitting low in its row; never drawn as selected.
+                using var headerFont = new Font("Segoe UI Semibold", 7.8F);
+                TextRenderer.DrawText(graphics, header.Text.ToUpperInvariant(), headerFont,
+                    new Rectangle(e.Bounds.Left + 10, e.Bounds.Top, e.Bounds.Width - 12, e.Bounds.Height - 4),
+                    Muted, TextFormatFlags.Bottom | TextFormatFlags.Left | TextFormatFlags.NoPrefix);
+                return;
+            }
             var selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
             var bounds = Rectangle.Inflate(e.Bounds, -4, -2);
             if (selected)
@@ -84,6 +93,12 @@ internal static class FormKit
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         };
         list.SelectedIndexChanged += (_, _) => list.Invalidate();
+    }
+
+    /// <summary>A section heading in a <see cref="NavigationList"/>: drawn as a label, not a page.</summary>
+    internal sealed record NavigationHeader(string Text)
+    {
+        public override string ToString() => Text;
     }
 
     /// <summary>A white rounded card holding <paramref name="content"/>.</summary>

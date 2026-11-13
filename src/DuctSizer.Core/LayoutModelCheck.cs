@@ -89,6 +89,24 @@ public static class LayoutModelCheck
             }
         }
 
+        // Every split or merge of the air must be a junction fitting, or its junction losses are silently zero
+        // (review P1-04): a component that feeds two connections without being a diverging fitting, or a tee/wye
+        // linked to a fitting record that is not a junction (for example an elbow), charges no branch or
+        // straight-through loss on either route.
+        foreach (var node in document.LayoutNodes.Where(x => x.Type != LayoutNodeType.CalculationPoint).OrderBy(x => x.Sequence))
+        {
+            var outlets = LayoutTopology.ConnectionsFrom(document, node).Count();
+            if (outlets > 1 && !LayoutTopology.IsDiverging(node))
+                issues.Add(new SystemCalculationIssue(node.Id,
+                    $"{node.Id}: the air splits here into {outlets} connections, but it is not a tee or wye, so no junction loss is charged. Insert a diverging fitting at the split."));
+            if ((LayoutTopology.IsDiverging(node) || LayoutTopology.IsConverging(node))
+                && LayoutTopology.LinkedFitting(document, node) is { } linked
+                && FittingCatalog.All.FirstOrDefault(x => string.Equals(x.Code, linked.FittingCode, StringComparison.OrdinalIgnoreCase))
+                    is { IsJunction: false } definition)
+                issues.Add(new SystemCalculationIssue(node.Id,
+                    $"{node.Id}: this {(LayoutTopology.IsDiverging(node) ? "diverging" : "converging")} junction is calculated as ASHRAE {definition.Code} ({definition.Description}), which is not a junction, so its straight-through and branch losses are not modelled. Choose a tee or wye."));
+        }
+
         // A component that is its own upstream (directly or through others) has no defined flow direction.
         foreach (var node in document.LayoutNodes.Where(x => x.Type != LayoutNodeType.CalculationPoint).OrderBy(x => x.Sequence))
         {

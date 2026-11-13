@@ -2223,7 +2223,7 @@ internal sealed partial class LayoutDesignerScreen
         if (string.Equals(node.FittingGroup, "Elbows", StringComparison.OrdinalIgnoreCase)
             && inputs.ContainsKey("angle"))
             inputs["angle"] = node.ElbowAngleDegrees;
-        return new SavedFitting
+        var draft = new SavedFitting
         {
             FittingCode = definition.Code,
             Description = $"{definition.Code} — {definition.Description}",
@@ -2237,6 +2237,9 @@ internal sealed partial class LayoutDesignerScreen
             RelativeHumidity = MainForm.FixedRelativeHumidity,
             AtmosphericPressurePa = MainForm.FixedAtmosphericPressurePa
         };
+        // Start from the size of the duct the fitting is drawn on, not a fixed 12 in (review P0-03).
+        SystemSolver.SyncReferenceSize(_host.DuctSystemScreen._ductSystem, node, draft);
+        return draft;
     }
 
     private static SavedFitting CloneFitting(SavedFitting fitting) => new()
@@ -2253,6 +2256,7 @@ internal sealed partial class LayoutDesignerScreen
         DiameterM = fitting.DiameterM,
         WidthM = fitting.WidthM,
         HeightM = fitting.HeightM,
+        ReferenceSizeManual = fitting.ReferenceSizeManual,
         ReferenceVelocityMPerS = fitting.ReferenceVelocityMPerS,
         TemperatureC = fitting.TemperatureC,
         RelativeHumidity = fitting.RelativeHumidity,
@@ -2274,6 +2278,7 @@ internal sealed partial class LayoutDesignerScreen
         target.WidthM = source.WidthM;
         target.HeightM = source.HeightM;
         target.ReferenceVelocityMPerS = source.ReferenceVelocityMPerS;
+        target.ReferenceSizeManual = source.ReferenceSizeManual;
         target.TemperatureC = source.TemperatureC;
         target.RelativeHumidity = source.RelativeHumidity;
         target.AtmosphericPressurePa = source.AtmosphericPressurePa;
@@ -3330,7 +3335,8 @@ internal sealed partial class LayoutDesignerScreen
         var pressure = _layoutShowPressureCheck.Checked
             ? _host.DuctSystemScreen.DuctInletPressureCaption(duct.Sequence)
             : string.Empty;
-        return string.Join("  ", new[] { size, flow, pressure }.Where(part => part.Length > 0));
+        // One item per line: the drawing stacks them under the duct ID (LayoutDesignerCanvas.DrawConnection).
+        return string.Join("\n", new[] { size, flow, pressure }.Where(part => part.Length > 0));
     }
 
     /// <summary>Saves a dragged label (or its leader) as one undoable drawing edit.</summary>
