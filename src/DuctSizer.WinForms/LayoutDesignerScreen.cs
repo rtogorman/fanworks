@@ -109,7 +109,9 @@ internal sealed partial class LayoutDesignerScreen
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, PanelSplitterWidth));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, SelectionInspector.ExpandedWidth));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        // The canvas toolbar row grows to a second line when the window is too narrow for one (round Y), instead of
+        // scrolling sideways and hiding the editors at its right end.
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
 
@@ -358,8 +360,10 @@ internal sealed partial class LayoutDesignerScreen
             Name = "LayoutCanvasToolbar",
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoScroll = true,
+            WrapContents = true,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(0, 40),
             Padding = new Padding(4, 4, 4, 0),
             Margin = new Padding(0, 0, 0, 4),
             BackColor = Color.White

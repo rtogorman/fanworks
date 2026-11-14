@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-13 (round Y, v0.106.0); round X v0.105.1; round W v0.104.0; round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
+Last updated: 2026-11-13 (round Y, v0.106.1); round X v0.105.1; round W v0.104.0; round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
 
 ## Where things live
 
@@ -658,3 +658,6 @@ lock the ducts. Fans are not lockable (Calculate Critical Path sizes the fan). T
 input changes are unapplied (locking rebuilds the panel).
 Checks: engine 95/95 (new `SizeLockTests`: flow order hand-ordered; locked elbow keeps 10 in when its duct goes to 12 in
 and still carries 800 cfm; format 22 round-trip and format-21 upgrade), interface 24/24 at 100 %, 150 % and 1080p (Wine).
+v0.106.1: the canvas toolbar overflowed at about 1,536 px logical width (Ryan's laptop at 150 %): it scrolled sideways,
+clipped its text and hid the Source / Sink and Component Lock editors. It now wraps (root row AutoSize, toolbar
+AutoSize + WrapContents, minimum 40 px). Checks: interface 24/24 at 100 %, 150 % and 1080p.
