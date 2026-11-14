@@ -81,7 +81,7 @@ internal sealed class InlineEditSession : IDisposable
 
     internal IReadOnlyList<IInlineEditable> Editors { get; }
 
-    /// <summary>Extra commands for this item (for example Reverse Flow Direction).</summary>
+    /// <summary>Extra commands for this item (none at present; kept for future item commands).</summary>
     internal List<(string Name, string Text, Action Run)> Actions { get; } = new();
 
     /// <summary>Captures the undo state used if the edit is applied.</summary>

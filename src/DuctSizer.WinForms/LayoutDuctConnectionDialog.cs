@@ -11,7 +11,6 @@ internal sealed class LayoutDuctConnectionDialog : DpiScaledForm, IInlineEditabl
 {
     private readonly ComboBox _airSystem = new();
     internal string SelectedAirSystemType => Convert.ToString(_airSystem.SelectedItem, CultureInfo.CurrentCulture) ?? "Supply Air";
-    internal bool ReverseRequested { get; private set; }
 
     internal LayoutDuctConnectionDialog(string upstreamId, string downstreamId, string airSystemType,
         bool hasSavedDuct = false)
@@ -51,27 +50,9 @@ internal sealed class LayoutDuctConnectionDialog : DpiScaledForm, IInlineEditabl
             ForeColor = Color.White
         };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 32, FlatStyle = FlatStyle.Flat };
-        var reverse = new Button
-        {
-            Name = "LayoutDuctReverseButton",
-            Text = "Reverse Flow Direction",
-            Width = 165,
-            Height = 32,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(14, 111, 230),
-            ForeColor = Color.White
-        };
-        reverse.Click += (_, _) =>
-        {
-            ReverseRequested = true;
-            DialogResult = DialogResult.OK;
-            Close();
-        };
         UiPolish.RoundButton(open, 7);
-        UiPolish.RoundButton(reverse, 7);
         UiPolish.RoundButton(cancel, 7);
         buttons.Controls.Add(open);
-        buttons.Controls.Add(reverse);
         buttons.Controls.Add(cancel);
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         table.Controls.Add(buttons, 0, 3);

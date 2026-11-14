@@ -89,6 +89,44 @@ public static class LayoutTopology
         return connected;
     }
 
+    /// <summary>
+    /// Drawn components (calculation points excluded) in flow order: every component comes after the components that
+    /// feed it, starting from the sources (components with no upstream connection) and ending at the sinks. Components
+    /// that are equally far along keep document (sequence) order, so the order is the same for the same drawing. A
+    /// loop, which the model check reports, cannot be ordered: its components follow in sequence order.
+    /// </summary>
+    public static IReadOnlyList<SavedLayoutNode> FlowOrder(DuctSystemDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        var nodes = document.LayoutNodes.Where(x => x.Type != LayoutNodeType.CalculationPoint)
+            .OrderBy(x => x.Sequence).ToArray();
+        var byId = nodes.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+        var waiting = nodes.ToDictionary(x => x.Id, x => new[] { x.ParentNodeId, x.SecondaryParentNodeId }
+            .Count(parent => !string.IsNullOrWhiteSpace(parent) && byId.ContainsKey(parent)), StringComparer.OrdinalIgnoreCase);
+        var ready = new SortedSet<int>(nodes.Where(x => waiting[x.Id] == 0).Select(x => x.Sequence));
+        var bySequence = nodes.ToDictionary(x => x.Sequence);
+        var ordered = new List<SavedLayoutNode>(nodes.Length);
+        while (ready.Count > 0)
+        {
+            var next = bySequence[ready.Min];
+            ready.Remove(ready.Min);
+            ordered.Add(next);
+            foreach (var child in nodes.Where(x =>
+                         string.Equals(x.ParentNodeId, next.Id, StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(x.SecondaryParentNodeId, next.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                var count = (string.Equals(child.ParentNodeId, next.Id, StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+                            + (string.Equals(child.SecondaryParentNodeId, next.Id, StringComparison.OrdinalIgnoreCase) ? 1 : 0);
+                waiting[child.Id] -= count;
+                if (waiting[child.Id] == 0)
+                    ready.Add(child.Sequence);
+            }
+        }
+        if (ordered.Count < nodes.Length)
+            ordered.AddRange(nodes.Where(x => !ordered.Contains(x)));
+        return ordered;
+    }
+
     /// <summary>Calculation points (P/T/V/Q sensors) drawn on the connection into <paramref name="downstream"/>.</summary>
     public static IEnumerable<SavedLayoutNode> CalculationPointsForConnection(
         DuctSystemDocument document, SavedLayoutNode downstream, bool secondary)

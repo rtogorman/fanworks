@@ -286,3 +286,18 @@ the first starts a secondary calculation drawn after the assumptions with a divi
 - **Ribbon / settings**: `AutomaticSizingInputsDialog` takes `ProjectSizingSettings` (increment, rounding, equivalent
   diameter, area basis) on its Project-wide pages (`FormKit.NavigationHeader` section headings); Project Settings is
   project information and units only.
+
+## Auto Size Ductwork, size locks, net path pressure view (v0.106)
+
+- `LayoutTopology.FlowOrder(document)` orders drawn components from the sources to the sinks (Kahn's algorithm on
+  the parent links, ties by sequence; components on a loop follow in sequence order). `LayoutDesignerScreen.AutoSizeLayout`
+  uses it in three passes (undefined components, ducts, defined fittings/GRDs), solving between passes. A duct is
+  sized from its solved connection airflow.
+- `SavedDuct.SizeLocked` and `SavedLayoutNode.SizeLocked` (schema 22). Auto Size skips locked items;
+  `SystemSolver.SyncReferenceSize` keeps a locked fitting's stored size. `SystemSolver.TakesConnectedDuctSize` names
+  the fittings that follow their duct. Locks are set from the Selection Inspector or `ComponentLockEditorDialog`;
+  `LayoutDesignerScreen.ApplySizeLocks` applies them as one undo step (`LayoutDesignerScreen.Locks.cs`).
+- `ConnectionFlowReversed` is retired: it is ignored and cleared on load (schema 22).
+- `NetPathPressureView` (check boxes, Show list, `NetStaticPressureChart`) is used on the Project tab's bottom panel
+  and on the Analysis tab. The chart raises `ItemClicked`; hosts set `HighlightItemId` from the drawing or table.
+

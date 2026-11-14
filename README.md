@@ -197,6 +197,26 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.106.0
+
+- **Auto Size Ductwork** (renamed from Auto Size) re-sizes the whole system from the **Auto Sizing Criteria**, working
+  from the sources to the sinks: undefined components get the criteria defaults, every duct is re-sized from its own
+  airflow (after a split, the outlet's share, not the splitter's whole airflow), elbows, dampers, transitions, entries
+  and exits take the size of the duct they are drawn on, and GRDs are re-selected at their new airflow. Coils, filters,
+  VAV boxes and custom components keep their entered data; a fitting keeps its type.
+- **Size locks**: **Lock current size** in the Selection Inspector, or the new **Component Lock Editor** (beside the
+  Source / Sink Editor) to lock or unlock every duct and component, with Lock All / Unlock All. Auto Size Ductwork
+  leaves a locked item's size and geometry alone; its airflow still follows the sources. Saved in file format 22.
+- **Flow direction** follows the drawn sources and sinks; the Reverse Flow Direction button is gone (it only changed
+  how a connection was labelled, never the calculation). Older files are cleared of the flag when opened.
+- **Net Path Static Pressure graph**: Static (solid blue), Total (dashed) and Velocity pressure (green) lines, each
+  shown or hidden with a check box; clicking a point selects that component on the drawing, the System Overview and the
+  inspector, and the component selected elsewhere is ringed on the graph. The same graph is on the Analysis tab as its
+  own card, linked to the table.
+- **System Overview**: right-click a row for **Edit** (Selection Inspector) or **Remove** (undoable).
+- Ribbon: **Calculate Critical Path** and **Auto Size Ductwork**.
+- Top-Down view: Z is drawn as a dot in a circle at the origin (pointing out of the page), not a line up the screen.
+
 ## What changed in 0.105.1
 
 - **VAV with reheat**: a **Terminal Pressure Drop** input (in. w.c.) for the terminal's own resistance (inlet sensor,

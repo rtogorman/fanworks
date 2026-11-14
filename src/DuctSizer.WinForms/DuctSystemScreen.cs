@@ -320,7 +320,7 @@ internal sealed partial class DuctSystemScreen
         }
         SaveDuctSystem();
         _host.CalculatorScreen.CalculateAndDisplay();
-        _host.LayoutScreen._layoutStatusLabel.Text = "Auto sizing criteria were saved: rounding, calculation method and component defaults. Use Auto Size to re-size existing ducts.";
+        _host.LayoutScreen._layoutStatusLabel.Text = "Auto sizing criteria were saved: rounding, calculation method and component defaults. Use Auto Size Ductwork to re-size the ductwork and fittings.";
         _host.LayoutScreen._layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
@@ -413,7 +413,7 @@ internal sealed partial class DuctSystemScreen
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 6,
             BackColor = _host.BackColor,
             Padding = new Padding(14)
         };
@@ -422,6 +422,7 @@ internal sealed partial class DuctSystemScreen
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 610F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 350F));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 380F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
@@ -537,9 +538,11 @@ internal sealed partial class DuctSystemScreen
         graphs.Controls.Add(BuildPressureProfileCard(), 0, 0);
         graphs.Controls.Add(BuildSystemSummaryCard(), 1, 0);
         root.Controls.Add(graphs, 0, 1);
-        root.Controls.Add(actions, 0, 2);
-        root.Controls.Add(_ductGrid, 0, 3);
-        root.Controls.Add(_systemStorageStatusLabel, 0, 4);
+        // Round Y: the net path pressure graph (static, total and velocity) as its own card, below the pressure-drop graph.
+        root.Controls.Add(BuildNetPathPressureCard(), 0, 2);
+        root.Controls.Add(actions, 0, 3);
+        root.Controls.Add(_ductGrid, 0, 4);
+        root.Controls.Add(_systemStorageStatusLabel, 0, 5);
         // The full table shows every row; the wheel over it scrolls the page.
         _ductGrid.ScrollBars = ScrollBars.Horizontal;
         _ductGrid.MouseWheel += (_, args) =>
@@ -571,7 +574,8 @@ internal sealed partial class DuctSystemScreen
     /// </summary>
     private void FitAnalysisTableHeight()
     {
-        if (_analysisPageContent is null || _analysisPageContent.RowStyles.Count < 4)
+        const int tableRow = 4;
+        if (_analysisPageContent is null || _analysisPageContent.RowStyles.Count <= tableRow)
             return;
         var rows = 0;
         foreach (DataGridViewRow row in _ductGrid.Rows)
@@ -582,8 +586,8 @@ internal sealed partial class DuctSystemScreen
         const int largest = 30_000;
         _ductGrid.ScrollBars = needed > largest ? ScrollBars.Both : ScrollBars.Horizontal;
         var height = Math.Min(needed, largest);
-        if (Math.Abs(_analysisPageContent.RowStyles[3].Height - height) > 0.5)
-            _analysisPageContent.RowStyles[3].Height = height;
+        if (Math.Abs(_analysisPageContent.RowStyles[tableRow].Height - height) > 0.5)
+            _analysisPageContent.RowStyles[tableRow].Height = height;
     }
 
     private static void ConfigureSystemButton(Button button, string text, int width)
@@ -962,7 +966,7 @@ internal sealed partial class DuctSystemScreen
     }
 
     /// <summary>
-    /// Ribbon "Calculate": sizes the fan to the critical path (as Auto-size Fan did on the Duct System tab), then
+    /// Ribbon "Calculate Critical Path": sizes the fan to the critical path (as Auto-size Fan did on the Duct System tab), then
     /// highlights the critical path on the drawing. If the system cannot be calculated, the reasons are shown and
     /// nothing is changed.
     /// </summary>
@@ -973,7 +977,7 @@ internal sealed partial class DuctSystemScreen
             _host.LayoutScreen._layoutStatusLabel.Text = message.Replace("\r\n", " ", StringComparison.Ordinal);
             _host.LayoutScreen._layoutStatusLabel.ForeColor = Color.DarkOrange;
             if (!AutomationOptions.SuppressDialogs)
-                MessageBox.Show(_host, message, "Calculate", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(_host, message, "Calculate Critical Path", MessageBoxButtons.OK, MessageBoxIcon.Information);
             _host.Ribbon.SynchronizeWithPage();
             return false;
         }
@@ -1506,9 +1510,7 @@ internal sealed partial class DuctSystemScreen
             var parent = _ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == connectionNode.ParentNodeId);
             var topology = (Upstream: parent is null ? "—" : SystemItemIdForNode(parent),
                 Downstream: SystemItemIdForNode(connectionNode));
-            return connectionNode.ConnectionFlowReversed
-                ? (topology.Downstream, topology.Upstream)
-                : topology;
+            return topology;
         }
         connectionNode = _ductSystem.LayoutNodes.FirstOrDefault(x => x.SecondaryConnectionDuctSequence == ductSequence);
         if (connectionNode is not null)
@@ -1516,9 +1518,7 @@ internal sealed partial class DuctSystemScreen
             var parent = _ductSystem.LayoutNodes.FirstOrDefault(x => x.Id == connectionNode.SecondaryParentNodeId);
             var topology = (Upstream: parent is null ? "—" : SystemItemIdForNode(parent),
                 Downstream: SystemItemIdForNode(connectionNode));
-            return connectionNode.SecondaryConnectionFlowReversed
-                ? (topology.Downstream, topology.Upstream)
-                : topology;
+            return topology;
         }
         var legacyNode = _ductSystem.LayoutNodes.FirstOrDefault(x => x.LinkedDuctSequence == ductSequence);
         return legacyNode is null ? ("—", "—") : LayoutTopologyForNode(legacyNode);
@@ -1668,7 +1668,7 @@ internal sealed partial class DuctSystemScreen
         ? $"{UnitConversions.M3PerSToCfm(cubicMetersPerSecond):N0}"
         : $"{UnitConversions.M3PerSToLps(cubicMetersPerSecond):N0}";
 
-    private string FormatSystemGeometry(DuctGeometry geometry) => _host._currentUnits == UnitSystem.Imperial
+    internal string FormatSystemGeometry(DuctGeometry geometry) => _host._currentUnits == UnitSystem.Imperial
         ? geometry.Shape == DuctShape.Round
             ? $"{UnitConversions.MToInches(geometry.DiameterM):0.##} in round"
             : $"{UnitConversions.MToInches(geometry.WidthM):0.##} × {UnitConversions.MToInches(geometry.HeightM):0.##} in"
@@ -2437,6 +2437,13 @@ internal sealed partial class DuctSystemScreen
         }
     }
 
+    /// <summary>Removes the duct or fitting record with this ID (after the same confirmation as the Analysis table).</summary>
+    internal void RemoveSystemRecord(string itemId)
+    {
+        SelectSystemGridRow(itemId);
+        RemoveSelectedDuct();
+    }
+
     private void RemoveSelectedDuct()
     {
         var duct = SelectedDuct();
@@ -3104,6 +3111,7 @@ internal sealed partial class DuctSystemScreen
             PdfField("Air temperature", PdfTemperature(fitting.TemperatureC)),
             PdfField("Reference duct", SafeFittingSize(fitting) + (fitting.ReferenceSizeSource is { } source
                 ? $" (size of connected duct {source})"
+                : layoutNode?.SizeLocked == true ? " (size locked)"
                 : fitting.ReferenceSizeManual ? " (entered)" : string.Empty)),
             PdfField("Relative delta X", PdfDelta(fitting.DeltaXM)), PdfField("Relative delta Y", PdfDelta(fitting.DeltaYM)),
             PdfField("Relative delta Z", PdfDelta(fitting.DeltaZM))
@@ -4329,7 +4337,7 @@ internal sealed partial class DuctSystemScreen
         try { return FormatSystemGeometry(duct.CreateGeometry()); }
         catch (ArgumentException) { return "Invalid entered size"; }
     }
-    private string SafeFittingSize(SavedFitting fitting)
+    internal string SafeFittingSize(SavedFitting fitting)
     {
         try { return fitting.CreateGeometry() is DuctGeometry geometry ? FormatSystemGeometry(geometry) : "-"; }
         catch (ArgumentException) { return "Invalid entered size"; }

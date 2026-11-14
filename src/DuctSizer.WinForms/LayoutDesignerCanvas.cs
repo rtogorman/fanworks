@@ -891,13 +891,26 @@ internal sealed class LayoutDesignerCanvas : Panel
             : ViewMode == LayoutViewMode.IsometricNegative
                 ? new Point(axisOrigin.X + axisLength, axisOrigin.Y + axisLength / 2)
                 : new Point(axisOrigin.X - axisLength, axisOrigin.Y + axisLength / 2);
-        var zEnd = new Point(axisOrigin.X, axisOrigin.Y - axisLength);
         graphics.DrawLine(xPen, axisOrigin, xEnd);
         graphics.DrawLine(yPen, axisOrigin, yEnd);
-        graphics.DrawLine(zPen, axisOrigin, zEnd);
         using var axisFont = new Font("Segoe UI Semibold", 8F);
         graphics.DrawString("X", axisFont, Brushes.Firebrick, xEnd.X + 2, xEnd.Y - 5);
         graphics.DrawString("Y", axisFont, Brushes.SeaGreen, yEnd.X - 5, yEnd.Y + 2);
+        if (ViewMode == LayoutViewMode.TopDown)
+        {
+            // Looking straight down, Z (elevation) points out of the page toward the viewer: drawn as the usual
+            // "out of the page" symbol, a dot in a circle at the origin (round Y), not as a line up the screen.
+            using var zRing = new Pen(Color.FromArgb(14, 111, 230), 1.6F);
+            using var zDot = new SolidBrush(Color.FromArgb(14, 111, 230));
+            const float ring = 5.5F;
+            graphics.FillEllipse(Brushes.White, axisOrigin.X - ring, axisOrigin.Y - ring, ring * 2, ring * 2);
+            graphics.DrawEllipse(zRing, axisOrigin.X - ring, axisOrigin.Y - ring, ring * 2, ring * 2);
+            graphics.FillEllipse(zDot, axisOrigin.X - 1.8F, axisOrigin.Y - 1.8F, 3.6F, 3.6F);
+            graphics.DrawString("Z", axisFont, Brushes.SteelBlue, axisOrigin.X - ring - 12, axisOrigin.Y - ring - 12);
+            return;
+        }
+        var zEnd = new Point(axisOrigin.X, axisOrigin.Y - axisLength);
+        graphics.DrawLine(zPen, axisOrigin, zEnd);
         graphics.DrawString("Z", axisFont, Brushes.SteelBlue, axisOrigin.X + 3, axisOrigin.Y - axisLength - 12);
     }
 

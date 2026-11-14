@@ -406,7 +406,7 @@ internal sealed class SelectionInspector : Panel
                 item = null;
                 itemKey = $"C:{selectedConnection.Downstream.Sequence}:{(selectedConnection.Secondary ? 1 : 0)}";
                 notesKey = string.Empty;
-                missingMessage = "This connection has no sized duct yet. Use Edit Inputs to size it, or Auto Size to size all ductwork. "
+                missingMessage = "This connection has no sized duct yet. Use Edit Inputs to size it, or Auto Size Ductwork to size all ductwork. "
                                  + "Until it is sized, the system total is not available.";
             }
             else
@@ -528,6 +528,10 @@ internal sealed class SelectionInspector : Panel
                 AddReferenceImage(detailSection, item, definition);
         }
 
+        // Size lock (round Y): Auto Size Ductwork keeps a locked item's size.
+        if (item is not null && _record is null && _host.LayoutScreen.SizeLockKey(_node, _connection) is string lockKey)
+            AddSizeLock(stack, lockKey);
+
         // Inputs: the editable ones as their own controls, the fixed ones as plain values.
         var inputs = AddSection(stack, "InspectorInputsSection", "Inputs");
         _inputsSection = inputs;
@@ -542,6 +546,48 @@ internal sealed class SelectionInspector : Panel
         }
         _descriptionPage.Controls.Add(stack);
         _descriptionPage.ResumeLayout();
+    }
+
+    private CheckBox? _sizeLockCheck;
+
+    private void AddSizeLock(InspectorStack stack, string lockKey)
+    {
+        var section = AddSection(stack, "InspectorSizeLockSection", "Auto Size");
+        var locked = _host.LayoutScreen.IsSizeLocked(lockKey);
+        var check = new CheckBox
+        {
+            Name = "InspectorSizeLockCheck",
+            Text = "Lock current size",
+            Checked = locked,
+            AutoSize = false,
+            Height = DpiScaling.Scale(26),
+            Margin = DpiScaling.Scale(new Padding(6, 0, 0, 0)),
+            Font = new Font("Segoe UI Semibold", 9F),
+            ForeColor = RibbonPalette.Ink,
+            Cursor = Cursors.Hand
+        };
+        _toolTips.SetToolTip(check,
+            "When locked, Auto Size Ductwork leaves this item's size and geometry as they are. Its airflow is still recalculated from the sources.");
+        check.Enabled = !_sessionDirty;
+        check.CheckedChanged += (_, _) =>
+        {
+            var value = check.Checked;
+            // Applied after this event (applying rebuilds the panel, which replaces this check box), keeping the item
+            // shown and selected, as an inspector edit does.
+            BeginInvoke(() => RunSessionAction(() => _host.LayoutScreen.ApplySizeLocks(new Dictionary<string, bool> { [lockKey] = value })));
+        };
+        _sizeLockCheck = check;
+        section.Controls.Add(check);
+        section.Controls.Add(new WrappingLabel
+        {
+            Name = "InspectorSizeLockHint",
+            Text = locked
+                ? "Locked: Auto Size Ductwork keeps this size. The airflow still follows the sources."
+                : "Auto Size Ductwork re-sizes this item from the Auto Sizing Criteria.",
+            ForeColor = RibbonPalette.Caption,
+            Font = new Font("Segoe UI", 8.5F),
+            Margin = DpiScaling.Scale(new Padding(6, 0, 0, 2))
+        });
     }
 
     /// <summary>(Re)builds the Inputs section from the edit session and the item's fixed inputs.</summary>
@@ -761,6 +807,8 @@ internal sealed class SelectionInspector : Panel
             _dirtyHint.Visible = true;
         if (_cancelButton is not null && !_cancelButton.IsDisposed)
             _cancelButton.Enabled = true;
+        if (_sizeLockCheck is { IsDisposed: false })
+            _sizeLockCheck.Enabled = false; // apply or cancel the input changes first (locking rebuilds the panel)
     }
 
     /// <summary>Update: the editors' checks, then the same apply step as the editor windows.</summary>

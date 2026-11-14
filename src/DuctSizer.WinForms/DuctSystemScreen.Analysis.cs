@@ -43,6 +43,8 @@ internal sealed partial class DuctSystemScreen
     private readonly SystemSummaryDonut _analysisDonut = new();
     private readonly DataGridView _analysisTopLossGrid = new();
     private readonly PressureProfileChart _analysisProfileChart = new();
+    private readonly NetPathPressureView _analysisNetPathView = new("AnalysisNetPath",
+        "Static, total and velocity pressure along each path (gauge). Click a point to select that component in the table.");
     private readonly Label _analysisProfileSubtitle = new() { Name = "AnalysisProfileSubtitle" };
     private readonly Label _analysisProfileComparison = new() { Name = "AnalysisProfileComparison" };
     private readonly ComboBox _analysisPathSelector = new() { Name = "AnalysisProfilePathSelector", DropDownStyle = ComboBoxStyle.DropDownList };
@@ -799,6 +801,7 @@ internal sealed partial class DuctSystemScreen
 
     private void RefreshPressureProfile()
     {
+        _analysisNetPathView.RefreshFrom(_ductSystem, _host._currentUnits == UnitSystem.Imperial);
         var profile = BuildPressureProfile();
         var previous = _analysisPathSelector.SelectedIndex > 0 ? Convert.ToString(_analysisPathSelector.SelectedItem) : null;
         _analysisProfileChart.Profile = profile;
@@ -1109,8 +1112,64 @@ internal sealed partial class DuctSystemScreen
                                  + $"From the start: {line.Values[picked.Index].ToString(format, CultureInfo.CurrentCulture)} {unit}";
     }
 
-    /// <summary>Rings the item on the path graph (when it lies on a path shown).</summary>
-    private void HighlightOnPathGraph(string? itemId) => _analysisProfileChart.HighlightItemId = itemId;
+    /// <summary>Rings the item on the path graphs (when it lies on a path shown).</summary>
+    private void HighlightOnPathGraph(string? itemId)
+    {
+        _analysisProfileChart.HighlightItemId = itemId;
+        _analysisNetPathView.HighlightItemId = itemId;
+    }
+
+    /// <summary>Rings the item selected on the drawing on the Analysis tab's net path pressure graph.</summary>
+    internal void HighlightOnNetPathGraph(string? itemId) => _analysisNetPathView.HighlightItemId = itemId;
+
+    /// <summary>
+    /// The Analysis tab's net path pressure card (round Y): the same graph as the Project tab's Net Path Static Pressure
+    /// panel, kept separate from the pressure-drop graph. A point clicked selects that item's row in the table below.
+    /// </summary>
+    private Control BuildNetPathPressureCard()
+    {
+        var card = new RoundedPanel
+        {
+            Name = "AnalysisNetPathCard",
+            Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            CornerRadius = 10,
+            BorderColor = UiPalette.CardBorder,
+            Padding = new Padding(14, 8, 14, 8),
+            Margin = new Padding(0, 10, 0, 0)
+        };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.White };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.Controls.Add(new Label
+        {
+            Text = "Net path pressure",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI Semibold", 10F),
+            ForeColor = Color.FromArgb(11, 31, 59),
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
+        layout.Controls.Add(new Label
+        {
+            Name = "AnalysisNetPathSubtitle",
+            Text = "Static and total pressure (gauge, from 0 at the source) and velocity pressure along each path",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 8.5F),
+            ForeColor = Color.FromArgb(74, 91, 106),
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
+        }, 0, 1);
+        _analysisNetPathView.Margin = Padding.Empty;
+        _analysisNetPathView.ItemClicked += id =>
+        {
+            SelectSystemGridRow(id);
+            HighlightOnPathGraph(id);
+        };
+        layout.Controls.Add(_analysisNetPathView, 0, 2);
+        card.Controls.Add(layout);
+        return card;
+    }
 
     /// <summary>Selects the item's row in the full system table and scrolls it into view.</summary>
     private void SelectSystemGridRow(string itemId)

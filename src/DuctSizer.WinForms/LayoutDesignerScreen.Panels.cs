@@ -21,16 +21,9 @@ internal sealed record ProjectIssue(string Severity, string Source, string ItemI
 internal sealed partial class LayoutDesignerScreen
 {
     private readonly DataGridView _layoutErrorsGrid = new();
-    private readonly Panel _netStaticPanel = new() { Name = "LayoutNetStaticPanel", Dock = DockStyle.Fill, BackColor = Color.White };
-    private readonly NetStaticPressureChart _netStaticChart = new() { Dock = DockStyle.Fill };
-    private readonly ComboBox _netStaticPathCombo = new()
-    {
-        Name = "NetStaticPathCombo",
-        DropDownStyle = ComboBoxStyle.DropDownList,
-        Width = 300,
-        Anchor = AnchorStyles.Top | AnchorStyles.Right
-    };
-    private bool _fillingNetStaticCombo;
+    private readonly NetPathPressureView _netStaticPanel = new("NetStatic",
+        "Static, total and velocity pressure along each path (gauge). Click a point to select that component.")
+    { Name = "LayoutNetStaticPanel" };
     private readonly Dictionary<string, InspectorStyleTab> _bottomTabs = new();
     private readonly Panel _bottomContent = new() { Name = "LayoutBottomContent", Dock = DockStyle.Fill, BackColor = Color.White };
     private string _activeBottomTab = "Overview";
@@ -182,7 +175,7 @@ internal sealed partial class LayoutDesignerScreen
                 issues.Add(new ProjectIssue("Warning", "Layout geometry", issue.ItemId, issue.Message));
             foreach (var node in document.LayoutNodes.Where(node => !node.IsDefined && node.Type != LayoutNodeType.Duct))
                 issues.Add(new ProjectIssue("Error", "Definition", node.Id,
-                    "This component is not defined yet. Double-click it, use Edit Inputs, or run Auto Size."));
+                    "This component is not defined yet. Double-click it, use Edit Inputs, or run Auto Size Ductwork."));
             // Airflows that do not add up (round X): a junction accepted out of balance, or outlets whose airflows
             // were entered by hand and no longer add up to the inlet.
             foreach (var node in document.LayoutNodes)
@@ -200,17 +193,19 @@ internal sealed partial class LayoutDesignerScreen
                 issues.Add(new ProjectIssue("Warning", "Expected range", itemId, message));
             foreach (var fitting in SystemMembership.Fittings(document))
             {
-                if (fitting.ReferenceSizeManual && LayoutTopology.LinkedFitting(document, document.LayoutNodes
-                        .First(node => node.LinkedFittingSequence == fitting.Sequence)) is not null)
+                var fittingNode = document.LayoutNodes.FirstOrDefault(node => node.LinkedFittingSequence == fitting.Sequence);
+                if (fittingNode is not null && SystemSolver.TakesConnectedDuctSize(fitting)
+                    && (fitting.ReferenceSizeManual || fittingNode.SizeLocked))
                 {
-                    var node = document.LayoutNodes.First(item => item.LinkedFittingSequence == fitting.Sequence);
+                    var node = fittingNode;
                     var inlet = LayoutTopology.DuctForConnection(document, node, false);
                     if (inlet is not null && (inlet.Shape != fitting.Shape
                                               || Math.Abs(inlet.DiameterM - fitting.DiameterM) > 1e-4
                                               || Math.Abs(inlet.WidthM - fitting.WidthM) > 1e-4
                                               || Math.Abs(inlet.HeightM - fitting.HeightM) > 1e-4))
-                        issues.Add(new ProjectIssue("Warning", "Reference size", fitting.Id,
-                            $"The size entered for this fitting differs from the duct it is drawn on ({inlet.Id}). Its velocity and loss use the entered size: add a transition, or tick \"Use the connected duct's size\"."));
+                        issues.Add(new ProjectIssue("Warning", "Reference size", fitting.Id, node.SizeLocked && !fitting.ReferenceSizeManual
+                            ? $"This fitting's size is locked and differs from the duct it is drawn on ({inlet.Id}). Its velocity and loss use the locked size: add a transition, or unlock it and run Auto Size Ductwork."
+                            : $"The size entered for this fitting differs from the duct it is drawn on ({inlet.Id}). Its velocity and loss use the entered size: add a transition, or tick \"Use the connected duct's size\"."));
                 }
             }
         }
@@ -293,93 +288,44 @@ internal sealed partial class LayoutDesignerScreen
 
     private void BuildNetStaticPanel()
     {
-        var header = new TableLayoutPanel
-        {
-            Name = "NetStaticHeader",
-            Dock = DockStyle.Top,
-            Height = 34,
-            ColumnCount = 3,
-            RowCount = 1,
-            BackColor = Color.White,
-            Padding = new Padding(10, 4, 10, 0)
-        };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.Controls.Add(new Label
-        {
-            Name = "NetStaticCaption",
-            Text = "Static pressure along each path (gauge): total pressure less velocity pressure",
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(74, 91, 106),
-            AutoEllipsis = true
-        }, 0, 0);
-        header.Controls.Add(new Label
-        {
-            Text = "Show",
-            AutoSize = true,
-            Anchor = AnchorStyles.Right,
-            ForeColor = Color.FromArgb(74, 91, 106),
-            Margin = new Padding(8, 7, 4, 0)
-        }, 1, 0);
-        _netStaticPathCombo.Margin = new Padding(0, 3, 0, 0);
-        _netStaticPathCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (_fillingNetStaticCombo)
-                return;
-            _netStaticChart.SelectedPath = _netStaticPathCombo.SelectedIndex <= 0 ? null : _netStaticPathCombo.SelectedIndex - 1;
-        };
-        header.Controls.Add(_netStaticPathCombo, 2, 0);
-        _netStaticPanel.Controls.Add(_netStaticChart);
-        _netStaticPanel.Controls.Add(header);
-        DialogStyle.AttachFieldInputs(header);
+        // A point clicked on the graph selects that component on the drawing (and in the System Overview).
+        _netStaticPanel.ItemClicked += id => SelectLayoutItemById(id);
     }
 
     /// <summary>
-    /// Rebuilds the Net path static pressure graph (round X): gauge static pressure along every path from
-    /// <see cref="PathPressureProfiles"/>, and the Show list (All paths, or one path drawn in blue). The pick is kept
-    /// when the same path still exists.
+    /// Rebuilds the Net Path Static Pressure graph (round X; static, total and velocity lines in round Y) from
+    /// <see cref="PathPressureProfiles"/>, keeping the picked path, and rings the selected component.
     /// </summary>
     private void RefreshValidationList()
     {
+        _netStaticPanel.RefreshFrom(_host.DuctSystemScreen._ductSystem, _host._currentUnits == UnitSystem.Imperial);
+        _netStaticPanel.HighlightItemId = SelectedLayoutItemId();
+    }
+
+    /// <summary>The connection selected on the drawing (the canvas reports it as an event), for the path graphs.</summary>
+    private LayoutConnectionRef? _selectedGraphConnection;
+
+    /// <summary>Rings the item selected on the drawing on the net path pressure graphs (Project and Analysis tabs).</summary>
+    private void HighlightSelectionOnPressureGraphs()
+    {
+        var id = SelectedLayoutItemId();
+        _netStaticPanel.HighlightItemId = id;
+        _host.DuctSystemScreen.HighlightOnNetPathGraph(id);
+    }
+
+    /// <summary>The ID of the item selected on the drawing (as the path graphs name it), or null.</summary>
+    internal string? SelectedLayoutItemId()
+    {
+        if (_layoutCanvas is null)
+            return null;
         var document = _host.DuctSystemScreen._ductSystem;
-        IReadOnlyList<PathPressureProfile> paths;
-        try
-        {
-            paths = document.LayoutNodes.Count == 0 ? Array.Empty<PathPressureProfile>() : PathPressureProfiles.Build(document);
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException or KeyNotFoundException)
-        {
-            DiagnosticLog.Error("Net path static pressure could not be built.", ex);
-            paths = Array.Empty<PathPressureProfile>();
-        }
-        var previousRoute = _netStaticChart.SelectedPath is int previous && previous < _netStaticChart.Paths.Count
-            ? _netStaticChart.Paths[previous].Path.Route
-            : null;
-        _netStaticChart.SetPaths(paths, _host._currentUnits == UnitSystem.Imperial);
-        _netStaticChart.EmptyMessage = document.LayoutNodes.Count == 0
-            ? "Draw and connect the system to see the static pressure along each path."
-            : "Connect the system components to see the static pressure along each path.";
-        _fillingNetStaticCombo = true;
-        try
-        {
-            _netStaticPathCombo.BeginUpdate();
-            _netStaticPathCombo.Items.Clear();
-            _netStaticPathCombo.Items.Add(_netStaticChart.Paths.Count == 1 ? "All paths (1)" : $"All paths ({_netStaticChart.Paths.Count})");
-            foreach (var profile in _netStaticChart.Paths)
-                _netStaticPathCombo.Items.Add($"{profile.Path.Name}{(profile.Path.IsCritical ? " (critical)" : string.Empty)}: {profile.Path.Route}"
-                                              + (profile.IsComplete ? string.Empty : " (incomplete)"));
-            _netStaticPathCombo.EndUpdate();
-            var keep = previousRoute is null ? -1 : _netStaticChart.Paths.ToList().FindIndex(x => x.Path.Route == previousRoute);
-            _netStaticPathCombo.SelectedIndex = keep >= 0 ? keep + 1 : 0;
-            _netStaticChart.SelectedPath = keep >= 0 ? keep : null;
-            MainForm.ResizeComboDropDown(_netStaticPathCombo);
-        }
-        finally
-        {
-            _fillingNetStaticCombo = false;
-        }
+        if (_selectedGraphConnection is LayoutConnectionRef connection)
+            return DuctForConnection(connection.Downstream, connection.Secondary)?.Id;
+        if (_layoutCanvas.SelectedNode is SavedLayoutNode node)
+            return LayoutTopology.LinkedFitting(document, node)?.Id
+                   ?? (node.LinkedDuctSequence is int sequence ? document.Ducts.FirstOrDefault(x => x.Sequence == sequence)?.Id : null)
+                   ?? node.Id;
+        return null;
     }
 
     private void SelectFromListGrid(DataGridView grid)

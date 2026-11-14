@@ -313,6 +313,23 @@ public static class SystemSolver
         fitting.TemperatureC = node.TemperatureC;
     }
 
+    /// <summary>
+    /// True for the in-line fittings that take the size of the duct they are drawn on (elbows, dampers, transitions,
+    /// entries and exits; see <see cref="SyncReferenceSize"/>), unless their size is entered or locked.
+    /// </summary>
+    public static bool TakesConnectedDuctSize(SavedFitting fitting)
+    {
+        ArgumentNullException.ThrowIfNull(fitting);
+        var definition = FittingCatalog.All.FirstOrDefault(x =>
+            string.Equals(x.Code, fitting.FittingCode, StringComparison.OrdinalIgnoreCase));
+        if (definition is null || definition.IsJunction)
+            return false;
+        var group = FittingCatalog.SelectionGroup(definition);
+        return group is "Elbows" or "Dampers" or "Transitions"
+               || string.Equals(definition.Category, "Entries", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(definition.Category, "Exits", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>The ASHRAE transitions whose "area" input is Ao/A1 with section o upstream (round, rectangular, pyramidal).</summary>
     private static readonly HashSet<string> AreaRatioTransitions = new(StringComparer.OrdinalIgnoreCase) { "4-1", "4-2", "4-3", "4-4" };
 
@@ -322,7 +339,8 @@ public static class SystemSolver
     /// exits take the upstream duct (their ASHRAE reference section); entries take the downstream duct. A transition
     /// also takes its area ratio Ao/A1 from the upstream (o) and downstream (1) ducts: the ASHRAE 4-1 to 4-4 tables are
     /// referred to the upstream section (Ao/A1 = 10 is a contraction, C ≈ 43 at 180°, i.e. about 0.5 Pv1). Junctions are
-    /// sized by <see cref="JunctionLegBuilder"/>; air terminals, VAV boxes and fan fittings keep their selected size.
+    /// sized by <see cref="JunctionLegBuilder"/>; air terminals, VAV boxes and fan fittings keep their selected size. A
+    /// component whose size is locked (<see cref="SavedLayoutNode.SizeLocked"/>) keeps its stored size.
     /// </summary>
     public static void SyncReferenceSize(DuctSystemDocument document, SavedLayoutNode node, SavedFitting fitting)
     {
@@ -330,17 +348,15 @@ public static class SystemSolver
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(fitting);
         fitting.ReferenceSizeSource = null;
-        if (fitting.ReferenceSizeManual)
+        // A size entered by hand, or a component locked against Auto Size (round Y), keeps its own size.
+        if (fitting.ReferenceSizeManual || node.SizeLocked)
             return;
-        var definition = FittingCatalog.All.FirstOrDefault(x =>
+        if (!TakesConnectedDuctSize(fitting))
+            return;
+        var definition = FittingCatalog.All.First(x =>
             string.Equals(x.Code, fitting.FittingCode, StringComparison.OrdinalIgnoreCase));
-        if (definition is null || definition.IsJunction)
-            return;
         var group = FittingCatalog.SelectionGroup(definition);
         var entry = string.Equals(definition.Category, "Entries", StringComparison.OrdinalIgnoreCase);
-        var exit = string.Equals(definition.Category, "Exits", StringComparison.OrdinalIgnoreCase);
-        if (!(group is "Elbows" or "Dampers" or "Transitions") && !entry && !exit)
-            return;
         var upstream = LayoutTopology.DuctForConnection(document, node, false);
         var downstream = LayoutTopology.ConnectionsFrom(document, node)
             .Select(x => LayoutTopology.DuctForConnection(document, x.Downstream, x.Secondary))

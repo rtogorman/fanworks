@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-13 (round X, v0.105.1); round W v0.104.0; round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
+Last updated: 2026-11-13 (round Y, v0.106.0); round X v0.105.1; round W v0.104.0; round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
 
 ## Where things live
 
@@ -635,3 +635,26 @@ in. w.c., default 0) added to the coil drop; the "VAV basis" warning is removed.
 acceptable when no terminal drop is entered; fan curve/AMCA basis, pressure-class envelope, operating leakage, QA
 summary page and route ledger are not to be built; "leakage allowance" wording kept.
 Checks: engine 92/92, interface 24/24 (Wine, 100 %).
+
+### Round Y (requested 2026-11-13 17:54, after v0.105.1) — v0.106.0
+
+| Request | Done |
+|---|---|
+| Remove Reverse Flow Direction | Button gone from the duct popup and inspector; flags ignored and cleared on load (schema 22). Solver never used them. |
+| Net path graph lines | Picked path: Static pressure (solid blue), Total pressure (dashed), Velocity pressure (green); legend has no path name |
+| Show/hide check boxes | Static / Total / Velocity (`NetPathPressureView`) |
+| Graph ↔ grid selection | Click a point → selects on drawing, System Overview, inspector; drawing/table selection ringed on the graph |
+| System Overview right-click | Edit (inspector, or calculator for an undrawn record) / Remove (undoable delete; undrawn record removed after confirmation) |
+| Ribbon labels | Calculate Critical Path; Auto Size Ductwork |
+| Analysis tab graph | Separate "Net path pressure" card under the pressure-drop graph, linked to the table |
+| Auto Size from sources | Flow-ordered passes; all ducts re-sized from solved connection airflow (bug fixed: branch ducts were sized for the splitter's whole airflow); following fittings drop entered sizes; GRDs re-selected at new airflow |
+| Size locks | Inspector "Lock current size"; Component Lock Editor beside Source / Sink Editor (all items, Lock All / Unlock All) |
+| Top-view Z axis | Dot in a circle at the origin (screen and report) |
+
+Decisions taken (tell Ryan): Auto Size keeps a defined fitting's type and inputs (only its size follows the duct);
+changed component defaults in the criteria apply to undefined components. Coils, filters, VAV boxes and custom
+components keep entered data. Junction legs are the connected ducts, so locking a junction does not freeze its legs —
+lock the ducts. Fans are not lockable (Calculate Critical Path sizes the fan). The inspector lock box is disabled while
+input changes are unapplied (locking rebuilds the panel).
+Checks: engine 95/95 (new `SizeLockTests`: flow order hand-ordered; locked elbow keeps 10 in when its duct goes to 12 in
+and still carries 800 cfm; format 22 round-trip and format-21 upgrade), interface 24/24 at 100 %, 150 % and 1080p (Wine).

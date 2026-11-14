@@ -131,11 +131,11 @@ internal sealed class MainRibbon
 
         var autoSize = AddGroup(page, "RibbonAutoSizeGroup", "Auto Size");
         AddButton(autoSize, "RibbonSizingCriteriaButton", "Auto Sizing\nCriteria", RibbonIcon.SizingCriteria,
-            "Duct size rounding, calculation method and the defaults Auto Size uses for ducts and components.",
+            "Duct size rounding, calculation method and the defaults Auto Size Ductwork uses for ducts and components.",
             () => SystemScreen.EditAutomaticSizingInputs(), 68);
-        AddButton(autoSize, "RibbonAutoSizeButton", "Auto Size", RibbonIcon.AutoSize,
-            "Size every undefined component from the Auto Sizing Criteria, then re-size all connected ductwork from the current airflows.",
-            () => Layout.AutoSizeLayout(), 54);
+        AddButton(autoSize, "RibbonAutoSizeButton", "Auto Size\nDuctwork", RibbonIcon.AutoSize,
+            "Re-size all ductwork and fittings from the sources to the sinks with the Auto Sizing Criteria. Locked items keep their size.",
+            () => Layout.AutoSizeLayout(), 62);
 
         var edit = AddGroup(page, "RibbonEditGroup", "Edit");
         _selectButton = AddButton(edit, "RibbonSelectButton", "Select", RibbonIcon.Select,
@@ -186,9 +186,9 @@ internal sealed class MainRibbon
         });
 
         var calculate = AddGroup(page, "RibbonCalculateGroup", "Calculate");
-        AddButton(calculate, "RibbonCalculateButton", "Calculate", RibbonIcon.Calculate,
-            "Calculate the system: size the fan to the critical path and highlight the critical path.",
-            () => SystemScreen.CalculateSystem(), 54);
+        AddButton(calculate, "RibbonCalculateButton", "Calculate\nCritical Path", RibbonIcon.Calculate,
+            "Calculate the system: find the critical path, size the fan to it and highlight it.",
+            () => SystemScreen.CalculateSystem(), 72);
         _highlightButton = AddButton(calculate, "RibbonHighlightCriticalPathButton", "Highlight\nCritical Path",
             RibbonIcon.CriticalPath, "Highlight or unhighlight the critical path on the drawing.",
             () => Layout.ToggleLayoutCriticalPathHighlight(), 76);

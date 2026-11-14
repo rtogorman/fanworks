@@ -190,7 +190,6 @@ internal sealed partial class LayoutDesignerScreen
         {
             CaptureHistory = CaptureLayoutHistoryState
         };
-        session.Actions.Add(("InspectorReverseFlowButton", "Reverse Flow Direction", () => ReverseConnectionFlow(connection)));
         return session;
     }
 }

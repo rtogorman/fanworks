@@ -28,6 +28,12 @@ public sealed class SavedDuct
     public double DeltaZM { get; set; }
     public bool RequiresResizing { get; set; }
 
+    /// <summary>
+    /// When true, Auto Size Ductwork keeps this duct's shape and size (round Y). Its airflow, velocity and pressure
+    /// loss are still recalculated from the system's sources, like any other duct.
+    /// </summary>
+    public bool SizeLocked { get; set; }
+
     [JsonIgnore]
     public string Id => $"D-{Sequence:000}";
 
@@ -78,7 +84,7 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 21;
+    public const int CurrentSchemaVersion = 22;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -493,8 +499,19 @@ public sealed class SavedLayoutNode
     public int? LinkedFittingSequence { get; set; }
     public int? ConnectionDuctSequence { get; set; }
     public int? SecondaryConnectionDuctSequence { get; set; }
+    /// <summary>
+    /// No longer used (round Y): flow runs from each connection's upstream item to its downstream item, set by the
+    /// drawn sources and sinks. Kept so older files load; cleared when a file is loaded (schema 22).
+    /// </summary>
     public bool ConnectionFlowReversed { get; set; }
+    /// <summary>See <see cref="ConnectionFlowReversed"/>.</summary>
     public bool SecondaryConnectionFlowReversed { get; set; }
+    /// <summary>
+    /// When true, Auto Size Ductwork keeps this component's size and selection (round Y): a fitting keeps its
+    /// reference size even when the connected duct is re-sized, a GRD keeps its selection and pressure drop. Its
+    /// airflow is still recalculated from the system's sources.
+    /// </summary>
+    public bool SizeLocked { get; set; }
     public bool ConnectionAirflowUserSpecified { get; set; }
     public bool SecondaryConnectionAirflowUserSpecified { get; set; }
     public bool ConnectionAirflowOverride { get; set; }
@@ -960,6 +977,18 @@ public static class DuctSystemStore
         // which replaces default sizes that were never matched to the drawing (review P0-03, P1-05).
         if (document.SchemaVersion == 20)
             document.SchemaVersion = 21;
+        // Version 22: ducts and components can be locked against Auto Size (SizeLocked; false when absent). Flow
+        // direction can no longer be reversed by hand: it follows the drawn sources and sinks, so stored reversal
+        // flags are cleared (they only changed how a connection was labelled, never the calculation).
+        if (document.SchemaVersion == 21)
+        {
+            foreach (var node in document.LayoutNodes)
+            {
+                node.ConnectionFlowReversed = false;
+                node.SecondaryConnectionFlowReversed = false;
+            }
+            document.SchemaVersion = 22;
+        }
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."

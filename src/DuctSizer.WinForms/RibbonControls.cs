@@ -28,7 +28,7 @@ internal enum RibbonIcon
     NewProject, Open, Save, SaveAs, ProjectSettings, SizingCriteria, RoundSizes,
     Select, Move, AutoSize, Calculate, CriticalPath, PrintReport, DuctCalculator, FittingCalculator,
     Filter, Fan, Warning, Check, Undo, Redo, Delete, ZoomIn, ZoomOut, ZoomFit, PdfImport, Grid, Origin, SourceSink,
-    AnalysisSettings
+    AnalysisSettings, Lock
 }
 
 /// <summary>
@@ -326,6 +326,16 @@ internal static class RibbonIcons
                 graphics.DrawRectangle(pen, 14.5f, 7, 7, 10);
                 graphics.DrawLine(accentPen, 10, 12, 14, 12);
                 graphics.DrawLines(accentPen, new[] { new PointF(12.5f, 10.5f), new PointF(14, 12), new PointF(12.5f, 13.5f) });
+                break;
+            case RibbonIcon.Lock:
+                // A padlock: shackle over a filled body with a keyhole.
+                graphics.DrawArc(pen, 7.5f, 3, 9, 10, 180, 180);
+                graphics.DrawLine(pen, 7.5f, 8, 7.5f, 11);
+                graphics.DrawLine(pen, 16.5f, 8, 16.5f, 11);
+                graphics.FillRectangle(accentFill, 5, 11, 14, 10);
+                graphics.DrawRectangle(pen, 5, 11, 14, 10);
+                graphics.FillEllipse(solid, 10.6f, 14, 2.8f, 2.8f);
+                graphics.DrawLine(pen, 12, 16, 12, 18.5f);
                 break;
         }
         graphics.Restore(state);

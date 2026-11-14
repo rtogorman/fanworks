@@ -36,6 +36,7 @@ internal sealed partial class LayoutDesignerScreen
     private readonly Button _layoutDuctSizesButton = new();
     private readonly ToolbarIconButton _layoutCenterButton = new("LayoutCenterButton", RibbonIcon.ZoomFit, "Center view");
     private readonly ToolbarIconButton _layoutSourceSinkEditorButton = new("LayoutSourceSinkEditorButton", RibbonIcon.SourceSink, "Source/Sink Editor");
+    private readonly ToolbarIconButton _layoutLockEditorButton = new("LayoutComponentLockEditorButton", RibbonIcon.Lock, "Component Lock Editor");
     private readonly Button _layoutSizeUndefinedButton = new();
     private readonly Button _layoutRecalculateDuctworkButton = new();
     private readonly Button _layoutCriticalPathButton = new();
@@ -170,7 +171,10 @@ internal sealed partial class LayoutDesignerScreen
             if (node is not null)
                 _inspector?.ShowNode(node);
             _layoutDeleteButton.Enabled = node is not null;
+            if (node is not null)
+                _selectedGraphConnection = null;
             SyncLayoutSummarySelection(node);
+            HighlightSelectionOnPressureGraphs();
             if (node is not null)
                 _layoutStatusLabel.Text = $"Selected {node.Id}. Press Delete or use the Delete button to remove it.";
         };
@@ -180,6 +184,8 @@ internal sealed partial class LayoutDesignerScreen
                 _inspector?.ShowConnection(selectedConnection);
             else if (_layoutCanvas.SelectedNode is null)
                 _inspector?.ShowNothing();
+            _selectedGraphConnection = connection;
+            HighlightSelectionOnPressureGraphs();
             if (connection is LayoutConnectionRef selected)
             {
                 SyncLayoutSummarySelection(connection: selected);
@@ -471,6 +477,10 @@ internal sealed partial class LayoutDesignerScreen
         _layoutSourceSinkEditorButton.Caption = "Source / Sink Editor";
         _layoutSourceSinkEditorButton.Click += (_, _) => OpenSourceSinkEditor();
         toolbar.Controls.Add(_layoutSourceSinkEditorButton);
+        _layoutToolTips.SetToolTip(_layoutLockEditorButton, "Component Lock Editor: lock ducts and components so Auto Size Ductwork keeps their sizes");
+        _layoutLockEditorButton.Caption = "Component Lock Editor";
+        _layoutLockEditorButton.Click += (_, _) => OpenComponentLockEditor();
+        toolbar.Controls.Add(_layoutLockEditorButton);
 
         // These commands now live in the main ribbon. The buttons stay (unparented) so their state text keeps
         // working for existing code paths; the ribbon calls the same methods.
@@ -523,6 +533,7 @@ internal sealed partial class LayoutDesignerScreen
         _layoutSystemSummaryGrid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(20, 49, 69);
         _layoutSystemSummaryGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(247, 250, 252);
         _layoutSystemSummaryGrid.SelectionChanged += (_, _) => SelectLayoutItemFromSummary();
+        ConfigureSystemOverviewMenu();
         // The columns share the full width of the panel (each at least its minimum; narrower windows scroll).
         _layoutSystemSummaryGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _layoutSystemSummaryGrid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
@@ -539,6 +550,64 @@ internal sealed partial class LayoutDesignerScreen
             });
         }
         return _layoutSystemSummaryGrid;
+    }
+
+    /// <summary>
+    /// Right-click menu of the System Overview rows (round Y): Edit opens the item in the Selection Inspector (a record
+    /// that is not on the drawing opens in its calculator); Remove deletes the drawn item as one undoable step, or
+    /// removes a record that is not drawn (after a confirmation), as the Analysis table does.
+    /// </summary>
+    private void ConfigureSystemOverviewMenu()
+    {
+        var menu = new ContextMenuStrip { Name = "LayoutOverviewMenu", Font = new Font("Segoe UI", 9F), ShowImageMargin = false };
+        menu.Items.Add(new ToolStripMenuItem("Edit", null, (_, _) => EditSystemOverviewRow()) { Name = "LayoutOverviewMenuEdit" });
+        menu.Items.Add(new ToolStripMenuItem("Remove", null, (_, _) => RemoveSystemOverviewRow()) { Name = "LayoutOverviewMenuRemove" });
+        menu.Opening += (_, args) => args.Cancel = _layoutSystemSummaryGrid.SelectedRows.Count == 0;
+        _layoutSystemSummaryGrid.ContextMenuStrip = menu;
+        _layoutSystemSummaryGrid.CellMouseDown += (_, args) =>
+        {
+            if (args.Button != MouseButtons.Right || args.RowIndex < 0)
+                return;
+            _layoutSystemSummaryGrid.ClearSelection();
+            _layoutSystemSummaryGrid.Rows[args.RowIndex].Selected = true;
+            if (args.ColumnIndex >= 0)
+                _layoutSystemSummaryGrid.CurrentCell = _layoutSystemSummaryGrid.Rows[args.RowIndex].Cells[args.ColumnIndex];
+        };
+    }
+
+    /// <summary>True when the selected System Overview row is drawn (a component or a duct on a drawn connection).</summary>
+    private bool SystemOverviewRowIsDrawn(object? tag)
+    {
+        if (tag is DuctSystemScreen.SystemRowTag { IsFitting: false } ductTag
+            && _host.DuctSystemScreen._ductSystem.LayoutNodes.Any(x =>
+                x.ConnectionDuctSequence == ductTag.Sequence || x.SecondaryConnectionDuctSequence == ductTag.Sequence))
+            return true;
+        return LayoutNodeForSystemTag(tag) is not null;
+    }
+
+    internal void EditSystemOverviewRow()
+    {
+        if (_layoutSystemSummaryGrid.SelectedRows.Count == 0)
+            return;
+        var tag = _layoutSystemSummaryGrid.SelectedRows[0].Tag;
+        SelectLayoutItemFromSummary();
+        if (SystemOverviewRowIsDrawn(tag))
+            EditSelectedItemInInspector();
+        else if (tag is DuctSystemScreen.SystemRowTag record)
+            _host.DuctSystemScreen.EditSystemRecord(record.IsFitting, record.Sequence);
+    }
+
+    internal void RemoveSystemOverviewRow()
+    {
+        if (_layoutSystemSummaryGrid.SelectedRows.Count == 0)
+            return;
+        var row = _layoutSystemSummaryGrid.SelectedRows[0];
+        var tag = row.Tag;
+        SelectLayoutItemFromSummary();
+        if (SystemOverviewRowIsDrawn(tag))
+            DeleteSelectedItemImmediately();
+        else if (Convert.ToString(row.Cells["Id"].Value, System.Globalization.CultureInfo.CurrentCulture) is { Length: > 0 } id)
+            _host.DuctSystemScreen.RemoveSystemRecord(id);
     }
 
     /// <summary>
@@ -2309,11 +2378,6 @@ internal sealed partial class LayoutDesignerScreen
                 downstream.AirSystemType, linkedDuct is not null);
             if (connectionDialog.ShowDialog(_host) != DialogResult.OK)
                 return;
-            if (connectionDialog.ReverseRequested)
-            {
-                ReverseConnectionFlow(connection);
-                return;
-            }
             ApplyConnectionAirSystem(connection, connectionDialog.SelectedAirSystemType);
             _host.DuctSystemScreen.SaveDuctSystem();
             _host.DuctSystemScreen.RefreshDuctSystemGrid();
@@ -2324,27 +2388,6 @@ internal sealed partial class LayoutDesignerScreen
         if (editor.ShowDialog(_host) != DialogResult.OK || editor.Result is not SavedDuct edited)
             return;
         ApplyConnectionDuctEdit(connection, edited, historyState);
-    }
-
-    /// <summary>Reverses the flow direction of a drawn connection (an undoable edit).</summary>
-    internal void ReverseConnectionFlow(LayoutConnectionRef connection)
-    {
-        var downstream = connection.Downstream;
-        var parentId = connection.Secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
-        var reverseFlowHistoryState = CaptureLayoutHistoryState();
-        if (connection.Secondary)
-            downstream.SecondaryConnectionFlowReversed = !downstream.SecondaryConnectionFlowReversed;
-        else
-            downstream.ConnectionFlowReversed = !downstream.ConnectionFlowReversed;
-        CommitLayoutHistoryState(reverseFlowHistoryState);
-        _host.DuctSystemScreen.SaveDuctSystem();
-        _host.DuctSystemScreen.RefreshDuctSystemGrid();
-        RefreshLayoutDesigner();
-        var direction = LayoutConnectionFlowReversed(connection)
-            ? $"{downstream.Id} to {parentId}"
-            : $"{parentId} to {downstream.Id}";
-        _layoutStatusLabel.Text = $"Flow direction changed to {direction}.";
-        _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
     }
 
     /// <summary>Sets the air system of a connection and of its saved duct.</summary>
@@ -3393,9 +3436,12 @@ internal sealed partial class LayoutDesignerScreen
         return next;
     }
 
-    internal static bool LayoutConnectionFlowReversed(LayoutConnectionRef connection) => connection.Secondary
-        ? connection.Downstream.SecondaryConnectionFlowReversed
-        : connection.Downstream.ConnectionFlowReversed;
+    /// <summary>
+    /// Flow in a drawn connection always runs from the upstream (parent) item to the downstream item, as the system
+    /// is solved from its sources to its sinks; it cannot be reversed by hand (round Y). Older files that stored a
+    /// reversed flag are cleared on load (schema 22).
+    /// </summary>
+    internal static bool LayoutConnectionFlowReversed(LayoutConnectionRef connection) => false;
 
     /// <summary>Result of the last system calculation (inlet static pressure of each node).</summary>
     private SystemSolution _systemSolution = SystemSolution.Empty;
@@ -3905,28 +3951,49 @@ internal sealed partial class LayoutDesignerScreen
     }
 
     /// <summary>
-    /// Ribbon "Auto Size": the former "Size Undefined Components" followed by "Recalculate All Ductwork", as one
-    /// undo step. Undefined supported components are sized from the Sizing Criteria, then every connected duct is
-    /// re-sized from the current airflows. Items that cannot be sized are listed; nothing is assumed for them.
+    /// Ribbon "Auto Size Ductwork" (round Y): re-sizes the whole system from the Auto Sizing Criteria, as one undo step.
+    /// <list type="number">
+    /// <item>The system is solved, so every connection carries the airflow delivered from the sources.</item>
+    /// <item>Undefined components that can be sized automatically get the criteria's defaults, in flow order (from the
+    /// sources to the sinks).</item>
+    /// <item>Every duct is re-sized from its airflow with the duct criteria (method, target friction or velocity,
+    /// rounding), in flow order.</item>
+    /// <item>Defined components follow: elbows, dampers, transitions, entries and exits take the size of the duct they
+    /// are drawn on (a size entered by hand is replaced); GRDs are re-selected at their new airflow with their own
+    /// type and size. Junction legs are the connected ducts. Coils, filters, VAV boxes and custom components keep their
+    /// entered data.</item>
+    /// </list>
+    /// A duct or component whose size is locked (<see cref="SavedDuct.SizeLocked"/>, <see cref="SavedLayoutNode.SizeLocked"/>)
+    /// is left exactly as it is; only its airflow changes, as for every item when the system is solved. Items that
+    /// cannot be sized are listed; nothing is assumed for them.
     /// </summary>
     internal void AutoSizeLayout()
     {
+        var document = _host.DuctSystemScreen._ductSystem;
         var historyState = CaptureLayoutHistoryState();
         var componentCount = 0;
         var ductCount = 0;
+        var lockedCount = 0;
         var failures = new List<string>();
         UpdateCalculatedLayoutValues();
+        var order = LayoutTopology.FlowOrder(document);
+        var newlySized = new HashSet<int>();
 
-        foreach (var node in _host.DuctSystemScreen._ductSystem.LayoutNodes
-                     .Where(x => !x.IsDefined && IsAutomaticSizingComponent(x))
-                     .OrderBy(x => x.Sequence).ToArray())
+        foreach (var node in order.Where(x => !x.IsDefined && IsAutomaticSizingComponent(x)))
         {
+            if (node.SizeLocked)
+            {
+                lockedCount++;
+                failures.Add($"{node.Id}: locked, but not defined yet. Unlock it or enter its inputs.");
+                continue;
+            }
             try
             {
                 if (node.Type == LayoutNodeType.Fitting)
                     AutoSizeFittingNode(node);
                 else
                     AutoSizeEquipmentNode(node);
+                newlySized.Add(node.Sequence);
                 componentCount++;
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
@@ -3937,8 +4004,7 @@ internal sealed partial class LayoutDesignerScreen
         }
 
         UpdateCalculatedLayoutValues();
-        foreach (var connection in _host.DuctSystemScreen._ductSystem.LayoutNodes.OrderBy(node => node.Sequence)
-                     .SelectMany(node => new[]
+        foreach (var connection in order.SelectMany(node => new[]
                      {
                          string.IsNullOrWhiteSpace(node.ParentNodeId)
                              ? (LayoutConnectionRef?)null : new LayoutConnectionRef(node, false),
@@ -3949,6 +4015,11 @@ internal sealed partial class LayoutDesignerScreen
                      .Select(connection => connection!.Value)
                      .ToArray())
         {
+            if (DuctForConnection(connection.Downstream, connection.Secondary) is { SizeLocked: true })
+            {
+                lockedCount++;
+                continue;
+            }
             try
             {
                 AutoSizeConnectionDuct(connection);
@@ -3961,14 +4032,45 @@ internal sealed partial class LayoutDesignerScreen
         }
 
         UpdateCalculatedLayoutValues();
+        foreach (var node in order.Where(x => x.IsDefined && !newlySized.Contains(x.Sequence)
+                                               && (x.Type == LayoutNodeType.Grd || LayoutTopology.LinkedFitting(document, x) is not null)))
+        {
+            if (node.SizeLocked)
+            {
+                lockedCount++;
+                continue;
+            }
+            try
+            {
+                if (node.Type == LayoutNodeType.Grd)
+                {
+                    if (ReselectGrdNode(node))
+                        componentCount++;
+                }
+                else if (LayoutTopology.LinkedFitting(document, node) is { } fitting && SystemSolver.TakesConnectedDuctSize(fitting))
+                {
+                    // The size comes from the duct the fitting is drawn on (applied when the system is solved below).
+                    fitting.ReferenceSizeManual = false;
+                    componentCount++;
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+                                           or KeyNotFoundException or OverflowException)
+            {
+                failures.Add($"{node.Id}: {ex.Message}");
+            }
+        }
+
+        UpdateCalculatedLayoutValues();
         CommitLayoutHistoryState(historyState);
         _host.DuctSystemScreen.ResetCriticalPath();
         _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
         _host.DuctSystemScreen.RefreshDuctSystemGrid();
-        _layoutStatusLabel.Text = componentCount == 0 && ductCount == 0 && failures.Count == 0
+        _layoutStatusLabel.Text = componentCount == 0 && ductCount == 0 && failures.Count == 0 && lockedCount == 0
             ? "There are no components or connected ducts to size."
-            : $"Auto Size: sized {componentCount} undefined component(s) and {ductCount} duct section(s)."
+            : $"Auto Size Ductwork: sized {ductCount} duct section(s) and {componentCount} component(s) from the Auto Sizing Criteria."
+              + (lockedCount > 0 ? $" {lockedCount} locked item(s) kept their size." : string.Empty)
               + (failures.Count > 0 ? $" {failures.Count} item(s) still need attention." : string.Empty);
         _layoutStatusLabel.ForeColor = failures.Count == 0 ? Color.FromArgb(30, 100, 55) : Color.DarkOrange;
         if (failures.Count > 0 && !AutomatedLayoutVerification)
@@ -3979,128 +4081,33 @@ internal sealed partial class LayoutDesignerScreen
         NotifyLayoutCommandStateChanged();
     }
 
-    internal void RecalculateAllLayoutDuctwork()
+    /// <summary>
+    /// Re-selects a defined GRD at its current airflow with its own type and sizes (Auto Size Ductwork). Returns false
+    /// for a GRD type with no catalog (its entered pressure drop is kept).
+    /// </summary>
+    private bool ReselectGrdNode(SavedLayoutNode node)
     {
-        var historyState = CaptureLayoutHistoryState();
-        var resized = 0;
-        var failures = new List<string>();
-        UpdateCalculatedLayoutValues();
-        var connections = _host.DuctSystemScreen._ductSystem.LayoutNodes.OrderBy(node => node.Sequence)
-            .SelectMany(node => new[]
-            {
-                string.IsNullOrWhiteSpace(node.ParentNodeId)
-                    ? (LayoutConnectionRef?)null : new LayoutConnectionRef(node, false),
-                string.IsNullOrWhiteSpace(node.SecondaryParentNodeId)
-                    ? (LayoutConnectionRef?)null : new LayoutConnectionRef(node, true)
-            })
-            .Where(connection => connection.HasValue)
-            .Select(connection => connection!.Value)
-            .ToArray();
-        foreach (var connection in connections)
-        {
-            try
-            {
-                AutoSizeConnectionDuct(connection);
-                resized++;
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
-            {
-                failures.Add($"duct to {connection.Downstream.Id}: {ex.Message}");
-            }
-        }
-
-        UpdateCalculatedLayoutValues();
-        CommitLayoutHistoryState(historyState);
-        _host.DuctSystemScreen.ResetCriticalPath();
-        _host.DuctSystemScreen.SaveDuctSystem();
-        RefreshLayoutDesigner();
-        _host.DuctSystemScreen.RefreshDuctSystemGrid();
-        _layoutStatusLabel.Text = resized == 0
-            ? "No connected ductwork was available to recalculate."
-            : $"Recalculated {resized} duct section(s) from the current source and sink airflows."
-              + (failures.Count > 0 ? $" {failures.Count} section(s) need attention." : string.Empty);
-        _layoutStatusLabel.ForeColor = failures.Count == 0
-            ? Color.FromArgb(30, 100, 55) : Color.DarkOrange;
-        if (failures.Count > 0 && !AutomatedLayoutVerification)
-            MessageBox.Show(_host, string.Join("\r\n", failures.Take(12)), "Ductwork Recalculation Notices",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-    }
-
-    internal void SizeUndefinedLayoutItems()
-    {
-        var historyState = CaptureLayoutHistoryState();
-        var componentCount = 0;
-        var ductCount = 0;
-        var failures = new List<string>();
-        UpdateCalculatedLayoutValues();
-
-        foreach (var node in _host.DuctSystemScreen._ductSystem.LayoutNodes
-                     .Where(x => !x.IsDefined && IsAutomaticSizingComponent(x))
-                     .OrderBy(x => x.Sequence).ToArray())
-        {
-            try
-            {
-                if (node.Type == LayoutNodeType.Fitting)
-                    AutoSizeFittingNode(node);
-                else
-                    AutoSizeEquipmentNode(node);
-                componentCount++;
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
-                                           or KeyNotFoundException or OverflowException)
-            {
-                failures.Add($"{node.Id}: {ex.Message}");
-            }
-        }
-
-        UpdateCalculatedLayoutValues();
-        foreach (var connection in _host.DuctSystemScreen._ductSystem.LayoutNodes.OrderBy(x => x.Sequence)
-                     .SelectMany(node => new[]
-                     {
-                         string.IsNullOrWhiteSpace(node.ParentNodeId) ? (LayoutConnectionRef?)null : new LayoutConnectionRef(node, false),
-                         string.IsNullOrWhiteSpace(node.SecondaryParentNodeId) ? (LayoutConnectionRef?)null : new LayoutConnectionRef(node, true)
-                     }).Where(x => x.HasValue).Select(x => x!.Value).ToArray())
-        {
-            var existingDuct = DuctForConnection(connection.Downstream, connection.Secondary);
-            if (existingDuct is not null && !existingDuct.RequiresResizing)
-                continue;
-            try
-            {
-                AutoSizeConnectionDuct(connection);
-                ductCount++;
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
-            {
-                failures.Add($"duct to {connection.Downstream.Id}: {ex.Message}");
-            }
-        }
-
-        if (componentCount == 0 && ductCount == 0)
-        {
-            var message = failures.Count == 0
-                ? "There are no supported undefined components or ducts to size."
-                : "No undefined items could be sized. " + string.Join("  ", failures.Take(3));
-            if (!AutomatedLayoutVerification)
-                MessageBox.Show(_host, message, "Size Undefined Components",
-                    MessageBoxButtons.OK, failures.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-            _layoutStatusLabel.Text = message;
-            _layoutStatusLabel.ForeColor = failures.Count == 0 ? Color.FromArgb(30, 100, 55) : Color.DarkOrange;
-            return;
-        }
-
-        UpdateCalculatedLayoutValues();
-        CommitLayoutHistoryState(historyState);
-        _host.DuctSystemScreen.ResetCriticalPath();
-        _host.DuctSystemScreen.SaveDuctSystem();
-        RefreshLayoutDesigner();
-        _host.DuctSystemScreen.RefreshDuctSystemGrid();
-        _layoutStatusLabel.Text = $"Automatically sized {componentCount} component(s) and {ductCount} duct(s)."
-                                  + (failures.Count > 0 ? $" {failures.Count} item(s) still need attention." : string.Empty);
-        _layoutStatusLabel.ForeColor = failures.Count == 0 ? Color.FromArgb(30, 100, 55) : Color.DarkOrange;
-        if (failures.Count > 0 && !AutomatedLayoutVerification)
-            MessageBox.Show(_host,
-                "Some items remain undefined:\r\n\r\n" + string.Join("\r\n", failures.Take(12)),
-                "Automatic Sizing Completed with Notices", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        if (node.AirflowM3PerS <= 0)
+            throw new InvalidOperationException("No airflow reaches this GRD.");
+        var cfm = UnitConversions.M3PerSToCfm(node.AirflowM3PerS);
+        GrdPerformanceSelection selection;
+        if (string.Equals(node.GrdType, "Grille", StringComparison.OrdinalIgnoreCase))
+            selection = GrdPerformanceCatalog.AutoSelectTitus350R(cfm, node.GrdNominalDuctSizeIn);
+        else if (string.Equals(node.GrdType, "Diffuser", StringComparison.OrdinalIgnoreCase))
+            selection = GrdPerformanceCatalog.SelectPriceScd(cfm, Convert.ToInt32(node.GrdFaceSizeIn), Convert.ToInt32(node.GrdNeckDiameterIn));
+        else if (string.Equals(node.GrdType, "Linear Diffuser TBD-80 D", StringComparison.OrdinalIgnoreCase))
+            selection = GrdPerformanceCatalog.SelectTitusTbd80(cfm, Convert.ToInt32(node.GrdLengthFt), node.GrdSlotWidthIn, node.GrdSlotCount);
+        else
+            return false;
+        node.PressureDropPa = UnitConversions.InchesWaterToPa(selection.Selected.TotalPressureInWg);
+        node.GrdInletDiameterIn = selection.InletDiameterIn ?? node.GrdInletDiameterIn;
+        node.GrdSelectedAirflowCfm = selection.Selected.AirflowCfm;
+        node.GrdSoundNc = selection.Selected.SoundNc;
+        node.GrdThrowFt = selection.Selected.ThrowFt;
+        if (!string.IsNullOrWhiteSpace(selection.NominalDuctSizeIn))
+            node.GrdNominalDuctSizeIn = selection.NominalDuctSizeIn;
+        SyncLinkedItemMetadata(node);
+        return true;
     }
 
     private static bool AutomatedLayoutVerification => AutomationOptions.AcceptDefaultCoordinates;
@@ -4253,6 +4260,13 @@ internal sealed partial class LayoutDesignerScreen
                            string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase))
                        ?? throw new InvalidOperationException("The upstream component was not found.");
         var state = AutomaticConnectionFlowState(upstream, downstream);
+        // The solved airflow of this connection when it already has a duct (round Y): after a split it is the outlet's
+        // share, not the splitter's whole inlet airflow.
+        var existingConnectionDuct = DuctForConnection(downstream, connection.Secondary);
+        if (existingConnectionDuct is { AirflowM3PerS: > 0 })
+            state = (existingConnectionDuct.AirflowM3PerS, state.TemperatureC);
+        else if (LayoutTopology.IsDiverging(upstream) && downstream.AirflowM3PerS > 0)
+            state = (downstream.AirflowM3PerS, state.TemperatureC);
         if (state.AirflowM3PerS <= 0)
             throw new InvalidOperationException("No connected defined item provides a positive airflow.");
         var connectionDelta = ConnectionDelta(downstream, connection.Secondary);

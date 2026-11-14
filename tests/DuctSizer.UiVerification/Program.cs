@@ -285,7 +285,7 @@ internal static class Program
                     && form.Controls.Find("CopyResultsButton", true).Length == 0
                     && !Descendants<Button>(form).Any(button => button.Text == "Copy system"),
                 "Save Changes actions should be hidden until an existing duct or fitting is opened for editing.");
-            Require(autoSizeFan.Text == "Calculate"
+            Require(autoSizeFan.Text == "Calculate\nCritical Path"
                     && form.Controls.Find("RibbonAnalysisCalculateButton", true).Length == 0
                     && form.Controls.Find("CalculateLongestRouteButton", true).Length == 0
                     && form.Controls.Find("AutoSizeFanButton", true).Length == 0
@@ -1426,6 +1426,34 @@ internal static class Program
                     "Choosing a path in the Show list should highlight that path (in blue).");
                 netStaticCombo.SelectedIndex = 0;
             }
+            // Round Y: Static / Total / Velocity check boxes show or hide each line; a point clicked selects that item on
+            // the drawing and in the System Overview, and the item selected elsewhere is ringed on the graph.
+            var staticCheck = Find<CheckBox>(form, "NetStaticStaticCheck");
+            var totalCheck = Find<CheckBox>(form, "NetStaticTotalCheck");
+            var velocityCheck = Find<CheckBox>(form, "NetStaticVelocityCheck");
+            bool ChartFlag(string name) => (bool)netStaticChart.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(netStaticChart)!;
+            Require(staticCheck.Checked && totalCheck.Checked && velocityCheck.Checked
+                    && ChartFlag("ShowStatic") && ChartFlag("ShowTotal") && ChartFlag("ShowVelocity"),
+                "The graph should start with the static, total and velocity pressure lines all shown.");
+            velocityCheck.Checked = false;
+            totalCheck.Checked = false;
+            Require(!ChartFlag("ShowVelocity") && !ChartFlag("ShowTotal") && ChartFlag("ShowStatic"),
+                "Clearing the Velocity and Total boxes should hide those lines.");
+            velocityCheck.Checked = true;
+            totalCheck.Checked = true;
+            var clickedStation = expectedPaths.SelectMany(path => path.Stations).FirstOrDefault(station => station.ItemId.StartsWith("D-", StringComparison.Ordinal));
+            if (clickedStation is not null)
+            {
+                var clickHandler = (Action<string>?)netStaticChart.GetType().GetField("ItemClicked", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(netStaticChart);
+                clickHandler!.Invoke(clickedStation.ItemId);
+                Application.DoEvents();
+                var overview = Find<DataGridView>(form, "LayoutSystemSummaryGrid");
+                Require(overview.SelectedRows.Count == 1 && Convert.ToString(overview.SelectedRows[0].Cells["Id"].Value) == clickedStation.ItemId
+                        && (string?)netStaticChart.GetType().GetProperty("HighlightItemId", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(netStaticChart) == clickedStation.ItemId,
+                    $"Clicking {clickedStation.ItemId} on the graph should select it in the System Overview and ring it on the graph.");
+            }
+            viewOffsetField.SetValue(layoutCanvas, savedViewOffset); // selecting scrolled the drawing: put the view back
+            layoutCanvas.Invalidate();
             UiMember.Method("RefreshLayoutBottomPanel", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             var issues = (System.Collections.IList)UiMember.Method("BuildProjectIssues", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(form, null)!;
@@ -1472,10 +1500,10 @@ internal static class Program
                     && Math.Abs((float)layoutCanvas.GetType().GetProperty("ZoomFactor",
                         BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(layoutCanvas)! - zoomBefore) < 0.001F,
                 "The zoom buttons should zoom in and back out (mouse-wheel zoom is unchanged).");
-            Require(layoutAutoSize.Text == "Auto Size" && Find<Button>(form, "RibbonCalculateButton").Text == "Calculate"
+            Require(layoutAutoSize.Text == "Auto Size\nDuctwork" && Find<Button>(form, "RibbonCalculateButton").Text == "Calculate\nCritical Path"
                     && form.Controls.Find("LayoutSizeUndefinedButton", true).Length == 0
                     && form.Controls.Find("LayoutRecalculateDuctworkButton", true).Length == 0,
-                "Auto Size should replace Size Undefined Components and Recalculate All Ductwork, beside Calculate.");
+                "Auto Size Ductwork should replace Size Undefined Components and Recalculate All Ductwork; Calculate is labelled Calculate Critical Path (round Y).");
             Require(layoutPdfBackground.AccessibleName == "PDF underlay" && layoutPdfBackground.Visible,
                 "The Designer should expose a visible PDF-underlay import action in its canvas toolbar.");
             var gridLocationMethod = layoutCanvas.GetType().GetMethod("GridLocation",
@@ -3512,8 +3540,8 @@ internal static class Program
             {
                 Require(Find<Button>(ductDialog, "LayoutDuctEditButton").Text == "Edit",
                     "A sized designer duct popup should use the concise Edit action.");
-                Require(Find<Button>(ductDialog, "LayoutDuctReverseButton").Text == "Reverse Flow Direction",
-                    "Pressing a designer duct should offer a direct flow-direction switch.");
+                Require(ductDialog.Controls.Find("LayoutDuctReverseButton", true).Length == 0,
+                    "Flow direction follows the sources and sinks: a duct offers no Reverse Flow Direction button (round Y).");
             }
 
             var rewire = UiMember.Method("RewireLayoutNode", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -3955,9 +3983,64 @@ internal static class Program
             ClickButton(Find<Button>(form, "RibbonAutoSizeButton"));
             Application.DoEvents();
             var layoutStatus = Find<Label>(form, "LayoutDesignerStatus");
-            Require(layoutStatus.Text.StartsWith("Auto Size", StringComparison.Ordinal)
+            Require(layoutStatus.Text.StartsWith("Auto Size Ductwork", StringComparison.Ordinal)
                     || layoutStatus.Text.StartsWith("There are no", StringComparison.Ordinal),
-                $"Auto Size should report what it sized. Status={layoutStatus.Text}");
+                $"Auto Size Ductwork should report what it sized. Status={layoutStatus.Text}");
+
+            // Round Y: size locks. Auto Size Ductwork keeps a locked duct's size; the Component Lock Editor lists every
+            // duct and component, with Lock All / Unlock All.
+            var lockModel = form.DuctSystemScreen._ductSystem;
+            var lockTarget = lockModel.LayoutNodes.Where(node => node.ConnectionDuctSequence is not null)
+                .Select(node => lockModel.Ducts.FirstOrDefault(duct => duct.Sequence == node.ConnectionDuctSequence))
+                .FirstOrDefault(duct => duct is not null);
+            if (lockTarget is not null)
+            {
+                lockTarget.Shape = DuctShape.Round;
+                lockTarget.DiameterM = UnitConversions.InchesToM(7.3);
+                form.LayoutScreen.ApplySizeLocks(new Dictionary<string, bool> { [DuctSystemScreen.DuctKey(lockTarget.Sequence)] = true });
+                ClickButton(Find<Button>(form, "RibbonAutoSizeButton"));
+                Application.DoEvents();
+                Require(lockTarget.SizeLocked && Math.Abs(UnitConversions.MToInches(lockTarget.DiameterM) - 7.3) < 1e-9
+                        && layoutStatus.Text.Contains("locked item", StringComparison.Ordinal),
+                    $"Auto Size Ductwork should keep a locked duct's size and say so. Size={UnitConversions.MToInches(lockTarget.DiameterM):0.###} in, Status={layoutStatus.Text}");
+                form.LayoutScreen.ApplySizeLocks(new Dictionary<string, bool> { [DuctSystemScreen.DuctKey(lockTarget.Sequence)] = false });
+                ClickButton(Find<Button>(form, "RibbonAutoSizeButton"));
+                Application.DoEvents();
+                Require(!lockTarget.SizeLocked && Math.Abs(UnitConversions.MToInches(lockTarget.DiameterM) - 7.3) > 1e-6,
+                    "Once unlocked, Auto Size Ductwork re-sizes the duct from the criteria.");
+            }
+            var lockRows = form.LayoutScreen.ComponentLockRows();
+            Require(lockRows.Count > 0 && lockRows.Any(row => row.Type == "Duct")
+                    && lockRows.All(row => row.Type != "Fan" && !row.ItemId.StartsWith("S-", StringComparison.Ordinal)),
+                "The Component Lock Editor should list the ducts and components Auto Size can change (not fans or calculation points).");
+            Require(Find<Control>(form, "LayoutComponentLockEditorButton").Parent == Find<Control>(form, "LayoutSourceSinkEditorButton").Parent
+                    && Find<Control>(form, "LayoutComponentLockEditorButton").Parent!.Controls.GetChildIndex(Find<Control>(form, "LayoutComponentLockEditorButton"))
+                       == Find<Control>(form, "LayoutSourceSinkEditorButton").Parent!.Controls.GetChildIndex(Find<Control>(form, "LayoutSourceSinkEditorButton")) + 1,
+                "The Component Lock Editor button should sit next to the Source / Sink Editor.");
+            var lockDialogType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.ComponentLockEditorDialog")!;
+            using (var lockDialog = (Form)Activator.CreateInstance(lockDialogType, BindingFlags.Instance | BindingFlags.NonPublic, null,
+                       new object[] { lockRows }, null)!)
+            {
+                lockDialog.CreateControl();
+                var lockGrid = Find<DataGridView>(lockDialog, "ComponentLockGrid");
+                Require(lockGrid.Rows.Count == lockRows.Count && Find<Button>(lockDialog, "ComponentLockAllButton").Text == "Lock All"
+                        && Find<Button>(lockDialog, "ComponentUnlockAllButton").Text == "Unlock All",
+                    "The Component Lock Editor should list every row with Lock All and Unlock All at the top.");
+                ClickButton(Find<Button>(lockDialog, "ComponentLockAllButton"));
+                Require(Find<Label>(lockDialog, "ComponentLockCount").Text == $"{lockRows.Count} of {lockRows.Count} locked",
+                    "Lock All should tick every row.");
+                ClickButton(Find<Button>(lockDialog, "ComponentLockSaveButton"));
+                var locks = (IReadOnlyDictionary<string, bool>)lockDialogType.GetProperty("Locks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(lockDialog)!;
+                Require(locks.Count == lockRows.Count && locks.Values.All(value => value), "Save Locks should return every row locked.");
+                form.LayoutScreen.ApplySizeLocks(locks);
+                Require(lockRows.All(row => row.Key.StartsWith("D:", StringComparison.Ordinal)
+                        ? lockModel.Ducts.Single(duct => DuctSystemScreen.DuctKey(duct.Sequence) == row.Key).SizeLocked
+                        : lockModel.LayoutNodes.Single(node => DuctSystemScreen.LayoutKey(node.Sequence) == row.Key).SizeLocked),
+                    "Applying the editor's locks should lock every listed item.");
+                form.LayoutScreen.ApplySizeLocks(locks.ToDictionary(pair => pair.Key, _ => false));
+                Require(lockModel.Ducts.All(duct => !duct.SizeLocked) && lockModel.LayoutNodes.All(node => !node.SizeLocked),
+                    "Unlock All should clear every lock.");
+            }
             var highlightButton = Find<Button>(form, "RibbonHighlightCriticalPathButton");
             if (((dynamic)highlightButton).Checked)
                 ClickButton(highlightButton);
@@ -3988,6 +4071,17 @@ internal static class Program
                     && Find<Label>(form, "AnalysisRouteValue").Text.Length > 0
                     && ScreenBounds(Find<Control>(form, "AnalysisSummary")).Bottom <= ScreenBounds(grid).Top,
                 "The Analysis tab should list every critical-path item (adding up to the critical-path total) above the full table.");
+            // Round Y: the net path pressure graph is on the Analysis tab too, as its own card (not merged with the
+            // pressure-drop graph).
+            var analysisNetChart = Find<Control>(form, "AnalysisNetPathChart");
+            var analysisNetPaths = (System.Collections.IList)analysisNetChart.GetType().GetProperty("Paths", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(analysisNetChart)!;
+            Require(Find<Control>(form, "AnalysisNetPathCard").Contains(analysisNetChart)
+                    && !Find<Control>(form, "AnalysisProfileCard").Contains(analysisNetChart)
+                    && analysisNetPaths.Count == PathPressureProfiles.Build(form.DuctSystemScreen._ductSystem).Count
+                    && Find<CheckBox>(form, "AnalysisNetPathVelocityCheck").Checked
+                    && Find<ComboBox>(form, "AnalysisNetPathPathCombo").Items.Count == analysisNetPaths.Count + 1,
+                "The Analysis tab should show the net path pressure graph in its own card, with every path.");
             var lossValues = expectedTop.Select(entry => entry.LossPa).ToArray();
             Require(lossValues.Zip(lossValues.Skip(1)).All(pair => pair.First >= pair.Second),
                 "The top pressure drops should be listed from highest to lowest.");
@@ -4383,8 +4477,20 @@ internal static class Program
                 Application.DoEvents();
                 Require(Find<Button>(form, "InspectorUpdateButton").Text == "Update Duct"
                         && Descendants<ComboBox>(Find<Control>(form, "InspectorDescriptionPage")).Any(combo => combo.Name == "LayoutDuctSizingMethodCombo")
-                        && form.Controls.Find("InspectorReverseFlowButton", true).Length == 1,
-                    "A duct should be editable in the inspector with the duct editor's own inputs (and Reverse Flow Direction).");
+                        && form.Controls.Find("InspectorReverseFlowButton", true).Length == 0,
+                    "A duct should be editable in the inspector with the duct editor's own inputs (no Reverse Flow Direction).");
+                // Round Y: the inspector's "Lock current size" box locks the duct against Auto Size Ductwork (undoable).
+                var lockedDuct = ribbonModel.Ducts.Single(duct => duct.Sequence == inlineDuct.ConnectionDuctSequence);
+                var lockCheck = Find<CheckBox>(form, "InspectorSizeLockCheck");
+                Require(!lockCheck.Checked && !lockedDuct.SizeLocked, "A duct starts unlocked.");
+                lockCheck.Checked = true;
+                Application.DoEvents();
+                Application.DoEvents();
+                Require(lockedDuct.SizeLocked && Find<CheckBox>(form, "InspectorSizeLockCheck").Checked,
+                    "Ticking Lock current size in the inspector should lock the duct.");
+                form.LayoutScreen.ApplySizeLocks(new Dictionary<string, bool> { [DuctSystemScreen.DuctKey(lockedDuct.Sequence)] = false });
+                Application.DoEvents();
+                Require(!lockedDuct.SizeLocked, "Size locks can be cleared again.");
             }
 
             // Designer shortcuts (round Q): Esc deselects, Delete removes the selection at once (undoable), and the
@@ -4425,6 +4531,38 @@ internal static class Program
             Require(form.DuctSystemScreen._ductSystem.LayoutNodes.Count == nodesBeforeDelete
                     && form.DuctSystemScreen._ductSystem.LayoutNodes.Any(node => node.Id == shortcutNode.Id),
                 "Undo should restore a component removed with the Delete key.");
+            ClickButton(Find<Button>(form, "LayoutOverviewTab"));
+            Application.DoEvents();
+            // Round Y: System Overview rows have a right-click menu with Edit and Remove.
+            var overviewGrid = Find<DataGridView>(form, "LayoutSystemSummaryGrid");
+            Require(overviewGrid.ContextMenuStrip is { Name: "LayoutOverviewMenu" } overviewMenu
+                    && overviewMenu.Items.Cast<ToolStripItem>().Select(item => item.Text).SequenceEqual(new[] { "Edit", "Remove" }),
+                "Right-clicking a System Overview row should offer Edit and Remove.");
+            var overviewDuctRow = overviewGrid.Rows.Cast<DataGridViewRow>()
+                .FirstOrDefault(row => Convert.ToString(row.Cells["Id"].Value)!.StartsWith("D-", StringComparison.Ordinal));
+            if (overviewDuctRow is not null)
+            {
+                var overviewDuctId = Convert.ToString(overviewDuctRow.Cells["Id"].Value)!;
+                overviewGrid.ClearSelection();
+                overviewDuctRow.Selected = true;
+                form.LayoutScreen.EditSystemOverviewRow();
+                Application.DoEvents();
+                Require(Find<Label>(form, "InspectorTitle").Text.StartsWith(overviewDuctId, StringComparison.Ordinal),
+                    $"Edit on a System Overview row should open {overviewDuctId} in the Selection Inspector.");
+                var ductsBefore = form.DuctSystemScreen._ductSystem.Ducts.Count(duct => !SystemMembership.IsStandalone(form.DuctSystemScreen._ductSystem, duct));
+                overviewGrid.ClearSelection();
+                overviewGrid.Rows.Cast<DataGridViewRow>().First(row => Convert.ToString(row.Cells["Id"].Value) == overviewDuctId).Selected = true;
+                form.LayoutScreen.RemoveSystemOverviewRow();
+                Application.DoEvents();
+                var removedNow = form.DuctSystemScreen._ductSystem;
+                Require(removedNow.Ducts.All(duct => duct.Id != overviewDuctId || SystemMembership.IsStandalone(removedNow, duct)),
+                    $"Remove on a System Overview row should delete {overviewDuctId} from the drawing.");
+                UiMember.Method("UndoLayoutChange", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+                Application.DoEvents();
+                var restored = form.DuctSystemScreen._ductSystem;
+                Require(restored.Ducts.Count(duct => !SystemMembership.IsStandalone(restored, duct)) == ductsBefore,
+                    "Undo should bring the removed duct back.");
+            }
 
             // Round S: Pressure labels, draggable labels with leaders, free rotation and the view cube.
             var pressureCheck = Find<CheckBox>(form, "LayoutShowPressureCheck");
