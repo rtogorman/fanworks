@@ -381,10 +381,33 @@ internal static class Program
                 Require(Find<ComboBox>(automaticSizingDialog, "AutomaticFittingDefinition").Items.Count > 0
                         && automaticSizingDialog.Controls.Find("AutomaticFittingParameterTable", true).Length == 1,
                     "Elbow defaults should allow selection of an ASHRAE elbow and its fitting-specific inputs.");
+                // Round Z: fitting sizes come from the connected ducts and an elbow's angle from the drawn ducts, so they
+                // are greyed out; a split or merge has no flow percentage (its flows come from the sources).
+                foreach (var page in new[] { "Elbow", "Transition", "Split", "Merge", "Damper", "Terminal" })
+                {
+                    componentList.SelectedItem = page;
+                    Application.DoEvents();
+                    Require(!Find<TextBox>(automaticSizingDialog, "AutomaticFittingDiameter").Enabled
+                            && !Find<TextBox>(automaticSizingDialog, "AutomaticFittingWidth").Enabled
+                            && !Find<TextBox>(automaticSizingDialog, "AutomaticFittingHeight").Enabled
+                            && automaticSizingDialog.Controls.Find("AutomaticFittingBranchPercent", true).Length == 0,
+                        $"{page} defaults should grey out the diameter, width and height and have no flow percentage.");
+                    if (page == "Elbow")
+                    {
+                        var elbowDefinitions = Find<ComboBox>(automaticSizingDialog, "AutomaticFittingDefinition");
+                        elbowDefinitions.SelectedItem = elbowDefinitions.Items.Cast<FittingDefinition>()
+                            .First(definition => definition.Inputs.Any(input => input.Key == "angle"));
+                        Application.DoEvents();
+                        Require(automaticSizingDialog.Controls.Find("AutomaticFittingInput_angle", true) is { Length: 1 } angleInputs
+                                && !angleInputs[0].Enabled,
+                            "The elbow angle should be greyed out: it comes from the drawn ducts.");
+                    }
+                }
                 componentList.SelectedItem = "GRD";
                 Application.DoEvents();
-                Require(Find<ComboBox>(automaticSizingDialog, "AutomaticGrdTitus350RSize").Items.Count == 78,
-                    "Automatic GRD sizing should expose every Titus 350R nominal duct-size chart.");
+                Require(Find<ComboBox>(automaticSizingDialog, "AutomaticGrdTitus350RSize").Items.Count == 78
+                        && !Find<ComboBox>(automaticSizingDialog, "AutomaticGrdNeckDiameter").Enabled,
+                    "Automatic GRD sizing should expose every Titus 350R chart and take the diffuser neck from the connected duct.");
             }
             using (var wideDropDown = new ComboBox { Width = 612, DropDownStyle = ComboBoxStyle.DropDownList })
             {
@@ -2485,24 +2508,19 @@ internal static class Program
 
             var nodeBoundsMethod = layoutCanvas.GetType().GetMethod("NodeBounds", BindingFlags.Instance | BindingFlags.NonPublic)
                                    ?? throw new InvalidOperationException("Could not find Designer node bounds.");
-            var candidatePortsMethod = layoutCanvas.GetType().GetMethod("CandidatePortPoints", BindingFlags.Instance | BindingFlags.NonPublic)
-                                       ?? throw new InvalidOperationException("Could not inspect Designer candidate ports.");
             var provisionalNode = new SavedLayoutNode
             {
                 Sequence = document.ReserveLayoutSequence(), Type = LayoutNodeType.Filter,
                 GridX = 44, GridY = 56, AirSystemType = "Supply Air", BranchId = "Main"
             };
             document.LayoutNodes.Add(provisionalNode);
-            var candidatePorts = (IReadOnlyList<Point>)candidatePortsMethod.Invoke(layoutCanvas, new object[] { provisionalNode })!;
             var provisionalBounds = (Rectangle)nodeBoundsMethod.Invoke(layoutCanvas, new object[] { provisionalNode })!;
             document.LayoutNodes.Remove(provisionalNode);
-            var provisionalCenterForPorts = new Point(provisionalBounds.Left + provisionalBounds.Width / 2,
-                provisionalBounds.Top + provisionalBounds.Height / 2);
-            Require(candidatePorts.Count == 6
-                    && candidatePorts.All(point => point.X == provisionalCenterForPorts.X
-                        || Math.Abs(Math.Abs(point.X - provisionalCenterForPorts.X)
-                                    - 2 * Math.Abs(point.Y - provisionalCenterForPorts.Y)) <= 1),
-                "An unfilled component should expose six connector candidates aligned with the isometric X, Y, and Z axes.");
+            // Round Z: components have no connector dots; ducts are drawn with the Duct Segment tools.
+            Require(layoutCanvas.GetType().GetMethod("CandidatePortPoints", BindingFlags.Instance | BindingFlags.NonPublic) is null
+                    && layoutCanvas.GetType().GetMethod("DrawPorts", BindingFlags.Instance | BindingFlags.NonPublic) is null
+                    && layoutCanvas.GetType().GetMethod("HitTestPort", BindingFlags.Instance | BindingFlags.NonPublic) is null,
+                "Components should no longer show connector dots; ducts are drawn centre to centre with Duct Segment.");
             var gridSize = (int)(layoutCanvas.GetType().GetProperty("GridSize", BindingFlags.Instance | BindingFlags.NonPublic)
                                  ?.GetValue(layoutCanvas) ?? 0);
             var provisionalCenter = new Point(provisionalBounds.Left + provisionalBounds.Width / 2,
@@ -2552,13 +2570,11 @@ internal static class Program
 
             var hitTestNode = layoutCanvas.GetType().GetMethod("HitTest", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var hitTestConnection = layoutCanvas.GetType().GetMethod("HitTestConnection", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            var hitTestPort = layoutCanvas.GetType().GetMethod("HitTestPort", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var blankPoint = Enumerable.Range(1, 8)
                 .SelectMany(row => Enumerable.Range(1, 8).Select(column =>
                     new Point(column * layoutCanvas.ClientSize.Width / 9, row * layoutCanvas.ClientSize.Height / 9)))
                 .First(point => hitTestNode.Invoke(layoutCanvas, new object[] { point }) is null
-                                && hitTestConnection.Invoke(layoutCanvas, new object[] { point }) is null
-                                && hitTestPort.Invoke(layoutCanvas, new object?[] { point, null }) is null);
+                                && hitTestConnection.Invoke(layoutCanvas, new object[] { point }) is null);
             layoutCanvas.GetType().GetProperty("SelectedTool", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
                 .SetValue(layoutCanvas, null);
             var offsetBeforePan = (PointF)viewOffsetProperty.GetValue(layoutCanvas)!;
@@ -3652,13 +3668,15 @@ internal static class Program
                 FittingGroup = "Terminals", GridX = 30, GridY = 28, ParentNodeId = splitPreviewNode.Id,
                 AirSystemType = "Supply Air", BranchId = "B-001"
             };
-            var firstAvailableOutput = layoutCanvas.GetType().GetMethod("FirstAvailableOutputIndex",
-                                           BindingFlags.Static | BindingFlags.NonPublic)
-                                       ?? throw new InvalidOperationException("Could not inspect split outlet selection.");
-            var afterMain = (int)firstAvailableOutput.Invoke(null,
-                new object[] { splitPreviewNode, new List<SavedLayoutNode> { splitPreviewNode, splitSameBranch } })!;
-            var afterBranch = (int)firstAvailableOutput.Invoke(null,
-                new object[] { splitPreviewNode, new List<SavedLayoutNode> { splitPreviewNode, splitNewBranch } })!;
+            var outletIndexFor = UiMember.Method("OutletIndexFor", BindingFlags.Instance | BindingFlags.NonPublic)
+                                 ?? throw new InvalidOperationException("Could not inspect split outlet selection.");
+            document.LayoutNodes.AddRange(new[] { splitPreviewNode, splitSameBranch });
+            var afterMain = (int)outletIndexFor.Invoke(form, new object[] { splitPreviewNode, new LayoutVector(0, 1, 0) })!;
+            document.LayoutNodes.Remove(splitSameBranch);
+            document.LayoutNodes.Add(splitNewBranch);
+            var afterBranch = (int)outletIndexFor.Invoke(form, new object[] { splitPreviewNode, new LayoutVector(1, 0, 0) })!;
+            document.LayoutNodes.Remove(splitPreviewNode);
+            document.LayoutNodes.Remove(splitNewBranch);
             Require(afterMain == 1 && afterBranch == 0,
                 "A second split connection should automatically use the only remaining main or branch outlet.");
             document.LayoutNodes.AddRange(new[] { splitPreviewNode, splitSameBranch, splitNewBranch });
@@ -3693,21 +3711,20 @@ internal static class Program
             var convergingBeforeSecondInlet = LayoutCoordinateResolver.Resolve(document)[convergingNode.Sequence];
             var primaryDeltaBeforeSecondInlet = (convergingNode.DeltaXM, convergingNode.DeltaYM,
                 convergingNode.DeltaZM, convergingNode.ParentNodeId);
-            var gestureRequest = layoutCanvas.GetType().GetMethod("CreateGestureConnectionRequest",
-                                     BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(layoutCanvas, new object[] { secondarySource, convergingNode })
-                ?? throw new InvalidOperationException("Could not resolve a connector drag direction.");
-            Require(ReferenceEquals(gestureRequest.GetType().GetProperty("Upstream")?.GetValue(gestureRequest), secondarySource)
-                    && ReferenceEquals(gestureRequest.GetType().GetProperty("Downstream")?.GetValue(gestureRequest), convergingNode),
-                "A connector drag must use its initial connector as upstream and the connector it is dragged to as downstream.");
-            UiMember.Method("ConnectLayoutPorts", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(form, new object[] { secondarySource, convergingNode, 0, 1 });
+            // Round Z: a duct drawn with Duct Segment from the fan to the merge joins them directly (centre to centre,
+            // diagonal if need be) through the merge's free second inlet; no elbow is added on its own.
+            var elbowsBeforeSecondInlet = document.LayoutNodes.Count(x => x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows");
+            Require((bool)UiMember.Method("DrawDuctBetween", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(form, new object[] { secondarySource, convergingNode, false })!,
+                "Drawing a duct from a fan to a merge's free second inlet should connect them.");
             Application.DoEvents();
             var secondaryPathElbow = document.LayoutNodes.FirstOrDefault(x =>
                 x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows"
                 && x.ParentNodeId == secondarySource.Id && convergingNode.SecondaryParentNodeId == x.Id);
             var convergingAfterSecondInlet = LayoutCoordinateResolver.Resolve(document)[convergingNode.Sequence];
-            Require(secondaryPathElbow is not null
+            Require(secondaryPathElbow is null
+                    && convergingNode.SecondaryParentNodeId == secondarySource.Id
+                    && document.LayoutNodes.Count(x => x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows") == elbowsBeforeSecondInlet
                     && convergingNode.ParentNodeId == primaryDeltaBeforeSecondInlet.ParentNodeId
                     && Math.Abs(convergingNode.DeltaXM - primaryDeltaBeforeSecondInlet.DeltaXM) < 1e-10
                     && Math.Abs(convergingNode.DeltaYM - primaryDeltaBeforeSecondInlet.DeltaYM) < 1e-10
@@ -3724,7 +3741,7 @@ internal static class Program
                     && FittingCatalog.OutletPortCount("Diverting Fittings") == 2
                     && FittingCatalog.InletPortCount("Elbows") == 1
                     && FittingCatalog.OutletPortCount("Elbows") == 1,
-                "Dragging to the second converging inlet should preserve the first inlet and the fitting's absolute position while retaining one-in/one-out elbows, one-in/two-out diverting fittings, and two-in/one-out converging fittings.");
+                "A duct drawn to a merge's second inlet should join it directly, keep the first inlet and the fitting's position, and add no elbow.");
 
             var convergingOutletTarget = new SavedLayoutNode
             {
@@ -3814,6 +3831,102 @@ internal static class Program
                                                        && x.FittingGroup == "Elbows") == belowElbowCount,
                 "A component placed directly below a converging outlet should resolve as one Z-axis run, stay at the same drawn location, and not receive a redundant elbow.");
             document.LayoutNodes.Remove(directlyBelowTarget);
+
+            // Round Z: Duct Segment / Flex Duct Segment. Press on a component, drag to another, release: one straight duct,
+            // centre to centre. A diagonal joins two elbows directly (no elbow added); a sloping duct and an elbow
+            // needed at a component that cannot turn the air are asked about first.
+            var ductSegmentButton = Find<Button>(form, "RibbonDuctSegmentButton");
+            var flexSegmentButton = Find<Button>(form, "RibbonFlexDuctSegmentButton");
+            Require(ductSegmentButton.Text == "Duct\nSegment" && flexSegmentButton.Text == "Flex Duct\nSegment"
+                    && Find<Control>(form, "RibbonDuctworkGroup").Contains(ductSegmentButton),
+                "The ribbon should offer Duct Segment and Flex Duct Segment in a Ductwork group.");
+            var ductOrigin = LayoutCoordinateResolver.Resolve(document)[convergingNode.Sequence];
+            SavedLayoutNode Anchored(LayoutNodeType type, string group, double xFeet, double yFeet, double zFeet) => new()
+            {
+                Sequence = document.ReserveLayoutSequence(), Type = type, FittingGroup = group,
+                HasAbsoluteCoordinateAnchor = true,
+                AbsoluteAnchorXM = ductOrigin.XM + UnitConversions.FeetToM(xFeet),
+                AbsoluteAnchorYM = ductOrigin.YM + UnitConversions.FeetToM(yFeet),
+                AbsoluteAnchorZM = ductOrigin.ZM + UnitConversions.FeetToM(zFeet),
+                AirSystemType = "Supply Air", BranchId = "Main"
+            };
+            var drawFan = Anchored(LayoutNodeType.Fan, string.Empty, 40, 40, 0);
+            var drawElbowA = Anchored(LayoutNodeType.Fitting, "Elbows", 40, 20, 0);
+            var drawElbowB = Anchored(LayoutNodeType.Fitting, "Elbows", 60, 0, 0);
+            document.LayoutNodes.AddRange(new[] { drawFan, drawElbowA, drawElbowB });
+            UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
+            ClickButton(flexSegmentButton);
+            Application.DoEvents();
+            Require(form.LayoutScreen.ActiveDuctTool == LayoutDuctTool.Flex
+                    && (LayoutDuctTool)layoutCanvas.GetType().GetProperty("DuctTool", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(layoutCanvas)! == LayoutDuctTool.Flex
+                    && flexSegmentButton is RibbonButton { Checked: true } && !Find<RibbonButton>(form, "RibbonSelectButton").Checked,
+                "Flex Duct Segment should switch the drawing to flex duct drawing.");
+            var centerMethod = layoutCanvas.GetType().GetMethod("Center", BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { typeof(SavedLayoutNode) }, null)!;
+            void DragDuct(SavedLayoutNode from, SavedLayoutNode to)
+            {
+                var start = (Point)centerMethod.Invoke(layoutCanvas, new object[] { from })!;
+                var end = (Point)centerMethod.Invoke(layoutCanvas, new object[] { to })!;
+                layoutCanvas.GetType().GetMethod("OnMouseDown", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(layoutCanvas, new object[] { new MouseEventArgs(MouseButtons.Left, 1, start.X, start.Y, 0) });
+                layoutCanvas.GetType().GetMethod("OnMouseMove", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(layoutCanvas, new object[] { new MouseEventArgs(MouseButtons.Left, 0, end.X, end.Y, 0) });
+                layoutCanvas.GetType().GetMethod("OnMouseUp", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(layoutCanvas, new object[] { new MouseEventArgs(MouseButtons.Left, 1, end.X, end.Y, 0) });
+                Application.DoEvents();
+            }
+            DragDuct(drawFan, drawElbowA);
+            DragDuct(drawElbowA, drawElbowB);
+            var elbowCountAfterDiagonal = document.LayoutNodes.Count(x => x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows");
+            Require(drawElbowA.ParentNodeId == drawFan.Id && drawElbowB.ParentNodeId == drawElbowA.Id
+                    && drawElbowA.ConnectionFlexDuct && drawElbowB.ConnectionFlexDuct
+                    && Math.Abs(UnitConversions.MToFeet(drawElbowB.DeltaXM) - 20) < 1e-6
+                    && Math.Abs(UnitConversions.MToFeet(drawElbowB.DeltaYM) + 20) < 1e-6
+                    && Math.Abs(drawElbowB.DeltaZM) < 1e-9,
+                $"Dragging from one component to the next should draw one straight flex duct centre to centre (here a 45° diagonal). Elbow B parent={drawElbowB.ParentNodeId}, offset=({UnitConversions.MToFeet(drawElbowB.DeltaXM):0.##}, {UnitConversions.MToFeet(drawElbowB.DeltaYM):0.##}, {UnitConversions.MToFeet(drawElbowB.DeltaZM):0.##}) ft.");
+            form.LayoutScreen.UpdateCalculatedLayoutValues();
+            Require(Math.Abs(drawElbowA.ElbowAngleDegrees - 45) < 0.05,
+                $"The elbow between a straight run and the 45° diagonal should be a 45° elbow from the drawing. Was {drawElbowA.ElbowAngleDegrees}°.");
+            ClickButton(Find<Button>(form, "RibbonSelectButton"));
+            Require(form.LayoutScreen.ActiveDuctTool == LayoutDuctTool.None, "Select should end duct drawing.");
+
+            // An elbow needed at a transition: declined → nothing drawn; accepted → elbows added at the corners.
+            var drawTransition = Anchored(LayoutNodeType.Fitting, "Transitions", 100, 0, 0);
+            var drawAfterTransition = Anchored(LayoutNodeType.Fitting, "Dampers", 100, 20, 0);
+            var drawOffset = Anchored(LayoutNodeType.Fitting, "Elbows", 120, 30, 0);
+            document.LayoutNodes.AddRange(new[] { drawTransition, drawAfterTransition, drawOffset });
+            Require(form.LayoutScreen.DrawDuctBetween(drawTransition, drawAfterTransition, flex: false),
+                "A straight duct from a transition to a damper should draw.");
+            form.LayoutScreen.AutomatedConnectionAnswer = false;
+            Require(!form.LayoutScreen.DrawDuctBetween(drawAfterTransition, drawOffset, flex: false)
+                    && string.IsNullOrEmpty(drawOffset.ParentNodeId),
+                "Declining the elbow question should draw nothing.");
+            form.LayoutScreen.AutomatedConnectionAnswer = true;
+            var elbowsBeforeAutomatic = document.LayoutNodes.Count(x => x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows");
+            Require(form.LayoutScreen.DrawDuctBetween(drawAfterTransition, drawOffset, flex: false)
+                    && document.LayoutNodes.Count(x => x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows") == elbowsBeforeAutomatic + 1
+                    && document.LayoutNodes.Single(x => x.Id == drawOffset.ParentNodeId) is { FittingGroup: "Elbows" } addedElbow
+                    && addedElbow.ParentNodeId == drawAfterTransition.Id
+                    && Math.Abs(UnitConversions.MToFeet(addedElbow.DeltaYM) - 10) < 1e-6 && Math.Abs(addedElbow.DeltaXM) < 1e-9,
+                "Accepting should add one elbow, continuing straight out of the damper first and then turning.");
+            Require(LayoutDirections.MissingElbows(document).All(x => x.Node != drawAfterTransition),
+                "After the automatic elbow the damper no longer turns the air.");
+
+            // A sloping duct is drawn only when accepted.
+            var slopeStart = Anchored(LayoutNodeType.Fan, string.Empty, 160, 0, 0);
+            var slopeEnd = Anchored(LayoutNodeType.Fitting, "Elbows", 170, 0, 5);
+            document.LayoutNodes.AddRange(new[] { slopeStart, slopeEnd });
+            form.LayoutScreen.AutomatedConnectionAnswer = false;
+            Require(!form.LayoutScreen.DrawDuctBetween(slopeStart, slopeEnd, flex: false) && string.IsNullOrEmpty(slopeEnd.ParentNodeId),
+                "Declining the slope question should draw nothing.");
+            form.LayoutScreen.AutomatedConnectionAnswer = true;
+            Require(form.LayoutScreen.DrawDuctBetween(slopeStart, slopeEnd, flex: false) && slopeEnd.ParentNodeId == slopeStart.Id
+                    && Math.Abs(UnitConversions.MToFeet(slopeEnd.DeltaZM) - 5) < 1e-6,
+                "Accepting the slope should draw the sloping duct.");
+            foreach (var drawn in new[] { drawFan, drawElbowA, drawElbowB, drawTransition, drawAfterTransition, drawOffset, slopeStart, slopeEnd })
+                document.LayoutNodes.Remove(drawn);
+            document.LayoutNodes.RemoveAll(x => x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows"
+                                                && (x.ParentNodeId == drawAfterTransition.Id));
+            UiMember.Method("RefreshLayoutDesigner", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, null);
             var portCapturePath = Environment.GetEnvironmentVariable("DUCTSIZER_PORT_CAPTURE_PATH");
             if (!string.IsNullOrWhiteSpace(portCapturePath))
             {

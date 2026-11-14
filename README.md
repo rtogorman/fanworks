@@ -197,6 +197,22 @@ Version 0.44 adds signed relative-coordinate confirmation for newly connected co
 
 For target-pressure-rate and target-velocity sizing, the project-wide increment and rounding method are selected under **Settings > Calculation Method Inputs** and no longer repeated on each duct. Equivalent-diameter calculation and the **Duct Area Calculation Method** are configured there as well. A positive increment enables nominal-size rounding. **Automatic** uses standard mathematical rounding to the nearest increment: fractions below `0.5` round down and `0.5` or above round up. **Round Down** always selects the lower increment. Either method can select a smaller duct than the exact result, so the program warns whenever the rounded size can exceed the requested pressure-rate or velocity target.
 
+## What changed in 0.107.0
+
+- **Duct Segment** and **Flex Duct Segment** (new Ductwork group on the ribbon): press on a component, drag to the
+  next one and release. The duct runs straight from centre to centre; the tool stays on for the next duct until
+  Select or Esc. The connector dots around components are gone. Flex duct is calculated as fully extended flexible
+  duct and drawn with cross ticks.
+- **No automatic elbows.** A duct can run on a diagonal (a 45° offset joins two elbows directly). An elbow's angle is
+  the angle between its drawn ducts (45°, 90° …) and is shown read-only in the editor.
+- A duct that would **slope** up or down asks first ("Is that OK?"); No draws nothing.
+- Where a duct would turn the air at a component that cannot turn it (transition, damper, VAV box, coil, filter,
+  custom), you are asked whether to **add the elbows automatically** (90° elbows at the corners) or add the elbow
+  yourself. Existing drawings with such a turn show an error naming the component.
+- **Auto Sizing Criteria**: fitting diameter, width and height, the elbow angle and the diffuser neck are greyed out
+  (they come from the connected ducts and the drawing); the split / merge flow percentage is removed (flows come from
+  the sources). Auto Size Ductwork picks a diffuser's neck to fit its duct.
+
 ## What changed in 0.106.1
 
 - The drawing toolbar wraps onto a second line when the window is too narrow for one, so the Source / Sink Editor and

@@ -394,7 +394,9 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         AddRow(table, "GRD Type", type);
         AddRow(table, "Titus 350R Nominal Duct Size (in)", grilleSize);
         AddRow(table, "Price SCD Face Size (in)", face);
-        AddRow(table, "Price SCD Neck Diameter (in)", neck);
+        // Round Z: the neck matches the duct connected to the diffuser (Auto Size Ductwork picks the catalog neck).
+        neck.Enabled = false;
+        AddRow(table, "Price SCD Neck Diameter (in), from the connected duct", neck);
         AddRow(table, "Titus TBD-80 D Length (ft)", length);
         AddRow(table, "Titus Slot Size (in)", slotWidth);
         AddRow(table, "Titus Number of Slots", slotCount);
@@ -425,15 +427,24 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         _controls["height"] = height;
         AddRow(table, "Default Fitting", definition);
         AddRow(table, "Reference Duct Shape", shape);
+        // Round Z: a fitting's size always comes from the ducts connected to it (and a split's or merge's flows from the
+        // sources), so these are shown greyed out and never used as a default.
         AddRow(table, SizeLabel("Diameter"), diameter);
         AddRow(table, SizeLabel("Width"), width);
         AddRow(table, SizeLabel("Height"), height);
-        if (selected.IsJunction)
+        var sizeNote = new Label
         {
-            var branch = Input("AutomaticFittingBranchPercent", (defaults.BranchFraction * 100).ToString("0.##", CultureInfo.CurrentCulture));
-            _controls["branch"] = branch;
-            AddRow(table, title == "Merge" ? "Second Inlet Flow (%)" : "Branch Outlet Flow (%)", branch);
-        }
+            Name = "AutomaticFittingSizeNote",
+            Text = selected.IsJunction
+                ? "Size: from the connected ducts. Flows: from the sources."
+                : "Size: from the connected duct.",
+            AutoSize = true,
+            ForeColor = Color.FromArgb(83, 99, 116),
+            Margin = new Padding(4, 0, 0, 6)
+        };
+        table.Controls.Add(sizeNote, 1, table.RowCount);
+        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        table.RowCount++;
         var parameterHost = new TableLayoutPanel
         {
             Name = "AutomaticFittingParameterTable",
@@ -473,10 +484,9 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         {
             var required = (definition.SelectedItem as FittingDefinition)?.ReferenceDuctShape;
             shape.Enabled = required is null;
-            var round = (required ?? (shape.SelectedItem is DuctShape value ? value : DuctShape.Round)) == DuctShape.Round;
-            diameter.Enabled = round;
-            width.Enabled = !round;
-            height.Enabled = !round;
+            diameter.Enabled = false;
+            width.Enabled = false;
+            height.Enabled = false;
         }
     }
 
@@ -515,11 +525,18 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
             }
             else
                 input = Input($"AutomaticFittingInput_{spec.Key}", saved.ToString("0.####", CultureInfo.CurrentCulture));
-            _fittingInputs[spec.Key] = input;
+            // Round Z: an elbow's angle is the angle between its drawn ducts, so it is not a default.
+            var fromDrawing = string.Equals(spec.Key, "angle", StringComparison.OrdinalIgnoreCase)
+                              && string.Equals(FittingCatalog.SelectionGroup(definition), "Elbows", StringComparison.OrdinalIgnoreCase);
+            if (fromDrawing)
+                input.Enabled = false;
+            else
+                _fittingInputs[spec.Key] = input;
             host.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
             host.Controls.Add(new Label
             {
-                Text = string.IsNullOrWhiteSpace(spec.Unit) ? spec.Label : $"{spec.Label} ({spec.Unit})",
+                Text = (string.IsNullOrWhiteSpace(spec.Unit) ? spec.Label : $"{spec.Label} ({spec.Unit})")
+                       + (fromDrawing ? ", from the drawn ducts" : string.Empty),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoEllipsis = true
@@ -610,7 +627,7 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         Settings.Grd.NominalDuctSizeIn = Convert.ToString(((ComboBox)_controls["grilleSize"]).SelectedItem,
             CultureInfo.CurrentCulture) ?? "12x12";
         Settings.Grd.FaceSizeIn = Convert.ToDouble(((ComboBox)_controls["face"]).SelectedItem, CultureInfo.CurrentCulture);
-        Settings.Grd.NeckDiameterIn = Convert.ToDouble(((ComboBox)_controls["neck"]).SelectedItem, CultureInfo.CurrentCulture);
+        // The neck diameter follows the connected duct (round Z): the stored default is left as it is.
         Settings.Grd.LengthFt = Convert.ToDouble(((ComboBox)_controls["length"]).SelectedItem, CultureInfo.CurrentCulture);
         Settings.Grd.SlotWidthIn = Convert.ToDouble(((ComboBox)_controls["slotWidth"]).SelectedItem, CultureInfo.CurrentCulture);
         Settings.Grd.SlotCount = Convert.ToInt32(((ComboBox)_controls["slotCount"]).SelectedItem, CultureInfo.CurrentCulture);
@@ -625,11 +642,8 @@ internal sealed class AutomaticSizingInputsDialog : DpiScaledForm
         defaults.FittingCode = definition.Code;
         defaults.Shape = definition.ReferenceDuctShape
                          ?? (DuctShape)((ComboBox)_controls["shape"]).SelectedItem!;
-        defaults.DiameterM = StoredSize(Positive(_controls["diameter"], "diameter"));
-        defaults.WidthM = StoredSize(Positive(_controls["width"], "width"));
-        defaults.HeightM = StoredSize(Positive(_controls["height"], "height"));
-        if (_controls.TryGetValue("branch", out var branch))
-            defaults.BranchFraction = Math.Clamp(Positive(branch, "branch flow percentage") / 100.0, 0.01, 0.99);
+        // The size (and a junction's flow split) is calculated from the connected ducts (round Z): the stored values
+        // are left as they are.
         SaveFittingParameterValues(defaults, definition, throwOnError: true);
     }
 

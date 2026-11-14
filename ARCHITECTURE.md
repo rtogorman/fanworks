@@ -301,3 +301,16 @@ the first starts a secondary calculation drawn after the assumptions with a divi
 - `NetPathPressureView` (check boxes, Show list, `NetStaticPressureChart`) is used on the Project tab's bottom panel
   and on the Analysis tab. The chart raises `ItemClicked`; hosts set `HighlightItemId` from the drawing or table.
 
+## Drawn ducts, directions and elbows (v0.107)
+
+- `LayoutDirections` (Core): connection vectors, turn angle between two directions, slope, `CannotTurn` components,
+  `TurnDegreesThrough` an elbow, `MissingElbows`. `SystemSolver.SyncLinkedFittingInput` writes an elbow's turn angle
+  to `ElbowAngleDegrees` and to its fitting's `angle` input; `LayoutModelCheck` reports a turn at a component that
+  cannot turn the air.
+- The canvas has no connector ports. `LayoutDesignerCanvas.DuctTool` (`LayoutDuctTool`) draws a duct between two
+  components and raises `DuctDrawRequested`; connections are drawn as straight lines centre to centre.
+- `LayoutDesignerScreen.Ducts.cs`: `DrawDuctBetween` (direction, outlet and inlet choice), the slope and elbow
+  questions, `AutomaticElbowSegments` (axis runs ordered to continue the inlet and meet the outlet); the elbows are
+  inserted only on request (`AddElbowsAlongSegments`). `SavedLayoutNode.ConnectionFlexDuct` (schema 23) keeps flex
+  duct when the duct is created or auto-sized.
+

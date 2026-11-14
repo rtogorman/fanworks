@@ -162,7 +162,8 @@ internal sealed partial class LayoutDesignerScreen
         _layoutCanvas.NodeActivated += ActivateLayoutNode;
         _layoutCanvas.ConnectionActivated += ActivateLayoutConnection;
         _layoutCanvas.ConnectionDeleteRequested += RemoveLayoutConnection;
-        _layoutCanvas.PortConnectionRequested += ConnectLayoutPorts;
+        _layoutCanvas.DuctDrawRequested += (from, to, flex) => DrawDuctBetween(from, to, flex);
+        _layoutCanvas.DuctToolCancelled += () => EndDuctTool();
         _layoutCanvas.NodeDeleteRequested += RemoveLayoutNode;
         _layoutCanvas.ItemMenuRequested += ShowLayoutItemMenu;
         _layoutCanvas.LabelPlacementChanged += SaveLabelPlacement;
@@ -303,7 +304,7 @@ internal sealed partial class LayoutDesignerScreen
         _layoutStatusLabel.Dock = DockStyle.Fill;
         _layoutStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         _layoutStatusLabel.ForeColor = Color.FromArgb(72, 92, 110);
-        _layoutStatusLabel.Text = "Drag components from the ribbon onto the grid, then drag between green outlet and inlet circles to connect them. Red ducts are unsized; green ducts are sized. Double-click to edit.";
+        _layoutStatusLabel.Text = "Drag components from the ribbon onto the grid, then join them with Duct Segment (press on one component, drag to the next). Red ducts are unsized; green ducts are sized. Double-click to edit.";
         _layoutStatusLabel.AutoEllipsis = true;
 
         root.Controls.Add(toolbar, 0, 0);
@@ -812,6 +813,7 @@ internal sealed partial class LayoutDesignerScreen
         _layoutToolTips.SetToolTip(tool, $"{title}\r\n{detail}");
         tool.ToolClicked += (clickedType, clickedGroup) =>
         {
+            EndDuctTool();
             _selectedLayoutTool = clickedType;
             _selectedLayoutFittingGroup = clickedGroup;
             if (_layoutCanvas is not null)
@@ -932,6 +934,7 @@ internal sealed partial class LayoutDesignerScreen
 
     internal void ToggleLayoutRearrangeMode()
     {
+        EndDuctTool();
         _layoutRearrangeMode = !_layoutRearrangeMode;
         if (_layoutCanvas is not null)
         {
@@ -1319,7 +1322,7 @@ internal sealed partial class LayoutDesignerScreen
             node.ConnectionDeltaConfirmed = true;
             InsertLayoutNodeIntoConnection(node, ductConnection);
             _layoutStatusLabel.Text = $"Inserted {node.Id} into the existing duct. "
-                                      + $"It was split along the {insertionAxis} axis; both segments inherited its inputs and updated lengths. Review or re-size both segments as needed.";
+                                      + $"It was split along {insertionAxis}; both segments inherited its inputs and updated lengths. Review or re-size both segments as needed.";
             _layoutStatusLabel.ForeColor = Color.FromArgb(14, 111, 230);
         }
         CommitLayoutHistoryState(historyState);
@@ -1331,7 +1334,7 @@ internal sealed partial class LayoutDesignerScreen
         {
             _layoutStatusLabel.Text = type == LayoutNodeType.CalculationPoint
                 ? $"Placed {node.Id} on {LayoutConnectionCaption(insertionConnection!.Value)} without splitting the duct."
-                : $"Placed {node.Id} at the selected location without connecting it. Drag between connector circles to create a duct.";
+                : $"Placed {node.Id} at the selected location without connecting it. Use Duct Segment to draw a duct to it.";
             _layoutStatusLabel.ForeColor = type == LayoutNodeType.CalculationPoint
                 ? Color.FromArgb(14, 111, 230)
                 : Color.Firebrick;
@@ -1626,11 +1629,12 @@ internal sealed partial class LayoutDesignerScreen
             (Axis: "Y", Value: fullDelta.YM),
             (Axis: "Z", Value: fullDelta.ZM)
         };
-        var axis = connectionDelta.OrderByDescending(item => Math.Abs(item.Value)).First().Axis;
-        node.DeltaXM = axis == "X" ? fullDelta.XM * fraction : 0.0;
-        node.DeltaYM = axis == "Y" ? fullDelta.YM * fraction : 0.0;
-        node.DeltaZM = axis == "Z" ? fullDelta.ZM * fraction : 0.0;
-        return axis;
+        // Round Z: the duct is straight, so the inserted component sits on it, the same fraction along every axis.
+        var axes = connectionDelta.Where(item => Math.Abs(item.Value) >= LayoutDirections.MinimumLengthM).ToArray();
+        node.DeltaXM = fullDelta.XM * fraction;
+        node.DeltaYM = fullDelta.YM * fraction;
+        node.DeltaZM = fullDelta.ZM * fraction;
+        return axes.Length == 1 ? $"{axes[0].Axis} axis" : "its length";
     }
 
     private bool ConfirmConnectionCoordinates(SavedLayoutNode downstream, SavedLayoutNode upstream, bool secondary,
@@ -1674,20 +1678,18 @@ internal sealed partial class LayoutDesignerScreen
         return true;
     }
 
-    private IReadOnlyList<SavedLayoutNode> AddAutomaticElbowsForMultiAxisConnection(
-        SavedLayoutNode downstream, bool secondary)
+    /// <summary>
+    /// Routes a connection through 90° elbows along <paramref name="segments"/> (straight runs, each along one axis,
+    /// adding up to the connection's offset): an elbow is placed at each corner. Used only when the user chooses to
+    /// have the elbows a connection needs added automatically (round Z).
+    /// </summary>
+    private IReadOnlyList<SavedLayoutNode> AddElbowsAlongSegments(SavedLayoutNode downstream, bool secondary,
+        IReadOnlyList<(double XM, double YM, double ZM)> segments)
     {
         var parentId = secondary ? downstream.SecondaryParentNodeId : downstream.ParentNodeId;
         var parent = _host.DuctSystemScreen._ductSystem.LayoutNodes.FirstOrDefault(x =>
             string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
-        if (parent is null || !(secondary
-                ? downstream.SecondaryConnectionDeltaConfirmed
-                : downstream.ConnectionDeltaConfirmed))
-            return Array.Empty<SavedLayoutNode>();
-
-        var connectionDelta = ConnectionDelta(downstream, secondary);
-        var segments = AxisSegments(connectionDelta.XM, connectionDelta.YM, connectionDelta.ZM);
-        if (segments.Count <= 1)
+        if (parent is null || segments.Count <= 1)
             return Array.Empty<SavedLayoutNode>();
 
         InvalidateConnectionDuct(downstream, secondary);
@@ -1715,7 +1717,7 @@ internal sealed partial class LayoutDesignerScreen
                 DeltaXM = segment.XM,
                 DeltaYM = segment.YM,
                 DeltaZM = segment.ZM,
-                ElbowAngleDegrees = AutomaticElbowAngleDegrees(segments, index),
+                ElbowAngleDegrees = 90.0, // replaced by the angle of the drawn ducts when the system is solved
                 ConnectionDeltaConfirmed = true,
                 IsDefined = false
             };
@@ -1739,36 +1741,6 @@ internal sealed partial class LayoutDesignerScreen
         EnsureInitialConnectionDuct(downstream, previous, secondary);
         SyncLinkedItemMetadata(downstream);
         return inserted;
-    }
-
-    private static double AutomaticElbowAngleDegrees(
-        IReadOnlyList<(double XM, double YM, double ZM)> segments, int elbowIndex)
-    {
-        var incoming = segments[elbowIndex];
-        var outgoing = segments[elbowIndex + 1];
-        var incomingLength = Math.Sqrt(incoming.XM * incoming.XM + incoming.YM * incoming.YM
-                                      + incoming.ZM * incoming.ZM);
-        var outgoingLength = Math.Sqrt(outgoing.XM * outgoing.XM + outgoing.YM * outgoing.YM
-                                      + outgoing.ZM * outgoing.ZM);
-        if (incomingLength <= 1e-8 || outgoingLength <= 1e-8)
-            return 90.0;
-        var offsetAngle = Math.Atan2(Math.Min(incomingLength, outgoingLength),
-            Math.Max(incomingLength, outgoingLength)) * 180.0 / Math.PI;
-        return Math.Abs(offsetAngle - 45.0) <= 1.0 ? 45.0 : 90.0;
-    }
-
-    private static IReadOnlyList<(double XM, double YM, double ZM)> AxisSegments(
-        double deltaXM, double deltaYM, double deltaZM)
-    {
-        const double tolerance = 1e-8;
-        var segments = new List<(double XM, double YM, double ZM)>(3);
-        if (Math.Abs(deltaXM) > tolerance)
-            segments.Add((deltaXM, 0.0, 0.0));
-        if (Math.Abs(deltaYM) > tolerance)
-            segments.Add((0.0, deltaYM, 0.0));
-        if (Math.Abs(deltaZM) > tolerance)
-            segments.Add((0.0, 0.0, deltaZM));
-        return segments;
     }
 
     private Point GridPointAfterAxisDelta(Point start, double deltaXM, double deltaYM, double deltaZM)
@@ -1966,7 +1938,8 @@ internal sealed partial class LayoutDesignerScreen
                     upstreamGrid.X, upstreamGrid.Y);
                 length = UnitConversions.FeetToM(Math.Max(1.0, gridDistance * 5.0));
             }
-            var material = DuctMaterialCatalog.All.First(x => x.Name == "Galvanized Spiral Duct");
+            var material = FlexMaterialFor(downstream, secondary)
+                           ?? DuctMaterialCatalog.All.First(x => x.Name == "Galvanized Spiral Duct");
             var increment = _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM > 0
                 ? _host.DuctSystemScreen._ductSystem.DefaultSizingIncrementM
                 : UnitConversions.InchesToM(0.5);
@@ -2077,9 +2050,8 @@ internal sealed partial class LayoutDesignerScreen
             else
                 node.ConnectionDeltaConfirmed = true;
             InvalidateConnectionDuct(node, secondaryConnection);
-            var elbows = AddAutomaticElbowsForMultiAxisConnection(node, secondaryConnection);
-            if (elbows.Count == 0)
-                EnsureInitialConnectionDuct(node, parent, secondaryConnection);
+            // Round Z: the duct runs straight between the two components; no elbows are added on their own.
+            EnsureInitialConnectionDuct(node, parent, secondaryConnection);
         }
         SyncLinkedItemMetadata(node);
         CommitLayoutHistoryState(historyState);
@@ -2917,19 +2889,14 @@ internal sealed partial class LayoutDesignerScreen
         }
 
         SyncLinkedItemMetadata(node);
+        // Round Z: ducts run straight between components; no elbows are added on their own.
         if (newParent is not null)
-        {
-            var elbows = AddAutomaticElbowsForMultiAxisConnection(node, secondary: false);
-            if (elbows.Count == 0)
-                EnsureInitialConnectionDuct(node, newParent, secondary: false);
-        }
+            EnsureInitialConnectionDuct(node, newParent, secondary: false);
         if (displacedChild is not null)
         {
             SetDefaultNodeDeltas(displacedChild, node);
             displacedChild.ConnectionDeltaConfirmed = true;
-            var elbows = AddAutomaticElbowsForMultiAxisConnection(displacedChild, secondary: false);
-            if (elbows.Count == 0)
-                EnsureInitialConnectionDuct(displacedChild, node, secondary: false);
+            EnsureInitialConnectionDuct(displacedChild, node, secondary: false);
             SyncLinkedItemMetadata(displacedChild);
         }
         return true;
@@ -3252,30 +3219,44 @@ internal sealed partial class LayoutDesignerScreen
     }
 
     private void ConnectLayoutPorts(SavedLayoutNode upstream, SavedLayoutNode downstream,
-        int outputIndex, int inputIndex)
+        int outputIndex, int inputIndex) => ConnectLayoutNodes(upstream, downstream, outputIndex, inputIndex, flex: false);
+
+    /// <summary>
+    /// Joins two components with a duct (round Z), centre to centre. The duct runs straight along the offset between
+    /// them, so it may run on a diagonal in plan. Before anything changes the user is asked:
+    /// <list type="bullet">
+    /// <item>when the duct would slope up or down, whether that is intended (No draws nothing);</item>
+    /// <item>when the duct would turn the air at a component that cannot turn it (a transition, damper, VAV box, coil,
+    /// filter or custom component), whether to add the elbows automatically or add the elbow themselves (nothing is
+    /// drawn). Elbows are never added without asking; an elbow's angle comes from its drawn ducts.</item>
+    /// </list>
+    /// Returns true when the connection was made.
+    /// </summary>
+    internal bool ConnectLayoutNodes(SavedLayoutNode upstream, SavedLayoutNode downstream,
+        int outputIndex, int inputIndex, bool flex)
     {
         if (downstream.Type == LayoutNodeType.Reservoir && IsSpaceSourceRole(downstream.SpaceRole))
         {
             MessageBox.Show(_host, "A Space Source cannot have an upstream duct.",
                 "Invalid Space Connection", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            return false;
         }
         if (upstream.Id == downstream.Id || IsLayoutDescendant(upstream, downstream))
         {
-            MessageBox.Show(_host, "That port connection would create a circular layout.", "Invalid Connection",
+            MessageBox.Show(_host, "That duct would create a closed loop.", "Invalid Connection",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            return false;
         }
         var inputCapacity = LayoutInletCapacity(downstream);
         if (inputIndex >= inputCapacity || ConnectedLayoutInputCount(downstream) >= inputCapacity)
         {
-            MessageBox.Show(_host, $"{downstream.Id} has no unused inlet ports.", "No Inlet Available",
+            MessageBox.Show(_host, $"{downstream.Id} has no free inlet.", "No Inlet Available",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            return false;
         }
         var secondary = inputIndex == 1;
         if (secondary && FittingCatalog.InletPortCount(downstream.FittingGroup) < 2)
-            return;
+            return false;
         var existingOutputs = _host.DuctSystemScreen._ductSystem.LayoutNodes.Count(x =>
             (x.ParentNodeId == upstream.Id && !(x.Id == downstream.Id && !secondary))
             || (x.SecondaryParentNodeId == upstream.Id && !(x.Id == downstream.Id && secondary)));
@@ -3286,9 +3267,9 @@ internal sealed partial class LayoutDesignerScreen
                 : 1;
         if (existingOutputs >= outputCapacity)
         {
-            MessageBox.Show(_host, $"{upstream.Id} has no unused outlet ports.", "No Outlet Available",
+            MessageBox.Show(_host, $"{upstream.Id} has no free outlet.", "No Outlet Available",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            return false;
         }
 
         var oldDelta = (downstream.DeltaXM, downstream.DeltaYM, downstream.DeltaZM,
@@ -3306,7 +3287,42 @@ internal sealed partial class LayoutDesignerScreen
             downstream.SecondaryDeltaZM = oldDelta.SecondaryDeltaZM;
             downstream.ConnectionDeltaConfirmed = oldDelta.ConnectionDeltaConfirmed;
             downstream.SecondaryConnectionDeltaConfirmed = oldDelta.SecondaryConnectionDeltaConfirmed;
-            return;
+            return false;
+        }
+        void RestoreDelta()
+        {
+            downstream.DeltaXM = oldDelta.DeltaXM;
+            downstream.DeltaYM = oldDelta.DeltaYM;
+            downstream.DeltaZM = oldDelta.DeltaZM;
+            downstream.SecondaryDeltaXM = oldDelta.SecondaryDeltaXM;
+            downstream.SecondaryDeltaYM = oldDelta.SecondaryDeltaYM;
+            downstream.SecondaryDeltaZM = oldDelta.SecondaryDeltaZM;
+            downstream.ConnectionDeltaConfirmed = oldDelta.ConnectionDeltaConfirmed;
+            downstream.SecondaryConnectionDeltaConfirmed = oldDelta.SecondaryConnectionDeltaConfirmed;
+        }
+
+        // Round Z: a sloping duct is drawn only when the user agrees to it.
+        var vector = LayoutDirections.ConnectionVector(downstream, secondary);
+        if (LayoutDirections.IsSloped(vector) && !ConfirmSlopedDuct(upstream, downstream, vector))
+        {
+            RestoreDelta();
+            _layoutStatusLabel.Text = $"No duct drawn from {upstream.Id} to {downstream.Id}: it would slope.";
+            _layoutStatusLabel.ForeColor = Color.FromArgb(72, 92, 110);
+            return false;
+        }
+        // Round Z: an elbow is needed where a component that cannot turn the air would turn it. Ask; never add one
+        // without asking.
+        IReadOnlyList<(double XM, double YM, double ZM)>? elbowSegments = null;
+        if (ElbowNeededFor(upstream, downstream, vector) is { } need)
+        {
+            elbowSegments = AutomaticElbowSegments(vector, need.UpstreamInlet, need.DownstreamOutlet);
+            if (!AskToAddElbows(need.Message, elbowSegments is not null))
+            {
+                RestoreDelta();
+                _layoutStatusLabel.Text = $"No duct drawn from {upstream.Id} to {downstream.Id}. Place an elbow where the duct turns, then draw the ducts to it.";
+                _layoutStatusLabel.ForeColor = Color.DarkOrange;
+                return false;
+            }
         }
 
         var historyState = CaptureLayoutHistoryState();
@@ -3338,7 +3354,13 @@ internal sealed partial class LayoutDesignerScreen
             downstream.BranchId = upstream.BranchId;
         if (downstream.AirflowM3PerS <= 0)
             downstream.AirflowM3PerS = upstream.AirflowM3PerS;
-        var elbows = AddAutomaticElbowsForMultiAxisConnection(downstream, secondary);
+        if (secondary)
+            downstream.SecondaryConnectionFlexDuct = flex;
+        else
+            downstream.ConnectionFlexDuct = flex;
+        var elbows = elbowSegments is null
+            ? Array.Empty<SavedLayoutNode>()
+            : AddElbowsAlongSegments(downstream, secondary, elbowSegments);
         if (elbows.Count == 0)
             EnsureInitialConnectionDuct(downstream, upstream, secondary);
         SyncLinkedItemMetadata(downstream);
@@ -3346,7 +3368,11 @@ internal sealed partial class LayoutDesignerScreen
         _host.DuctSystemScreen.SaveDuctSystem();
         RefreshLayoutDesigner();
         _host.DuctSystemScreen.RefreshDuctSystemGrid();
-        _layoutStatusLabel.Text = $"Connected outlet {outputIndex + 1} on {upstream.Id} to inlet {inputIndex + 1} on {downstream.Id}. The new duct is red until sized.";
+        _layoutStatusLabel.Text = $"{(flex ? "Flex duct" : "Duct")} drawn from {upstream.Id} to {downstream.Id}"
+                                  + (elbows.Count > 0 ? $" with {elbows.Count} elbow(s) added" : string.Empty)
+                                  + ". It is red until sized.";
+        _layoutStatusLabel.ForeColor = Color.FromArgb(30, 100, 55);
+        return true;
     }
 
     internal string LayoutNodeCaption(SavedLayoutNode node) => node.Id;
@@ -3734,32 +3760,6 @@ internal sealed partial class LayoutDesignerScreen
     /// <summary>Opens the duct editor of a drawing connection (Selection Inspector "Edit Inputs").</summary>
     internal void EditLayoutConnection(LayoutConnectionRef connection) => ActivateLayoutConnection(connection);
 
-    private bool EnsureExplicitElbowsForAxisChanges()
-    {
-        var changed = false;
-        var connections = _host.DuctSystemScreen._ductSystem.LayoutNodes.SelectMany(downstream => new[]
-        {
-            string.IsNullOrWhiteSpace(downstream.ParentNodeId)
-                ? (LayoutConnectionRef?)null : new LayoutConnectionRef(downstream, false),
-            string.IsNullOrWhiteSpace(downstream.SecondaryParentNodeId)
-                ? (LayoutConnectionRef?)null : new LayoutConnectionRef(downstream, true)
-        }).Where(connection => connection.HasValue).Select(connection => connection!.Value).ToArray();
-        foreach (var connection in connections)
-        {
-            var downstream = connection.Downstream;
-            var delta = ConnectionDelta(downstream, connection.Secondary);
-            if (AxisSegments(delta.XM, delta.YM, delta.ZM).Count <= 1)
-                continue;
-            if (connection.Secondary)
-                downstream.SecondaryConnectionDeltaConfirmed = true;
-            else
-                downstream.ConnectionDeltaConfirmed = true;
-            if (AddAutomaticElbowsForMultiAxisConnection(downstream, connection.Secondary).Count > 0)
-                changed = true;
-        }
-        return changed;
-    }
-
     private void ApplyLayoutScaleSettings()
     {
         if (_layoutCanvas is null)
@@ -3945,6 +3945,7 @@ internal sealed partial class LayoutDesignerScreen
     {
         if (_layoutRearrangeMode)
             ToggleLayoutRearrangeMode();
+        EndDuctTool();
         _selectedLayoutTool = null;
         _selectedLayoutFittingGroup = null;
         if (_layoutCanvas is not null)
@@ -4036,8 +4037,9 @@ internal sealed partial class LayoutDesignerScreen
         }
 
         UpdateCalculatedLayoutValues();
-        foreach (var node in order.Where(x => x.IsDefined && !newlySized.Contains(x.Sequence)
-                                               && (x.Type == LayoutNodeType.Grd || LayoutTopology.LinkedFitting(document, x) is not null)))
+        foreach (var node in order.Where(x => x.IsDefined
+                                               && (x.Type == LayoutNodeType.Grd
+                                                   || !newlySized.Contains(x.Sequence) && LayoutTopology.LinkedFitting(document, x) is not null)))
         {
             if (node.SizeLocked)
             {
@@ -4048,7 +4050,7 @@ internal sealed partial class LayoutDesignerScreen
             {
                 if (node.Type == LayoutNodeType.Grd)
                 {
-                    if (ReselectGrdNode(node))
+                    if (ReselectGrdNode(node) && !newlySized.Contains(node.Sequence))
                         componentCount++;
                 }
                 else if (LayoutTopology.LinkedFitting(document, node) is { } fitting && SystemSolver.TakesConnectedDuctSize(fitting))
@@ -4086,6 +4088,34 @@ internal sealed partial class LayoutDesignerScreen
     }
 
     /// <summary>
+    /// The Price SCD neck (for the diffuser's face size) that fits the duct connected to <paramref name="node"/>: the
+    /// smallest published neck at least as large as the duct's diameter (equivalent diameter of a rectangular duct),
+    /// or the largest neck when the duct is bigger than all of them. Null when no sized duct is connected.
+    /// </summary>
+    internal int? NeckForConnectedDuct(SavedLayoutNode node)
+    {
+        if (DuctForConnection(node, secondary: false) is not { } duct)
+            return null;
+        double diameterIn;
+        try
+        {
+            diameterIn = UnitConversions.MToInches(duct.Shape == DuctShape.Round
+                ? duct.DiameterM
+                : duct.CreateGeometry().HuebscherDiameterM);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        if (!(diameterIn > 0))
+            return null;
+        var necks = GrdPerformanceCatalog.PriceNeckDiameters(Convert.ToInt32(node.GrdFaceSizeIn));
+        if (necks.Count == 0)
+            return null;
+        return necks.Cast<int?>().FirstOrDefault(neck => neck >= diameterIn - 0.01) ?? necks[^1];
+    }
+
+    /// <summary>
     /// Re-selects a defined GRD at its current airflow with its own type and sizes (Auto Size Ductwork). Returns false
     /// for a GRD type with no catalog (its entered pressure drop is kept).
     /// </summary>
@@ -4098,7 +4128,12 @@ internal sealed partial class LayoutDesignerScreen
         if (string.Equals(node.GrdType, "Grille", StringComparison.OrdinalIgnoreCase))
             selection = GrdPerformanceCatalog.AutoSelectTitus350R(cfm, node.GrdNominalDuctSizeIn);
         else if (string.Equals(node.GrdType, "Diffuser", StringComparison.OrdinalIgnoreCase))
+        {
+            // Round Z: the neck matches the duct connected to the diffuser.
+            if (NeckForConnectedDuct(node) is int neck)
+                node.GrdNeckDiameterIn = neck;
             selection = GrdPerformanceCatalog.SelectPriceScd(cfm, Convert.ToInt32(node.GrdFaceSizeIn), Convert.ToInt32(node.GrdNeckDiameterIn));
+        }
         else if (string.Equals(node.GrdType, "Linear Diffuser TBD-80 D", StringComparison.OrdinalIgnoreCase))
             selection = GrdPerformanceCatalog.SelectTitusTbd80(cfm, Convert.ToInt32(node.GrdLengthFt), node.GrdSlotWidthIn, node.GrdSlotCount);
         else
@@ -4230,8 +4265,24 @@ internal sealed partial class LayoutDesignerScreen
             }
             else
             {
-                straight = common * (1.0 - branchFraction);
-                branch = common * branchFraction;
+                // Round Z: the outlet flows are the solved flows to the main and branch connections (set by the
+                // sources and sinks); the criteria's stored split is only a fallback before they are known.
+                var outlets = LayoutTopology.ConnectionsFrom(_host.DuctSystemScreen._ductSystem, node).ToArray();
+                var mainFlow = outlets.Where(x => string.Equals(x.Downstream.BranchId, node.BranchId, StringComparison.OrdinalIgnoreCase))
+                    .Sum(x => Math.Max(0.0, x.Downstream.AirflowM3PerS));
+                var branchFlow = outlets.Where(x => !string.Equals(x.Downstream.BranchId, node.BranchId, StringComparison.OrdinalIgnoreCase))
+                    .Sum(x => Math.Max(0.0, x.Downstream.AirflowM3PerS));
+                if (mainFlow > 0 && branchFlow > 0)
+                {
+                    straight = mainFlow;
+                    branch = branchFlow;
+                    common = mainFlow + branchFlow;
+                }
+                else
+                {
+                    straight = common * (1.0 - branchFraction);
+                    branch = common * branchFraction;
+                }
             }
             var junction = new JunctionFlowData(defaults.JunctionPath, common, geometry,
                 straight, geometry, branch, geometry);
@@ -4281,7 +4332,9 @@ internal sealed partial class LayoutDesignerScreen
             throw new InvalidOperationException("The graph connection has no measurable length.");
 
         var defaults = _host.DuctSystemScreen._ductSystem.AutomaticSizing.Duct;
-        var material = DuctMaterialCatalog.All.FirstOrDefault(x =>
+        // A connection drawn as flex duct stays flex duct (round Z); others use the criteria's material.
+        var material = FlexMaterialFor(downstream, connection.Secondary)
+                       ?? DuctMaterialCatalog.All.FirstOrDefault(x =>
                            string.Equals(x.Name, defaults.MaterialName, StringComparison.OrdinalIgnoreCase))
                        ?? DuctMaterialCatalog.All.First(x => x.Name == "Galvanized Spiral Duct");
         var shape = MainForm.RequiredShapeForMaterial(material) ?? defaults.Shape;
@@ -4557,6 +4610,16 @@ internal sealed partial class LayoutDesignerScreen
             }
             if (keyData == Keys.Escape && CancelSelectedLayoutTool())
                 return true;
+            if (keyData == Keys.Escape && ActiveDuctTool != LayoutDuctTool.None)
+            {
+                if (_layoutCanvas?.CancelDuctDrag() != true)
+                {
+                    EndDuctTool();
+                    _layoutStatusLabel.Text = "Duct drawing ended.";
+                    _layoutStatusLabel.ForeColor = Color.FromArgb(72, 92, 110);
+                }
+                return true;
+            }
             // Esc deselects and Delete removes the selected (for example just-dropped) item wherever the keyboard
             // focus is on the Project page, except while typing in a text box or list.
             if (keyData == Keys.Escape && _layoutCanvas?.ClearSelection() == true)

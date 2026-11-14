@@ -5,7 +5,7 @@ Living record of the correction plan from the v0.92.0 code review
 before starting a major task. If work is interrupted, read this file and inspect the code
 (and `git log`) before resuming.
 
-Last updated: 2026-11-13 (round Y, v0.106.1); round X v0.105.1; round W v0.104.0; round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
+Last updated: 2026-11-14 (round Z, v0.107.0); round Y v0.106.1; round X v0.105.1; round W v0.104.0; round V v0.103.0; earlier: 2026-11-09 (correction plan done; INTERFACE REDESIGN in progress — see "Interface redesign (v0.96)" at the end)
 
 ## Where things live
 
@@ -661,3 +661,28 @@ and still carries 800 cfm; format 22 round-trip and format-21 upgrade), interfac
 v0.106.1: the canvas toolbar overflowed at about 1,536 px logical width (Ryan's laptop at 150 %): it scrolled sideways,
 clipped its text and hid the Source / Sink and Component Lock editors. It now wraps (root row AutoSize, toolbar
 AutoSize + WrapContents, minimum 40 px). Checks: interface 24/24 at 100 %, 150 % and 1080p.
+
+### Icon studies (2026-11-14 09:31)
+
+Three original component icon styles (A Line & Tint, B Category Duotone, C Schematic Tiles) for all 16 ribbon
+components, on the Design canvas "FanWorks component icon studies". Waiting for Ryan's choice before replacing the
+icons in the app. Generator: `/home/claude/icons/gen.py` (scratch, not in the repo).
+
+### Round Z (requested 2026-11-14 10:05, after v0.106.1) — v0.107.0
+
+| Request | Done |
+|---|---|
+| Connector dots not user-friendly | Removed (drawing and hit-testing); ducts drawn with the new tools |
+| Duct Segment / Flex Duct Segment | Ribbon Ductwork group; press on a component, drag to the next, release; centre to centre; tool stays on until Select/Esc |
+| 45s replaced by an automatic 90 | Automatic elbow splitting removed everywhere; diagonal ducts allowed; elbow angle from the drawn ducts (solver) |
+| Sloped duct | Yes/No question; No draws nothing |
+| Elbow needed at a non-elbow | Question: add automatically (90° elbows along axis runs, first run continues the inlet) or add it myself (nothing drawn); impossible automatic case explained |
+| Criteria: calculated sizes | Fitting D/W/H greyed (elbow, transition, split, merge, damper, terminal), elbow angle greyed, branch/second-inlet % removed (Auto Size uses solved outlet flows), GRD neck greyed (Auto Size picks the catalog neck ≥ duct diameter) |
+
+Decisions (tell Ryan): the coordinate confirmation dialog still appears for each new duct (isometric views cannot tell
+a drop from a diagonal); "add it myself" draws nothing; a turn at a component that cannot turn is a model error
+(existing drawings may show it); Fan/Plenum, junctions, fans, AHUs, spaces and GRDs may have ducts in any direction.
+Checks: engine 98/98 (new `DuctDrawingTests`: 45°/45°/90° elbows, missing elbow at a transition, slope 26.565° for
+5 ft over 10 ft), interface 24/24 at 100 %, 150 % and 1080p (drag-drawn flex diagonal, declined/accepted elbow and
+slope questions, greyed criteria).
+

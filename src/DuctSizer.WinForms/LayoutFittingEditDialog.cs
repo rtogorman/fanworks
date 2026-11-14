@@ -49,8 +49,15 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
     private bool _updatingJunctionFlows;
     internal SavedFitting? Result { get; private set; }
 
-    internal LayoutFittingEditDialog(SavedFitting fitting, string fittingGroup, UnitSystem units)
+    /// <summary>
+    /// The angle the air turns through this elbow, from its drawn inlet and outlet ducts (round Z), or null when either
+    /// is not drawn yet. When set, the elbow's angle input shows it and cannot be changed.
+    /// </summary>
+    private readonly double? _angleFromDrawing;
+
+    internal LayoutFittingEditDialog(SavedFitting fitting, string fittingGroup, UnitSystem units, double? angleFromDrawing = null)
     {
+        _angleFromDrawing = angleFromDrawing;
         _original = fitting;
         _units = units;
         Text = fitting.Sequence > 0 ? $"Edit {fitting.Id}" : "Define Fitting";
@@ -306,17 +313,30 @@ internal sealed class LayoutFittingEditDialog : DpiScaledForm, IInlineEditable
                 var saved = !_initializing && !string.Equals(_original.FittingCode, definition.Code, StringComparison.OrdinalIgnoreCase)
                     ? spec.DefaultValue
                     : _original.Inputs.GetValueOrDefault(spec.Key, spec.DefaultValue);
-                var input = new TextBox { Text = saved.ToString("0.####", CultureInfo.CurrentCulture), Dock = DockStyle.Fill };
+                var fromDrawing = _angleFromDrawing is double drawnAngle
+                                  && string.Equals(spec.Key, "angle", StringComparison.OrdinalIgnoreCase)
+                                  && string.Equals(FittingCatalog.SelectionGroup(definition), "Elbows", StringComparison.OrdinalIgnoreCase);
+                if (fromDrawing)
+                    saved = _angleFromDrawing!.Value;
+                var input = new TextBox
+                {
+                    Text = saved.ToString("0.####", CultureInfo.CurrentCulture),
+                    Dock = DockStyle.Fill,
+                    ReadOnly = fromDrawing,
+                    Enabled = !fromDrawing,
+                    Name = fromDrawing ? "LayoutFittingAngleFromDrawing" : string.Empty
+                };
                 input.TextChanged += (_, _) => InvalidateCalculation();
                 control = input;
             }
             _inputControls[spec.Key] = control;
+            var angleCaption = control.Name == "LayoutFittingAngleFromDrawing" ? ", from the drawn ducts" : string.Empty;
             _parameterInlineRows.Add(new InlineEditRow(
-                string.IsNullOrWhiteSpace(spec.Unit) ? spec.Label : $"{spec.Label} ({spec.Unit})", control));
+                (string.IsNullOrWhiteSpace(spec.Unit) ? spec.Label : $"{spec.Label} ({spec.Unit})") + angleCaption, control));
             _parameters.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
             _parameters.Controls.Add(new Label
             {
-                Text = string.IsNullOrWhiteSpace(spec.Unit) ? spec.Label : $"{spec.Label} ({spec.Unit})",
+                Text = (string.IsNullOrWhiteSpace(spec.Unit) ? spec.Label : $"{spec.Label} ({spec.Unit})") + angleCaption,
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoEllipsis = true

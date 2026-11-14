@@ -15,9 +15,13 @@ internal enum LayoutDuctInsertionChoice
     PlaceUnconnected,
     Cancel
 }
-internal readonly record struct LayoutPortRef(SavedLayoutNode Node, bool IsOutput, int Index, Point? Anchor = null);
-internal readonly record struct LayoutPortConnectionRequest(SavedLayoutNode Upstream, SavedLayoutNode Downstream,
-    int OutputIndex, int InputIndex);
+/// <summary>The duct-drawing tool chosen on the ribbon (round Z): none, rigid duct or flexible duct.</summary>
+internal enum LayoutDuctTool
+{
+    None,
+    Rigid,
+    Flex
+}
 internal readonly record struct LayoutEditableAxes(bool X, bool Y, bool Z);
 
 /// <summary>

@@ -21,6 +21,8 @@ internal sealed class MainRibbon
 
     private RibbonButton? _selectButton;
     private RibbonButton? _moveButton;
+    private RibbonButton? _ductButton;
+    private RibbonButton? _flexDuctButton;
     private RibbonButton? _highlightButton;
     private RibbonButton? _criticalOnlyButton;
     private RibbonButton? _ductCalculatorButton;
@@ -147,6 +149,23 @@ internal sealed class MainRibbon
                 Layout.ToggleLayoutRearrangeMode();
                 SynchronizeWithPage();
             }, 44);
+
+        // Round Z: ducts are drawn with these tools, centre to centre between components.
+        var ductwork = AddGroup(page, "RibbonDuctworkGroup", "Ductwork");
+        _ductButton = AddButton(ductwork, "RibbonDuctSegmentButton", "Duct\nSegment", RibbonIcon.DuctSegment,
+            "Draw a duct: press on a component, drag to the next one and release. The duct runs centre to centre.",
+            () =>
+            {
+                Layout.UseDuctTool(flex: false);
+                SynchronizeWithPage();
+            }, 54);
+        _flexDuctButton = AddButton(ductwork, "RibbonFlexDuctSegmentButton", "Flex Duct\nSegment", RibbonIcon.FlexDuct,
+            "Draw a flexible duct (fully extended flex duct) the same way.",
+            () =>
+            {
+                Layout.UseDuctTool(flex: true);
+                SynchronizeWithPage();
+            }, 60);
 
         AddComponentGroup(page, "RibbonSpacesGroup", "Spaces", new (LayoutNodeType, string, string, string?)[]
         {
@@ -322,7 +341,11 @@ internal sealed class MainRibbon
         if (_moveButton is not null)
             _moveButton.Checked = Layout._layoutRearrangeMode;
         if (_selectButton is not null)
-            _selectButton.Checked = !Layout._layoutRearrangeMode;
+            _selectButton.Checked = !Layout._layoutRearrangeMode && Layout.ActiveDuctTool == LayoutDuctTool.None;
+        if (_ductButton is not null)
+            _ductButton.Checked = Layout.ActiveDuctTool == LayoutDuctTool.Rigid;
+        if (_flexDuctButton is not null)
+            _flexDuctButton.Checked = Layout.ActiveDuctTool == LayoutDuctTool.Flex;
         if (_highlightButton is not null)
             _highlightButton.Checked = Layout._layoutCriticalPathHighlighted;
         if (_criticalOnlyButton is not null)

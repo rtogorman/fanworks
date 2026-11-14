@@ -300,12 +300,18 @@ public static class SystemSolver
 
     private static void SyncLinkedFittingInput(DuctSystemDocument document, SavedLayoutNode node)
     {
+        // Round Z: an elbow's angle is the angle the air turns between its drawn inlet and outlet ducts.
+        var elbowAngle = LayoutDirections.IsElbow(node) ? LayoutDirections.TurnDegreesThrough(document, node) : null;
+        if (elbowAngle is double angle)
+            node.ElbowAngleDegrees = Math.Round(angle, 1);
         if (node.LinkedFittingSequence is not int fittingSequence)
             return;
         var fitting = document.Fittings.FirstOrDefault(x => x.Sequence == fittingSequence);
         if (fitting is null)
             return;
         fitting.LayoutId = node.Id;
+        if (elbowAngle is not null && fitting.Inputs.ContainsKey("angle"))
+            fitting.Inputs["angle"] = node.ElbowAngleDegrees;
         SyncReferenceSize(document, node, fitting);
         if (node.AirflowOverride)
             return;

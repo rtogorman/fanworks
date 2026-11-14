@@ -12,8 +12,6 @@ internal sealed class LayoutDesignerCanvas : Panel
     private const int BaseGridSize = 56;
     private SavedLayoutNode? _dragNode;
     private Point _mouseDown;
-    private LayoutPortRef? _connectionStart;
-    private Point _connectionMouse;
     private string? _selectedNodeId;
     private string? _selectedConnectionKey;
     private LayoutConnectionRef? _selectedConnection;
@@ -63,6 +61,43 @@ internal sealed class LayoutDesignerCanvas : Panel
     /// <summary>A label was right-clicked: its key and the pointer position.</summary>
     internal event Action<string, Point>? LabelMenuRequested;
     internal LayoutNodeType? SelectedTool { get; set; }
+
+    /// <summary>
+    /// Duct drawing (round Z): with Duct Segment or Flex Duct Segment chosen, press on a component, drag to another and
+    /// release to join them with a duct, centre to centre. The tool stays on for the next duct until Select is chosen
+    /// or Esc is pressed.
+    /// </summary>
+    internal LayoutDuctTool DuctTool
+    {
+        get => _ductTool;
+        set
+        {
+            _ductTool = value;
+            _ductStart = null;
+            _ductHover = null;
+            Cursor = value == LayoutDuctTool.None ? Cursors.Hand : Cursors.Cross;
+            Invalidate();
+        }
+    }
+
+    /// <summary>Abandons a duct being dragged. Returns false when none was.</summary>
+    internal bool CancelDuctDrag()
+    {
+        if (_ductStart is null)
+            return false;
+        _ductStart = null;
+        Capture = false;
+        Invalidate();
+        return true;
+    }
+
+    /// <summary>A duct was drawn from the first component to the second; true for flexible duct.</summary>
+    internal event Action<SavedLayoutNode, SavedLayoutNode, bool>? DuctDrawRequested;
+
+    private LayoutDuctTool _ductTool;
+    private SavedLayoutNode? _ductStart;
+    private SavedLayoutNode? _ductHover;
+    private Point _ductMouse;
     internal bool RearrangeMode { get; set; }
     internal bool ShowToScale { get; set; }
     internal double FeetPerGridCell { get; set; } = 1.0;
@@ -103,7 +138,6 @@ internal sealed class LayoutDesignerCanvas : Panel
     internal event Action<SavedLayoutNode>? NodeActivated;
     internal event Action<LayoutConnectionRef>? ConnectionActivated;
     internal event Action<LayoutConnectionRef>? ConnectionDeleteRequested;
-    internal event Action<SavedLayoutNode, SavedLayoutNode, int, int>? PortConnectionRequested;
     internal event Action<SavedLayoutNode>? NodeDeleteRequested;
 
     /// <summary>Raised when the selected item was right-clicked, with the pointer position on the drawing.</summary>
@@ -305,11 +339,7 @@ internal sealed class LayoutDesignerCanvas : Panel
             DrawConnection(e.Graphics, connection, nodes);
         foreach (var node in nodes)
             DrawNode(e.Graphics, node, Connections(nodes).Any(x => ParentId(x) == node.Id || x.Downstream.Id == node.Id));
-        if (_connectionStart is LayoutPortRef startPort)
-        {
-            using var preview = new Pen(Color.FromArgb(43, 150, 96), Math.Max(2F, 3F * ZoomFactor)) { DashStyle = DashStyle.Dash };
-            e.Graphics.DrawLine(preview, startPort.Anchor ?? PortPoint(startPort.Node, true, startPort.Index), _connectionMouse);
-        }
+        DrawDuctToolFeedback(e.Graphics);
         DrawAxisLegend(e.Graphics);
         DrawViewCube(e.Graphics);
     }
@@ -452,7 +482,8 @@ internal sealed class LayoutDesignerCanvas : Panel
             return;
         }
         // Labels first: drag a label, or the end of its leader; right-click offers the label menu.
-        if (SelectedTool is null && !RearrangeMode && HitTestLabel(e.Location, out var onLeaderHandle) is string labelKey)
+        if (SelectedTool is null && _ductTool == LayoutDuctTool.None && !RearrangeMode
+            && HitTestLabel(e.Location, out var onLeaderHandle) is string labelKey)
         {
             if (e.Button == MouseButtons.Right)
             {
@@ -471,14 +502,18 @@ internal sealed class LayoutDesignerCanvas : Panel
                 return;
             }
         }
-        if (!RearrangeMode && e.Button == MouseButtons.Left
-            && HitTestPort(e.Location) is LayoutPortRef port)
+        if (_ductTool != LayoutDuctTool.None && !RearrangeMode && e.Button == MouseButtons.Left)
         {
-            _connectionStart = port;
-            _connectionMouse = e.Location;
-            _dragNode = null;
-            Invalidate();
-            return;
+            // Duct drawing: press on the component the duct starts from (pressing on empty grid pans as usual).
+            if (HitTest(e.Location) is SavedLayoutNode start && start.Type != LayoutNodeType.CalculationPoint)
+            {
+                _ductStart = start;
+                _ductMouse = e.Location;
+                _dragNode = null;
+                Capture = true;
+                Invalidate();
+                return;
+            }
         }
         _dragNode = HitTest(e.Location);
         if (e.Button == MouseButtons.Left && _dragNode is not null)
@@ -547,18 +582,15 @@ internal sealed class LayoutDesignerCanvas : Panel
             Cursor = Cursors.Hand;
             return;
         }
-        if (e.Button == MouseButtons.Left && _connectionStart is LayoutPortRef source)
+        if (e.Button == MouseButtons.Left && _ductStart is SavedLayoutNode from)
         {
-            var target = HitTestPort(e.Location);
-            _connectionStart = null;
+            var to = DuctTarget(e.Location, from);
+            _ductStart = null;
+            _ductHover = null;
+            Capture = false;
             Invalidate();
-            if (target is LayoutPortRef destination
-                && destination.Node.Id != source.Node.Id)
-            {
-                var request = CreateGestureConnectionRequest(source.Node, destination.Node);
-                PortConnectionRequested?.Invoke(request.Upstream, request.Downstream,
-                    request.OutputIndex, request.InputIndex);
-            }
+            if (to is not null)
+                DuctDrawRequested?.Invoke(from, to, _ductTool == LayoutDuctTool.Flex);
             return;
         }
         if (e.Button == MouseButtons.Left && _dragNode is not null && _orbitView is null
@@ -620,11 +652,19 @@ internal sealed class LayoutDesignerCanvas : Panel
             Cursor = Cursors.SizeAll;
             return;
         }
-        if (_connectionStart is not null)
+        if (_ductTool != LayoutDuctTool.None && !_panning)
         {
-            _connectionMouse = e.Location;
+            // Duct drawing: follow the pointer and highlight the component the duct would join.
+            _ductMouse = e.Location;
+            var hover = _ductStart is null
+                ? HitTest(e.Location) is { Type: not LayoutNodeType.CalculationPoint } over ? over : null
+                : DuctTarget(e.Location, _ductStart);
+            if (!ReferenceEquals(hover, _ductHover) || _ductStart is not null)
+            {
+                _ductHover = hover;
+                Invalidate();
+            }
             Cursor = Cursors.Cross;
-            Invalidate();
             return;
         }
         if (_orbitView is not null)
@@ -640,7 +680,7 @@ internal sealed class LayoutDesignerCanvas : Panel
             ? Cursors.SizeAll
             : HitTest(e.Location) is not null && RearrangeMode
             ? Cursors.SizeAll
-            : (!RearrangeMode && HitTestPort(e.Location) is not null) || HitTest(e.Location) is not null || HitTestConnection(e.Location) is not null
+            : HitTest(e.Location) is not null || HitTestConnection(e.Location) is not null
             ? Cursors.Hand
             : SelectedTool is not null ? Cursors.Cross : Cursors.Hand;
     }
@@ -659,9 +699,25 @@ internal sealed class LayoutDesignerCanvas : Panel
         EmptyGridClicked?.Invoke(grid);
     }
 
+    /// <summary>Raised when Esc ends duct drawing.</summary>
+    internal event Action? DuctToolCancelled;
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        if (e.KeyCode == Keys.Escape && _ductTool != LayoutDuctTool.None)
+        {
+            if (_ductStart is not null)
+            {
+                _ductStart = null;
+                Capture = false;
+                Invalidate();
+            }
+            else
+                DuctToolCancelled?.Invoke();
+            e.Handled = true;
+            return;
+        }
         if (e.KeyCode != Keys.Delete)
             return;
         DeleteSelectedItem();
@@ -719,10 +775,7 @@ internal sealed class LayoutDesignerCanvas : Panel
             : node.IsAirHandlingUnit ? LayoutFanData.AirHandlingUnitTool
             : node.FittingGroup);
         if (!ShowLabels)
-        {
-            DrawPorts(graphics, node);
             return;
-        }
         var id = CaptionSource(node).Replace("\r", string.Empty).Split('\n').FirstOrDefault() ?? node.Id;
         using var idFont = new Font("Segoe UI Semibold", Math.Max(5.5F, 7F * ZoomFactor));
         var measured = TextRenderer.MeasureText(id, idFont, Size.Empty,
@@ -735,7 +788,6 @@ internal sealed class LayoutDesignerCanvas : Panel
         graphics.FillRectangle(labelBackground, textBounds);
         TextRenderer.DrawText(graphics, id, idFont, textBounds, Color.FromArgb(20, 44, 65),
             TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter);
-        DrawPorts(graphics, node);
     }
 
     private SavedLayoutNode? HitTest(Point point) =>
@@ -973,6 +1025,29 @@ internal sealed class LayoutDesignerCanvas : Panel
     private static string ParentId(LayoutConnectionRef connection) =>
         connection.Secondary ? connection.Downstream.SecondaryParentNodeId : connection.Downstream.ParentNodeId;
 
+    /// <summary>Flexible duct is drawn with short cross ticks along it, like the wire coil of flex duct.</summary>
+    private void DrawFlexTicks(Graphics graphics, IReadOnlyList<Point> path, Color color)
+    {
+        using var tick = new Pen(color, Math.Max(1F, 1.4F * ZoomFactor));
+        var spacing = Math.Max(6F, 9F * ZoomFactor);
+        var half = Math.Max(3F, 4.5F * ZoomFactor);
+        for (var index = 1; index < path.Count; index++)
+        {
+            var (a, b) = (path[index - 1], path[index]);
+            var length = Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2));
+            if (length < spacing)
+                continue;
+            var ux = (b.X - a.X) / length;
+            var uy = (b.Y - a.Y) / length;
+            for (var d = spacing / 2; d < length; d += spacing)
+            {
+                var cx = a.X + ux * d;
+                var cy = a.Y + uy * d;
+                graphics.DrawLine(tick, (float)(cx - uy * half), (float)(cy + ux * half), (float)(cx + uy * half), (float)(cy - ux * half));
+            }
+        }
+    }
+
     private void DrawConnection(Graphics graphics, LayoutConnectionRef connectionRef, IReadOnlyList<SavedLayoutNode> nodes)
     {
         var parent = nodes.FirstOrDefault(x => x.Id == ParentId(connectionRef));
@@ -1012,6 +1087,8 @@ internal sealed class LayoutDesignerCanvas : Panel
             graphics.DrawLines(selected, path);
         }
         graphics.DrawLines(connection, path);
+        if (connectionRef.Secondary ? connectionRef.Downstream.SecondaryConnectionFlexDuct : connectionRef.Downstream.ConnectionFlexDuct)
+            DrawFlexTicks(graphics, path, connectionColor);
         DrawFlowArrow(graphics,
             ConnectionFlowReversedSource(connectionRef) ? path.Reverse().ToArray() : path,
             connectionColor);
@@ -1236,137 +1313,40 @@ internal sealed class LayoutDesignerCanvas : Panel
         if (parent is null)
             return Array.Empty<Point>();
         var downstream = connectionRef.Downstream;
+        // Round Z: a duct runs straight from the centre of one component to the centre of the next, whatever its
+        // direction (a diagonal in plan, or sloping); the air turns only at fittings drawn as components.
         var centerStart = Center(parent);
         var centerEnd = Center(downstream);
-        LayoutCoordinate parentCoordinate = default!, downstreamCoordinate = default!;
-        var useCoordinates = _orbitView is not null;
-        if (useCoordinates)
-        {
-            parentCoordinate = WorldCoordinate(parent);
-            downstreamCoordinate = WorldCoordinate(downstream);
-        }
-        else if (UsesResolvedCoordinate(parent) && UsesResolvedCoordinate(downstream)
-                 && _resolvedCoordinates.TryGetValue(parent.Sequence, out var resolvedParent)
-                 && _resolvedCoordinates.TryGetValue(downstream.Sequence, out var resolvedDownstream))
-        {
-            parentCoordinate = resolvedParent;
-            downstreamCoordinate = resolvedDownstream;
-            useCoordinates = true;
-        }
-        if (useCoordinates)
-        {
-            var centersToScale = new List<Point>
-            {
-                centerStart,
-                CoordinatePoint(new LayoutCoordinate(downstreamCoordinate.XM, parentCoordinate.YM, parentCoordinate.ZM)),
-                CoordinatePoint(new LayoutCoordinate(downstreamCoordinate.XM, downstreamCoordinate.YM, parentCoordinate.ZM)),
-                centerEnd
-            };
-            centersToScale = centersToScale.Where((point, index) => index == 0 || point != centersToScale[index - 1]).ToList();
-            if (centersToScale.Count == 1)
-                centersToScale.Add(centerEnd == centerStart ? new Point(centerEnd.X + 1, centerEnd.Y) : centerEnd);
-            var scaledPath = new List<Point> { PortPointToward(parent, centersToScale[1]) };
-            for (var index = 1; index < centersToScale.Count - 1; index++)
-                scaledPath.Add(centersToScale[index]);
-            scaledPath.Add(PortPointToward(downstream, centersToScale[^2]));
-            return scaledPath;
-        }
-        var parentGrid = DisplayGridPoint(parent);
-        var downstreamGrid = DisplayGridPoint(downstream);
-        var deltaColumn = downstreamGrid.X - parentGrid.X;
-        var deltaRow = downstreamGrid.Y - parentGrid.Y;
-        var centers = new List<Point> { centerStart };
-        if (deltaColumn != 0 && deltaColumn != deltaRow && deltaColumn != -deltaRow)
-        {
-            var branchFirst = connectionRef.Secondary
-                              || !string.Equals(downstream.BranchId, parent.BranchId, StringComparison.OrdinalIgnoreCase);
-            int bendGridColumn;
-            int bendRow;
-            if (ViewMode == LayoutViewMode.IsometricNegative)
-            {
-                var axisXSteps = (deltaColumn - deltaRow) / 2;
-                var axisYSteps = (deltaColumn + deltaRow) / 2;
-                bendGridColumn = branchFirst ? axisYSteps : axisXSteps;
-                bendRow = branchFirst ? axisYSteps : -axisXSteps;
-            }
-            else
-            {
-                var axisXSteps = (deltaColumn + deltaRow) / 2;
-                var axisYSteps = (deltaRow - deltaColumn) / 2;
-                bendGridColumn = branchFirst ? -axisYSteps : axisXSteps;
-                bendRow = branchFirst ? axisYSteps : axisXSteps;
-            }
-            var bendGrid = new Point(parentGrid.X + bendGridColumn, parentGrid.Y + bendRow);
-            var bend = GridPoint(bendGrid);
-            if (bend != centerStart && bend != centerEnd)
-                centers.Add(bend);
-        }
-        centers.Add(centerEnd);
-        var path = new List<Point>(centers.Count)
-        {
-            PortPointToward(parent, centers[1])
-        };
-        for (var index = 1; index < centers.Count - 1; index++)
-            path.Add(centers[index]);
-        path.Add(PortPointToward(downstream, centers[^2]));
-        return path;
+        if (centerStart == centerEnd)
+            centerEnd = new Point(centerEnd.X + 1, centerEnd.Y);
+        return new[] { PortPointToward(parent, centerEnd), PortPointToward(downstream, centerStart) };
     }
 
-    private void DrawPorts(Graphics graphics, SavedLayoutNode node)
+    /// <summary>
+    /// Duct drawing feedback: a ring on the component under the pointer and, while dragging, a dashed line from the
+    /// centre of the start component to the pointer (snapped to the target's centre when over one).
+    /// </summary>
+    private void DrawDuctToolFeedback(Graphics graphics)
     {
-        var radius = Math.Max(3, (int)Math.Round(3.4 * ZoomFactor));
-        using var fill = new SolidBrush(Color.FromArgb(39, 116, 119));
-        using var outline = new Pen(Color.White, Math.Max(1F, 1.5F * ZoomFactor));
-        var points = new HashSet<Point>();
-        var nodes = NodeSource();
-        foreach (var connection in Connections(nodes))
-        {
-            if (string.Equals(connection.Downstream.Id, node.Id, StringComparison.OrdinalIgnoreCase))
-                points.Add(ConnectionEnd(connection, nodes));
-            if (string.Equals(ParentId(connection), node.Id, StringComparison.OrdinalIgnoreCase))
-                points.Add(ConnectionStart(connection, node, nodes));
-        }
-        if (ConnectedInputCount(node) < InletPortCount(node)
-            || ConnectedOutputCount(node, nodes) < OutletPortCount(node))
-        {
-            foreach (var candidate in CandidatePortPoints(node))
-                points.Add(candidate);
-        }
-        foreach (var point in points)
-            DrawPort(point);
-        return;
-
-        void DrawPort(Point center)
-        {
-            var circle = new Rectangle(center.X - radius, center.Y - radius, radius * 2, radius * 2);
-            graphics.FillEllipse(fill, circle);
-            graphics.DrawEllipse(outline, circle);
-        }
+        if (_ductTool == LayoutDuctTool.None)
+            return;
+        var accent = _ductTool == LayoutDuctTool.Flex ? Color.FromArgb(196, 116, 26) : Color.FromArgb(14, 111, 230);
+        using var ring = new Pen(accent, Math.Max(2F, 2.4F * ZoomFactor));
+        if (_ductHover is not null)
+            graphics.DrawEllipse(ring, Rectangle.Inflate(NodeBounds(_ductHover), Math.Max(5, (int)(7 * ZoomFactor)), Math.Max(5, (int)(7 * ZoomFactor))));
+        if (_ductStart is null)
+            return;
+        graphics.DrawEllipse(ring, Rectangle.Inflate(NodeBounds(_ductStart), Math.Max(5, (int)(7 * ZoomFactor)), Math.Max(5, (int)(7 * ZoomFactor))));
+        using var line = new Pen(accent, Math.Max(2F, 3F * ZoomFactor)) { DashStyle = DashStyle.Dash };
+        graphics.DrawLine(line, Center(_ductStart), _ductHover is null ? _ductMouse : Center(_ductHover));
     }
 
-    private LayoutPortRef? HitTestPort(Point point, bool? preferOutput = null)
-    {
-        var tolerance = Math.Max(9, (int)Math.Round(11 * ZoomFactor));
-        foreach (var node in NodeSource().Reverse())
-        {
-            var nodes = NodeSource();
-            if (preferOutput is not false && ConnectedOutputCount(node, nodes) < OutletPortCount(node))
-            {
-                var outputIndex = FirstAvailableOutputIndex(node, nodes);
-                foreach (var candidate in CandidatePortPoints(node))
-                    if (Math.Abs(point.X - candidate.X) <= tolerance && Math.Abs(point.Y - candidate.Y) <= tolerance)
-                        return new LayoutPortRef(node, true, outputIndex, candidate);
-            }
-            if (preferOutput is not true && ConnectedInputCount(node) < InletPortCount(node))
-            {
-                var inputIndex = string.IsNullOrWhiteSpace(node.ParentNodeId) ? 0 : 1;
-                foreach (var candidate in CandidatePortPoints(node))
-                    if (Math.Abs(point.X - candidate.X) <= tolerance && Math.Abs(point.Y - candidate.Y) <= tolerance)
-                        return new LayoutPortRef(node, false, inputIndex, candidate);
-            }
-        }
-        return null;
-    }
+    /// <summary>The component a duct being drawn from <paramref name="from"/> would join at <paramref name="point"/>.</summary>
+    private SavedLayoutNode? DuctTarget(Point point, SavedLayoutNode from) =>
+        HitTest(point) is SavedLayoutNode target && target.Type != LayoutNodeType.CalculationPoint
+                                              && !string.Equals(target.Id, from.Id, StringComparison.OrdinalIgnoreCase)
+            ? target
+            : null;
 
     private static int ConnectedInputCount(SavedLayoutNode node) =>
         (string.IsNullOrWhiteSpace(node.ParentNodeId) ? 0 : 1)
@@ -1374,81 +1354,6 @@ internal sealed class LayoutDesignerCanvas : Panel
 
     private static int ConnectedOutputCount(SavedLayoutNode node, IReadOnlyList<SavedLayoutNode> nodes) =>
         Connections(nodes).Count(x => string.Equals(ParentId(x), node.Id, StringComparison.OrdinalIgnoreCase));
-
-    private static int FirstAvailableOutputIndex(SavedLayoutNode node, IReadOnlyList<SavedLayoutNode> nodes)
-    {
-        if (OutletPortCount(node) <= 1)
-            return 0;
-        var hasMain = Connections(nodes).Any(x => string.Equals(ParentId(x), node.Id, StringComparison.OrdinalIgnoreCase)
-                                                  && string.Equals(x.Downstream.BranchId, node.BranchId, StringComparison.OrdinalIgnoreCase));
-        return hasMain ? 1 : 0;
-    }
-
-    private LayoutPortConnectionRequest CreateGestureConnectionRequest(SavedLayoutNode source,
-        SavedLayoutNode destination)
-    {
-        var nodes = NodeSource();
-        var outputIndex = FirstAvailableOutputIndex(source, nodes);
-        var inputIndex = string.IsNullOrWhiteSpace(destination.ParentNodeId) ? 0 : 1;
-        return new LayoutPortConnectionRequest(source, destination, outputIndex, inputIndex);
-    }
-
-    private IReadOnlyList<Point> CandidatePortPoints(SavedLayoutNode node)
-    {
-        var bounds = NodeBounds(node);
-        var center = Center(node);
-        var directions = AxisDirections;
-        return directions.Select(direction => RayToBounds(bounds, center, direction)).Distinct().ToArray();
-    }
-
-    private Point PortPoint(SavedLayoutNode node, bool output, int index)
-    {
-        var count = output ? OutletPortCount(node) : InletPortCount(node);
-        index = Math.Clamp(index, 0, Math.Max(0, count - 1));
-        var nodes = NodeSource();
-        if (!output)
-        {
-            var connection = new LayoutConnectionRef(node, index == 1);
-            if (!string.IsNullOrWhiteSpace(ParentId(connection)))
-                return ConnectionPath(connection, nodes).Last();
-        }
-        else
-        {
-            var outgoing = Connections(nodes)
-                .Where(x => string.Equals(ParentId(x), node.Id, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(x => x.Downstream.Sequence).ThenBy(x => x.Secondary).ToArray();
-            if (index < outgoing.Length)
-                return ConnectionPath(outgoing[index], nodes).First();
-        }
-
-        var candidates = CandidatePortPoints(node);
-        if (output)
-            return candidates[Math.Min(index, candidates.Count - 1)];
-        return candidates[(3 + Math.Min(index, 2)) % candidates.Count];
-    }
-
-    private SavedLayoutNode? ConnectedPeer(SavedLayoutNode node, bool output, int index)
-    {
-        var nodes = NodeSource();
-        if (!output)
-        {
-            var parentId = index == 1 ? node.SecondaryParentNodeId : node.ParentNodeId;
-            return nodes.FirstOrDefault(x => string.Equals(x.Id, parentId, StringComparison.OrdinalIgnoreCase));
-        }
-
-        var outgoing = Connections(nodes)
-            .Where(x => string.Equals(ParentId(x), node.Id, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(x => x.Downstream.Sequence).ThenBy(x => x.Secondary).ToArray();
-        if (OutletPortCount(node) > 1)
-            return outgoing.Select(connection => new
-                {
-                    Connection = connection,
-                    Port = string.Equals(connection.Downstream.BranchId, node.BranchId,
-                        StringComparison.OrdinalIgnoreCase) ? 0 : 1
-                })
-                .FirstOrDefault(x => x.Port == index)?.Connection.Downstream;
-        return index >= 0 && index < outgoing.Length ? outgoing[index].Downstream : null;
-    }
 
     private static readonly PointF[] IsoAxisDirections =
     {

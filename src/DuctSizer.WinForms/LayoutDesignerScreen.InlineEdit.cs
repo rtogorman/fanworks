@@ -107,7 +107,12 @@ internal sealed partial class LayoutDesignerScreen
         var draft = linkedFitting is null
             ? CreateLayoutFittingDraft(node)
             : CloneFitting(linkedFitting);
-        return new LayoutFittingEditDialog(draft, node.FittingGroup, _host._currentUnits);
+        // Round Z: an elbow's angle comes from its drawn ducts, so the inspector shows it read-only.
+        var drawnAngle = LayoutDirections.IsElbow(node)
+            ? LayoutDirections.TurnDegreesThrough(_host.DuctSystemScreen._ductSystem, node)
+            : null;
+        return new LayoutFittingEditDialog(draft, node.FittingGroup, _host._currentUnits,
+            drawnAngle is double angle ? Math.Round(angle, 1) : null);
     }
 
     /// <summary>

@@ -107,6 +107,13 @@ public static class LayoutModelCheck
                     $"{node.Id}: this {(LayoutTopology.IsDiverging(node) ? "diverging" : "converging")} junction is calculated as ASHRAE {definition.Code} ({definition.Description}), which is not a junction, so its straight-through and branch losses are not modelled. Choose a tee or wye."));
         }
 
+        // Round Z: the air can only change direction at an elbow (or a junction, plenum or piece of equipment). A
+        // transition, damper, VAV box, coil, filter or custom component whose outlet is not in line with its inlet is
+        // missing an elbow, and the loss of that turn is not counted.
+        foreach (var (node, turn) in LayoutDirections.MissingElbows(document))
+            issues.Add(new SystemCalculationIssue(node.Id,
+                $"{node.Id}: the air turns {turn:0.#}° here, but this component cannot turn the air, so the loss of the turn is not counted. Add an elbow."));
+
         // A component that is its own upstream (directly or through others) has no defined flow direction.
         foreach (var node in document.LayoutNodes.Where(x => x.Type != LayoutNodeType.CalculationPoint).OrderBy(x => x.Sequence))
         {

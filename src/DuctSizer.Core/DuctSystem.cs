@@ -84,7 +84,7 @@ public sealed class SavedDuct
 public sealed class DuctSystemDocument
 {
     /// <summary>Saved-format version written by this build (see <see cref="DuctSystemStore.Load"/> for upgrades).</summary>
-    public const int CurrentSchemaVersion = 22;
+    public const int CurrentSchemaVersion = 23;
 
     /// <summary>Saved-format version of this document.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -499,6 +499,13 @@ public sealed class SavedLayoutNode
     public int? LinkedFittingSequence { get; set; }
     public int? ConnectionDuctSequence { get; set; }
     public int? SecondaryConnectionDuctSequence { get; set; }
+    /// <summary>
+    /// True when the connection into this component was drawn as a flexible duct (Flex Duct Segment, round Z): its
+    /// duct is sized and calculated as fully extended flexible duct. Schema 23; false when absent.
+    /// </summary>
+    public bool ConnectionFlexDuct { get; set; }
+    /// <summary>See <see cref="ConnectionFlexDuct"/>, for the second inlet of a converging fitting.</summary>
+    public bool SecondaryConnectionFlexDuct { get; set; }
     /// <summary>
     /// No longer used (round Y): flow runs from each connection's upstream item to its downstream item, set by the
     /// drawn sources and sinks. Kept so older files load; cleared when a file is loaded (schema 22).
@@ -989,6 +996,10 @@ public static class DuctSystemStore
             }
             document.SchemaVersion = 22;
         }
+        // Version 23 (round Z): a connection can be drawn as flexible duct (ConnectionFlexDuct; false when absent).
+        // Elbow angles follow the drawn connections; nothing stored changes.
+        if (document.SchemaVersion == 22)
+            document.SchemaVersion = 23;
         if (document.SchemaVersion != DuctSystemDocument.CurrentSchemaVersion)
             throw new InvalidDataException(document.SchemaVersion > DuctSystemDocument.CurrentSchemaVersion
                 ? $"This project was saved by a newer version of FanWorks (file format {document.SchemaVersion}). Update FanWorks to open it."

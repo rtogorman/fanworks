@@ -28,7 +28,7 @@ internal enum RibbonIcon
     NewProject, Open, Save, SaveAs, ProjectSettings, SizingCriteria, RoundSizes,
     Select, Move, AutoSize, Calculate, CriticalPath, PrintReport, DuctCalculator, FittingCalculator,
     Filter, Fan, Warning, Check, Undo, Redo, Delete, ZoomIn, ZoomOut, ZoomFit, PdfImport, Grid, Origin, SourceSink,
-    AnalysisSettings, Lock
+    AnalysisSettings, Lock, DuctSegment, FlexDuct
 }
 
 /// <summary>
@@ -326,6 +326,29 @@ internal static class RibbonIcons
                 graphics.DrawRectangle(pen, 14.5f, 7, 7, 10);
                 graphics.DrawLine(accentPen, 10, 12, 14, 12);
                 graphics.DrawLines(accentPen, new[] { new PointF(12.5f, 10.5f), new PointF(14, 12), new PointF(12.5f, 13.5f) });
+                break;
+            case RibbonIcon.DuctSegment:
+                // A straight duct run between two component centres.
+                graphics.FillEllipse(accentFill, 2, 15, 6, 6);
+                graphics.DrawEllipse(pen, 2, 15, 6, 6);
+                graphics.FillEllipse(accentFill, 16, 3, 6, 6);
+                graphics.DrawEllipse(pen, 16, 3, 6, 6);
+                graphics.FillPolygon(accentFill, new[] { new PointF(6.2f, 14.2f), new PointF(15.2f, 5.2f), new PointF(17.8f, 7.8f), new PointF(8.8f, 16.8f) });
+                graphics.DrawPolygon(pen, new[] { new PointF(6.2f, 14.2f), new PointF(15.2f, 5.2f), new PointF(17.8f, 7.8f), new PointF(8.8f, 16.8f) });
+                break;
+            case RibbonIcon.FlexDuct:
+                // The same run with the wire coil of flex duct.
+                graphics.FillEllipse(accentFill, 2, 15, 6, 6);
+                graphics.DrawEllipse(pen, 2, 15, 6, 6);
+                graphics.FillEllipse(accentFill, 16, 3, 6, 6);
+                graphics.DrawEllipse(pen, 16, 3, 6, 6);
+                graphics.DrawLine(pen, 7.5f, 16.5f, 16.5f, 7.5f);
+                for (var t = 0.18f; t < 0.9f; t += 0.16f)
+                {
+                    var cx = 7.5f + 9 * t;
+                    var cy = 16.5f - 9 * t;
+                    graphics.DrawLine(accentPen, cx - 1.8f, cy - 1.8f, cx + 1.8f, cy + 1.8f);
+                }
                 break;
             case RibbonIcon.Lock:
                 // A padlock: shackle over a filled body with a keyhole.
