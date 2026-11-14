@@ -2606,7 +2606,6 @@ internal static class Program
             var overlayCanvas = (LayoutDesignerCanvas)layoutCanvas;
             bool IsBlank(Point point) => hitTestNode.Invoke(layoutCanvas, new object[] { point }) is null
                                          && hitTestConnection.Invoke(layoutCanvas, new object[] { point }) is null
-                                         && hitTestPort.Invoke(layoutCanvas, new object?[] { point, null }) is null
                                          && !Rectangle.Inflate(overlayCanvas.ViewCubeBounds, 12, 12).Contains(point)
                                          && !Rectangle.Inflate(overlayCanvas.AxisLegendBounds, 12, 12).Contains(point)
                                          && overlayCanvas.LabelAt(point) is null;
@@ -2656,11 +2655,16 @@ internal static class Program
                                       ?? throw new InvalidOperationException("Could not create a Designer connection reference.");
             var routedDuct = (IReadOnlyList<Point>)connectionPathMethod.Invoke(layoutCanvas,
                 new object[] { connectionReference, document.LayoutNodes })!;
-            Require(routedDuct.Count >= 2 && Enumerable.Range(1, routedDuct.Count - 1).All(index =>
-                    routedDuct[index].X == routedDuct[index - 1].X
-                    || Math.Abs(Math.Abs(routedDuct[index].X - routedDuct[index - 1].X)
-                                - 2 * Math.Abs(routedDuct[index].Y - routedDuct[index - 1].Y)) <= 1),
-                "Designer ducts should route only along the isometric X, Y, and Z grid axes.");
+            // Round Z: a duct is one straight line between the two component centres (diagonals allowed).
+            var routedFanBounds = (Rectangle)nodeBoundsMethod.Invoke(layoutCanvas, new object[] { fanNode })!;
+            var routedCoilBounds = (Rectangle)nodeBoundsMethod.Invoke(layoutCanvas, new object[] { coilNode })!;
+            var routedFrom = new Point(routedFanBounds.Left + routedFanBounds.Width / 2, routedFanBounds.Top + routedFanBounds.Height / 2);
+            var routedTo = new Point(routedCoilBounds.Left + routedCoilBounds.Width / 2, routedCoilBounds.Top + routedCoilBounds.Height / 2);
+            bool OnCentreLine(Point point) =>
+                Math.Abs((routedTo.X - routedFrom.X) * (point.Y - routedFrom.Y) - (routedTo.Y - routedFrom.Y) * (point.X - routedFrom.X))
+                <= 2.0 * Math.Sqrt(Math.Pow(routedTo.X - routedFrom.X, 2) + Math.Pow(routedTo.Y - routedFrom.Y, 2));
+            Require(routedDuct.Count == 2 && routedDuct.All(OnCentreLine),
+                $"Designer ducts should be drawn as one straight line from component centre to component centre. Path={string.Join(" ", routedDuct)}, from={routedFrom}, to={routedTo}.");
             var ductMidpoint = new Point((routedDuct[0].X + routedDuct[1].X) / 2,
                 (routedDuct[0].Y + routedDuct[1].Y) / 2);
             layoutCanvas.GetType().GetMethod("OnMouseDown", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -3472,7 +3476,8 @@ internal static class Program
                        {
                            savedDesignerFitting,
                            FittingCatalog.SelectionGroup(FittingCatalog.Find(savedDesignerFitting.FittingCode)),
-                           UnitSystem.Imperial
+                           UnitSystem.Imperial,
+                           null
                        }, null)
                    ?? throw new InvalidOperationException("Could not create the direct designer fitting editor."))
             {
@@ -3506,8 +3511,6 @@ internal static class Program
                     && Math.Abs(double.Parse(fittingAirflow.Text, System.Globalization.CultureInfo.CurrentCulture)
                                 - UnitConversions.M3PerSToCfm(savedDesignerFitting.AirflowM3PerS)) < 0.01,
                 "Opening a designer fitting should repopulate its fitting number, airflow, and saved calculation inputs.");
-            var portPoint = layoutCanvas.GetType().GetMethod("PortPoint", BindingFlags.Instance | BindingFlags.NonPublic)
-                            ?? throw new InvalidOperationException("Could not inspect designer port geometry.");
             fittingLayoutNode.GridX = 24;
             fittingLayoutNode.GridY = 32;
             var mainPortNode = new SavedLayoutNode
@@ -3521,13 +3524,27 @@ internal static class Program
                 GridX = 24, GridY = 16, ParentNodeId = fittingLayoutNode.Id, BranchId = "B-002"
             };
             document.LayoutNodes.AddRange(new[] { fittingLayoutNode, mainPortNode, branchPortNode });
-            var sameBranchPort = (Point)portPoint.Invoke(layoutCanvas, new object[] { fittingLayoutNode, true, 0 })!;
-            var upperBranchPort = (Point)portPoint.Invoke(layoutCanvas, new object[] { fittingLayoutNode, true, 1 })!;
+            // Round Z (no ports): each duct leaves the split straight toward the component it connects to.
+            Point DuctStart(SavedLayoutNode downstream) => ((IReadOnlyList<Point>)connectionPathMethod.Invoke(layoutCanvas,
+                new object[] { Activator.CreateInstance(layoutConnectionType, downstream, false)!, document.LayoutNodes })!)[0];
+            var splitBounds = (Rectangle)nodeBoundsMethod.Invoke(layoutCanvas, new object[] { fittingLayoutNode })!;
+            var splitCentre = new Point(splitBounds.Left + splitBounds.Width / 2, splitBounds.Top + splitBounds.Height / 2);
+            bool LeavesToward(SavedLayoutNode downstream)
+            {
+                var start = DuctStart(downstream);
+                var targetBounds = (Rectangle)nodeBoundsMethod.Invoke(layoutCanvas, new object[] { downstream })!;
+                var target = new Point(targetBounds.Left + targetBounds.Width / 2, targetBounds.Top + targetBounds.Height / 2);
+                var along = (start.X - splitCentre.X) * (target.X - splitCentre.X) + (start.Y - splitCentre.Y) * (target.Y - splitCentre.Y);
+                return along > 0;
+            }
+            var mainLeaves = LeavesToward(mainPortNode);
+            var upperLeaves = LeavesToward(branchPortNode);
+            var upperStart = DuctStart(branchPortNode);
             branchPortNode.GridY = 48;
-            var lowerBranchPort = (Point)portPoint.Invoke(layoutCanvas, new object[] { fittingLayoutNode, true, 1 })!;
-            Require(sameBranchPort.X > upperBranchPort.X && upperBranchPort.Y < sameBranchPort.Y
-                    && lowerBranchPort.Y > sameBranchPort.Y,
-                "Designer ports should automatically choose right, top, or bottom from connected component positions.");
+            var lowerLeaves = LeavesToward(branchPortNode);
+            var lowerStart = DuctStart(branchPortNode);
+            Require(mainLeaves && upperLeaves && lowerLeaves && upperStart != lowerStart,
+                "Each duct should leave a split toward the component it connects to (no connector ports).");
             document.LayoutNodes.Remove(fittingLayoutNode);
             document.LayoutNodes.Remove(mainPortNode);
             document.LayoutNodes.Remove(branchPortNode);
@@ -3569,20 +3586,37 @@ internal static class Program
             var rewireElbow = document.LayoutNodes.FirstOrDefault(x =>
                 x.Type == LayoutNodeType.Fitting && x.FittingGroup == "Elbows"
                 && x.ParentNodeId == filterNode.Id && coilNode.ParentNodeId == x.Id);
-            Require(rewired && filterNode.ParentNodeId == fanNode.Id && rewireElbow is not null
+            // Round Z: elbows are never added on their own; a turn left at a component that cannot turn is a model error.
+            Require(rewired && filterNode.ParentNodeId == fanNode.Id && rewireElbow is null
+                    && coilNode.ParentNodeId == filterNode.Id
                     && filterNode.ConnectionDuctSequence is not null
                     && document.Ducts.All(x => x.Sequence != 1)
                     && document.Ducts.Where(x => x.Sequence == filterNode.ConnectionDuctSequence)
                         .All(x => Math.Abs(x.AirflowM3PerS - fanNode.AirflowM3PerS) < 1e-12),
-                $"Changing an icon's upstream item should preserve the path, size the axial replacement run, and insert a reviewable elbow when the next run changes axis. " +
+                $"Changing an icon's upstream item should preserve the path, size the replacement run, and add no elbow by itself. " +
                 $"rewired={rewired}; parents={filterNode.ParentNodeId}/{coilNode.ParentNodeId}; " +
                 $"duct links={filterNode.ConnectionDuctSequence}/{coilNode.ConnectionDuctSequence}; " +
                 $"ducts={string.Join(',', document.Ducts.Select(x => $"{x.Sequence}:{UnitConversions.M3PerSToCfm(x.AirflowM3PerS):0}"))}; " +
                 $"fittings={string.Join(',', document.LayoutNodes.Where(x => x.Type == LayoutNodeType.Fitting).Select(x => $"{x.Id}<{x.ParentNodeId}[{x.FittingGroup}]"))}.");
 
-            var automaticElbowMethod = UiMember.Method("AddAutomaticElbowsForMultiAxisConnection",
+            // Round Z: elbows go in only when the user chooses "add automatically"; they are then placed at the
+            // corners of straight axis runs that continue the upstream inlet and meet the downstream outlet.
+            var automaticElbowMethod = UiMember.Method("AddElbowsAlongSegments",
                                           BindingFlags.Instance | BindingFlags.NonPublic)
                                       ?? throw new InvalidOperationException("Could not inspect multi-axis routing behavior.");
+            var automaticSegmentsMethod = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutDesignerScreen")!
+                                              .GetMethod("AutomaticElbowSegments", BindingFlags.Static | BindingFlags.NonPublic)
+                                          ?? throw new InvalidOperationException("Could not inspect automatic elbow routing.");
+            IReadOnlyList<(double XM, double YM, double ZM)>? Segments(LayoutVector offset, LayoutVector? inlet, LayoutVector? outlet) =>
+                (IReadOnlyList<(double XM, double YM, double ZM)>?)automaticSegmentsMethod.Invoke(null, new object?[] { offset, inlet, outlet });
+            var tenFeet = UnitConversions.FeetToM(10);
+            var inlineFirst = Segments(new LayoutVector(tenFeet, tenFeet, 0), new LayoutVector(0, 1, 0), null);
+            var outletLast = Segments(new LayoutVector(tenFeet, tenFeet, 0), null, new LayoutVector(0, 1, 0));
+            Require(inlineFirst is { Count: 2 } && Math.Abs(inlineFirst[0].YM - tenFeet) < 1e-10 && Math.Abs(inlineFirst[1].XM - tenFeet) < 1e-10
+                    && outletLast is { Count: 2 } && Math.Abs(outletLast[1].YM - tenFeet) < 1e-10
+                    && Segments(new LayoutVector(tenFeet, tenFeet, 0), new LayoutVector(0, 1, 0), new LayoutVector(0, 1, 0)) is null
+                    && Segments(new LayoutVector(tenFeet, 0, 0), null, null) is null,
+                "Automatic elbow routing should continue the inlet first, meet the outlet last, and refuse impossible routes.");
             var routeStart = new SavedLayoutNode
             {
                 Sequence = document.ReserveLayoutSequence(), Type = LayoutNodeType.Fan,
@@ -3605,19 +3639,19 @@ internal static class Program
             };
             document.LayoutNodes.AddRange(new[] { routeStart, routeEnd, preservedDownstream });
             var insertedElbows = ((IEnumerable<SavedLayoutNode>)automaticElbowMethod.Invoke(form,
-                new object[] { routeEnd, false })!).ToArray();
+                new object[] { routeEnd, false, new List<(double XM, double YM, double ZM)> { (tenFeet, 0, 0), (0, tenFeet, 0) } })!).ToArray();
             Require(insertedElbows.Length == 1
                     && insertedElbows[0].Type == LayoutNodeType.Fitting
                     && insertedElbows[0].FittingGroup == "Elbows"
                     && insertedElbows[0].ParentNodeId == routeStart.Id
                     && routeEnd.ParentNodeId == insertedElbows[0].Id
                     && preservedDownstream.ParentNodeId == routeEnd.Id
-                    && Math.Abs(insertedElbows[0].DeltaXM - UnitConversions.FeetToM(10)) < 1e-10
+                    && Math.Abs(insertedElbows[0].DeltaXM - tenFeet) < 1e-10
                     && Math.Abs(insertedElbows[0].DeltaYM) < 1e-10
-                    && Math.Abs(insertedElbows[0].ElbowAngleDegrees - 45.0) < 1e-10
+                    && Math.Abs(insertedElbows[0].ElbowAngleDegrees - 90.0) < 1e-10
                     && Math.Abs(routeEnd.DeltaXM) < 1e-10
-                    && Math.Abs(routeEnd.DeltaYM - UnitConversions.FeetToM(10)) < 1e-10,
-                "A two-axis connection should become two axial duct runs separated by one automatic elbow without disturbing downstream components.");
+                    && Math.Abs(routeEnd.DeltaYM - tenFeet) < 1e-10,
+                "Adding elbows automatically should give two axial duct runs separated by one 90° elbow without disturbing downstream components.");
 
             var threeAxisEnd = new SavedLayoutNode
             {
@@ -3628,14 +3662,15 @@ internal static class Program
                 AirSystemType = "Supply Air", BranchId = "Main", IsDefined = true
             };
             document.LayoutNodes.Add(threeAxisEnd);
+            var fiveFeet = UnitConversions.FeetToM(5);
             var threeAxisElbows = ((IEnumerable<SavedLayoutNode>)automaticElbowMethod.Invoke(form,
-                new object[] { threeAxisEnd, false })!).ToArray();
+                new object[] { threeAxisEnd, false, new List<(double XM, double YM, double ZM)> { (fiveFeet, 0, 0), (0, -fiveFeet, 0), (0, 0, fiveFeet) } })!).ToArray();
             Require(threeAxisElbows.Length == 2
                     && threeAxisElbows[0].ParentNodeId == routeStart.Id
                     && threeAxisElbows[1].ParentNodeId == threeAxisElbows[0].Id
                     && threeAxisEnd.ParentNodeId == threeAxisElbows[1].Id
-                    && Math.Abs(threeAxisEnd.DeltaZM - UnitConversions.FeetToM(5)) < 1e-10,
-                "A three-axis connection should receive two automatic elbows and three sequential axial runs.");
+                    && Math.Abs(threeAxisEnd.DeltaZM - fiveFeet) < 1e-10,
+                "A three-axis connection should receive two elbows and three sequential axial runs when added automatically.");
 
             var gridPlacementDialogType = typeof(MainForm).Assembly.GetType("DuctSizer.WinForms.LayoutComponentPlacementDialog")
                                           ?? throw new InvalidOperationException("Could not inspect coordinate-grid validation.");

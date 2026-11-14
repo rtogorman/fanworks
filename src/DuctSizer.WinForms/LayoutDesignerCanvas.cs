@@ -1399,13 +1399,9 @@ internal sealed class LayoutDesignerCanvas : Panel
         var dy = target.Y - center.Y;
         if (dx == 0 && dy == 0)
             return new Point(center.X, bounds.Top);
-        var length = Math.Sqrt(dx * dx + dy * dy);
-        var directions = AxisDirections;
-        var direction = directions
-            .OrderByDescending(axis => (dx * axis.X + dy * axis.Y)
-                                       / (length * Math.Sqrt(axis.X * axis.X + axis.Y * axis.Y)))
-            .First();
-        return RayToBounds(bounds, center, direction);
+        // Round Z: the duct leaves along its own straight centre line (not snapped to a grid axis), so the drawn
+        // line always joins the two component centres.
+        return RayToBounds(bounds, center, new PointF(dx, dy));
     }
 
     private static Point RayToBounds(Rectangle bounds, Point center, PointF direction)

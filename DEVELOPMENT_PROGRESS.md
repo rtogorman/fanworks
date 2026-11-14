@@ -685,4 +685,9 @@ a drop from a diagonal); "add it myself" draws nothing; a turn at a component th
 Checks: engine 98/98 (new `DuctDrawingTests`: 45°/45°/90° elbows, missing elbow at a transition, slope 26.565° for
 5 ft over 10 ft), interface 24/24 at 100 %, 150 % and 1080p (drag-drawn flex diagonal, declined/accepted elbow and
 slope questions, greyed criteria).
+v0.107.0 follow-up (same version): the first push failed CI because the interface checks still referred to the removed
+connector ports, and the local runs had silently reused an old log (the run script now deletes the log first).
+Fixed: duct ends are clipped along the duct's own centre line (no longer snapped to a grid axis); four outdated
+interface checks rewritten for round Z (straight centre-to-centre duct, split ducts leave toward their components,
+rewiring adds no elbow, automatic elbow routing order). Interface 24/24 at 100 %, 150 % and 1080p re-run for real.
 

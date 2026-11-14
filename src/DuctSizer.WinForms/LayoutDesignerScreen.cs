@@ -1634,7 +1634,7 @@ internal sealed partial class LayoutDesignerScreen
         node.DeltaXM = fullDelta.XM * fraction;
         node.DeltaYM = fullDelta.YM * fraction;
         node.DeltaZM = fullDelta.ZM * fraction;
-        return axes.Length == 1 ? $"{axes[0].Axis} axis" : "its length";
+        return axes.Length == 1 ? axes[0].Axis : "its length";
     }
 
     private bool ConfirmConnectionCoordinates(SavedLayoutNode downstream, SavedLayoutNode upstream, bool secondary,
